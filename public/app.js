@@ -377,14 +377,27 @@ function prefetchThumbnails(avatarList) {
 }
 
 // ── Mobile Sidebar Toggle ──
-window.toggleSidebar = function () {
-  const sidebar = document.getElementById("appSidebar");
+window.toggleSidebar = function (forceState) {
+  const activePanel = document.querySelector(".download-panel.active") || document.querySelector(".upload-panel.active");
+  if (!activePanel) return;
+  const sidebar = activePanel.querySelector(".sidebar");
+  if (!sidebar) return;
+
   const overlay = document.getElementById("sidebarOverlay");
   const btn     = document.getElementById("mobileSidebarBtn");
-  const isOpen  = sidebar?.classList.toggle("open");
-  overlay?.classList.toggle("active", isOpen);
-  btn?.classList.toggle("active", isOpen);
-  btn && (btn.textContent = isOpen ? "✕" : "☰");
+  
+  const isOpening = forceState !== undefined ? forceState : !sidebar.classList.contains("open");
+
+  if (isOpening) {
+    sidebar.classList.add("open");
+    overlay?.classList.add("active");
+  } else {
+    document.querySelectorAll(".sidebar.open").forEach(s => s.classList.remove("open"));
+    overlay?.classList.remove("active");
+  }
+
+  btn?.classList.toggle("active", isOpening);
+  if (btn) btn.textContent = isOpening ? "✕" : "☰";
 };
 
 // ── Login & Account Management ──
@@ -632,6 +645,7 @@ function renderFavoriteGroupButtons() {
 
 // ── Tabs ──
 function switchTab(tab) {
+  if (window.innerWidth <= 768) toggleSidebar(false);
   // Legacy tab-btn support
   document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
   document.querySelector(`.tab-btn[onclick*="${tab}"]`)?.classList.add("active");

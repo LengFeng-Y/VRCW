@@ -187,7 +187,7 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
     .download-panel.active { position: relative; overflow: hidden; }
 }
 
-.sidebar-overlay { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 899; backdrop-filter: blur(2px); }
+.sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 899; backdrop-filter: blur(2px); }
 .sidebar-overlay.active { display: block; }
 
 .btn-warning { background: var(--warning); color: #000; font-weight: 600; }
