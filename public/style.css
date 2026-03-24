@@ -510,3 +510,40 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
   /* Panel content areas padding */
   .my-profile-card { padding: 14px; }
 }
+
+/* ── Mobile Sidebar Toggle Button ── */
+#mobileSidebarBtn {
+  display: none;
+}
+@media (max-width: 768px) {
+  #mobileSidebarBtn {
+    display: flex;
+    position: fixed;
+    bottom: 68px;
+    right: 14px;
+    z-index: 850;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-size: 1.2rem;
+    align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(99,102,241,0.5);
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
+  }
+  #mobileSidebarBtn:active { transform: scale(0.9); }
+  #mobileSidebarBtn.active { background: var(--accent-light); }
+
+  /* Fix avatar grid: 2 cols on mobile */
+  .avatar-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Sidebar panels should cover full height on mobile */
+  .sidebar {
+    padding: 10px;
+    bottom: 56px !important;
+  }
+}

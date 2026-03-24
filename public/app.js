@@ -378,8 +378,13 @@ function prefetchThumbnails(avatarList) {
 
 // ── Mobile Sidebar Toggle ──
 window.toggleSidebar = function () {
-  document.getElementById("appSidebar")?.classList.toggle("open");
-  document.getElementById("sidebarOverlay")?.classList.toggle("active");
+  const sidebar = document.getElementById("appSidebar");
+  const overlay = document.getElementById("sidebarOverlay");
+  const btn     = document.getElementById("mobileSidebarBtn");
+  const isOpen  = sidebar?.classList.toggle("open");
+  overlay?.classList.toggle("active", isOpen);
+  btn?.classList.toggle("active", isOpen);
+  btn && (btn.textContent = isOpen ? "✕" : "☰");
 };
 
 // ── Login & Account Management ──
