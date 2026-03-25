@@ -4796,7 +4796,7 @@ async function openGroupDetail(groupId) {
           <button onclick="document.getElementById('groupDetailModal').classList.add('hidden')" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:99px;width:28px;height:28px;cursor:pointer;font-size:1rem;">\u00d7</button>
         </div>
         <div style="padding:0 24px 24px;">
-          <div style="display:flex;gap:16px;align-items:flex-end;margin:-28px 0 12px;">
+          <div style="display:flex;gap:16px;align-items:flex-end;margin:-28px 0 12px;position:relative;z-index:2;">
             <div style="width:56px;height:56px;border-radius:10px;overflow:hidden;border:2px solid var(--bg-primary);background:var(--bg-card);flex-shrink:0;">
               <img id="gdIcon" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">
             </div>
@@ -4806,6 +4806,7 @@ async function openGroupDetail(groupId) {
             </div>
           </div>
           <div id="gdStats" style="display:flex;gap:8px;flex-wrap:wrap;font-size:0.8em;color:var(--text-secondary);margin-bottom:10px;"></div>
+          <div id="gdActions" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
           <div id="gdDesc" style="font-size:0.85em;color:var(--text-secondary);line-height:1.6;max-height:180px;overflow-y:auto;white-space:pre-line;"></div>
         </div>
       </div>
@@ -4830,12 +4831,57 @@ async function openGroupDetail(groupId) {
     document.getElementById('gdShortCode').textContent = '.' + (g.shortCode || '');
     document.getElementById('gdDesc').textContent = g.description || '暂无简介';
     document.getElementById('gdStats').innerHTML =
-      '<span>\ud83d\udc65 ' + (g.memberCount || 0) + ' 成员</span>' +
+      '<span>👥 ' + (g.memberCount || 0) + ' 成员</span>' +
       '<span style="opacity:0.3;margin:0 4px;">|</span>' +
-      '<span>\ud83d\udd10 ' + (g.joinState || 'open') + '</span>' +
-      (g.languages && g.languages.length ? '<span style="opacity:0.3;margin:0 4px;">|</span><span>\ud83c\udf10 ' + g.languages.join(', ') + '</span>' : '');
+      '<span>' + (g.joinState === 'closed' ? '🔒 闭门' : g.joinState === 'invite' ? '✉️ 邀请' : g.joinState === 'request' ? '✋ 申请' : '🔓 公开') + '</span>' +
+      (g.languages && g.languages.length ? '<span style="opacity:0.3;margin:0 4px;">|</span><span>🌐 ' + g.languages.join(', ') + '</span>' : '');
+
+    // Render Actions
+    let actionHtml = '';
+    if (g.myMember) {
+      const myId = g.myMember.userId;
+      const vis = g.myMember.visibility; // 'visible', 'hidden', 'friends'
+      const oppVis = vis === 'visible' ? 'hidden' : 'visible';
+      const visText = vis === 'visible' ? '👁️ 个人资料可见' : (vis === 'friends' ? '👥 仅好友可见' : '👻 资料页隐藏');
+      actionHtml += `<button onclick="vrcGroupAction('${groupId}','visibility','${myId}','${oppVis}')" style="background:var(--bg-glass);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:0.75em;color:var(--text-primary);cursor:pointer;" title="点击切换">${visText}</button>`;
+      actionHtml += `<button onclick="vrcGroupAction('${groupId}','leave')" style="background:#ef444422;border:1px solid #ef444444;border-radius:6px;padding:4px 10px;font-size:0.75em;color:#ef4444;cursor:pointer;">🚪 退出群组</button>`;
+    } else {
+      actionHtml += `<button onclick="vrcGroupAction('${groupId}','join')" style="background:linear-gradient(135deg,var(--accent),var(--accent-light));border:none;border-radius:6px;padding:4px 10px;font-size:0.75em;color:#fff;cursor:pointer;font-weight:600;">➕ 申请加入</button>`;
+    }
+    document.getElementById('gdActions').innerHTML = actionHtml;
+
   } catch(e) {
     document.getElementById('gdName').textContent = '加载失败: ' + e.message;
+  }
+}
+
+async function vrcGroupAction(groupId, action, myId, nextVis) {
+  try {
+    let url, method = 'POST', body = null;
+    if (action === 'leave') {
+      if(!confirm('确定要退出该群组吗？')) return;
+      url = '/api/vrc/groups/' + groupId + '/leave';
+    } else if (action === 'join') {
+      url = '/api/vrc/groups/' + groupId + '/join';
+    } else if (action === 'visibility') {
+      url = '/api/vrc/groups/' + groupId + '/members/' + myId;
+      method = 'PUT';
+      body = JSON.stringify({ visibility: nextVis });
+    }
+    
+    let opts = { method };
+    if (body) {
+      opts.headers = { 'Content-Type': 'application/json' };
+      opts.body = body;
+    }
+    
+    const r = await fetch(url, opts);
+    if (!r.ok) throw new Error(await r.text());
+    
+    // Refresh modal
+    openGroupDetail(groupId);
+  } catch(e) {
+    alert('操作失败: ' + e.message);
   }
 }
 
