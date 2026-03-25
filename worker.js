@@ -330,7 +330,9 @@ export default {
                 auth
             );
 
-            const respBody = await resp.text();
+            // Fetch exactly as Raw Buffer to prevent surrogate-pair (emojis) and UTF-8 charset
+            // stripping by CF's text() if header is purely application/json.
+            const respBody = await resp.arrayBuffer();
             const cookies = mergeCookies(auth, setCookies);
 
             return new Response(respBody, {
