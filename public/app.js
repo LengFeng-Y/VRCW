@@ -17,6 +17,70 @@ let favoriteGroups = []; // Avatar favorite groups from API (dynamic)
 let favoriteIdMap = new Map(); // avatarId -> favoriteId (for unfavoriting)
 window._localNameMap = new Map(); // GLOBAL CACHE: avatarId -> name (for recovery)
 
+// ── Global Avatar Lookup Queue (Strict Rate Limiting & 429 Backoff) ──
+const avatarLookupQueue = {
+  pending: [],
+  active: 0,
+  max: 2,
+  paused: false,
+  add(id, onFound) {
+    if (this.pending.some(p => p.id === id)) return;
+    this.pending.push({ id, onFound });
+    this.next();
+  },
+  async next() {
+    if (this.paused || this.active >= this.max || !this.pending.length) return;
+    this.active++;
+    const { id, onFound } = this.pending.shift();
+    try {
+      const name = await performSingleAvatarRecovery(id);
+      if (name) onFound(name);
+    } catch (e) {
+      if (e.message.includes('429')) {
+        this.paused = true;
+        this.pending.unshift({ id, onFound });
+        setTimeout(() => { this.paused = false; this.next(); }, 3000);
+      }
+    } finally {
+      this.active--;
+      this.next();
+    }
+  }
+};
+
+async function performSingleAvatarRecovery(id) {
+  // Try sources in order
+  const sources = [
+    async () => {
+      const r = await apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?search=${id}`)}`);
+      if (!r.ok) { if(r.status===429) throw new Error('429'); return null; }
+      const data = await r.json();
+      const found = Array.isArray(data) ? data.find(x => x.id === id) : data;
+      return (found && found.name && found.name !== 'Unknown') ? found.name : null;
+    },
+    async () => {
+      const r = await apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avtrdb.com/v3/avatar/search/vrcx?search=${id}`)}`);
+      if (!r.ok) { if(r.status===429) throw new Error('429'); return null; }
+      const data = await r.json();
+      const found = data.avatars && data.avatars[0] ? data.avatars[0] : (Array.isArray(data) ? data[0] : data);
+      return (found && found.name && found.name !== 'Unknown') ? found.name : null;
+    },
+    async () => {
+      const r = await apiCall(`/api/vrc/avatars/${id}`);
+      if (!r.ok) return null;
+      const det = await r.json();
+      return (det.name && det.name !== 'Unknown') ? det.name : null;
+    }
+  ];
+  for (const s of sources) {
+    try {
+      const res = await s();
+      if (res) return res;
+    } catch (e) { if(e.message==='429') throw e; }
+  }
+  return null;
+}
+
 // ── Local IndexedDB Cache ──
 const idb = {
   db: null,
@@ -4280,58 +4344,19 @@ async function fetchFriendAvatars(userId) {
     el.querySelectorAll('.avatar-thumb[data-src]').forEach(img => avatarObserver.observe(img));
 
     // ═══════════════════════════════════════════════════════════════
-    // Bounded Parallel Background Recovery (Deduplicated & Fast)
+    // Global Queued Background Recovery (Strict 429 Safety)
     // ═══════════════════════════════════════════════════════════════
-    const unknownAvs = allAvatars.filter(av => !av.name || av.name.startsWith('Model ') || av.name === 'Unknown').slice(0, 30);
-    const BATCH_SIZE = 5; // Process 5 at a time for speed vs safety balance
-    
-    for (let i = 0; i < unknownAvs.length; i += BATCH_SIZE) {
-      const batch = unknownAvs.slice(i, i + BATCH_SIZE);
-      await Promise.allSettled(batch.map(async (av) => {
-        try {
-          // 1. Check local favorites map (built during initial render)
-          if (localNameMap && localNameMap.has(av.id)) {
-            updateAvatarNameInUI(el, av.id, localNameMap.get(av.id));
-            return;
-          }
-
-          // 2. Try AvatarRecovery search by ID (Proxy)
-          const arUrl = `https://api.avatarrecovery.com/Avatar/vrcx?search=${av.id}`;
-          const arResp = await apiCall(`/api/proxy?url=${encodeURIComponent(arUrl)}`);
-          if (arResp.ok) {
-            const arData = await arResp.json();
-            const found = Array.isArray(arData) ? arData.find(x => x.id === av.id) : arData;
-            if (found && found.name && found.name !== 'Unknown') {
-              updateAvatarNameInUI(el, av.id, found.name);
-              return;
-            }
-          }
-          
-          // 3. Try AvtrDB by ID (V3)
-          const avtrUrl = `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${av.id}`;
-          const avtrResp = await apiCall(`/api/proxy?url=${encodeURIComponent(avtrUrl)}`);
-          if (avtrResp.ok) {
-            const avtrData = await avtrResp.json();
-            const found = avtrData.avatars && avtrData.avatars[0] ? avtrData.avatars[0] : (Array.isArray(avtrData) ? avtrData[0] : avtrData);
-            if (found && found.name && found.name !== 'Unknown') {
-              updateAvatarNameInUI(el, av.id, found.name);
-              return;
-            }
-          }
-          
-          // 4. Fallback to official API detail (Proxy)
-          const r = await apiCall(`/api/vrc/avatars/${av.id}`);
-          if (r.ok) {
-            const det = await r.json();
-            if (det.name && det.name !== 'Unknown') {
-              updateAvatarNameInUI(el, av.id, det.name);
-            }
-          }
-        } catch (e) { /* silent fail */ }
-      }));
-      // Small pause between batches
-      if (i + BATCH_SIZE < unknownAvs.length) await new Promise(r => setTimeout(r, 200));
-    }
+    const unknownAvs = allAvatars.filter(av => !av.name || av.name.startsWith('Model ') || av.name === 'Unknown').slice(0, 40);
+    unknownAvs.forEach(av => {
+       // Check local map one last time BEFORE queuing
+       if (localNameMap.has(av.id)) {
+          updateAvatarNameInUI(el, av.id, localNameMap.get(av.id));
+          return;
+       }
+       avatarLookupQueue.add(av.id, (name) => {
+         updateAvatarNameInUI(el, av.id, name);
+       });
+    });
     
   } catch(e) { 
     console.error('fetchFriendAvatars error:', e);
