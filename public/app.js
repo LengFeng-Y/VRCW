@@ -373,11 +373,17 @@ function processImageQueue() {
     };
     img.onerror = () => {
       img.onload = img.onerror = null;
-      img.classList.remove("loading");
-      img.classList.add("failed");
-      if (wrapper) {
-        wrapper.classList.remove("img-loading");
-        wrapper.classList.add("img-failed");
+      const retryCount = parseInt(img.dataset.retry || "0");
+      if (retryCount < 2) {
+        img.dataset.retry = retryCount + 1;
+        imageQueue.push({ img, src });
+      } else {
+        img.classList.remove("loading");
+        img.classList.add("failed");
+        if (wrapper) {
+          wrapper.classList.remove("img-loading");
+          wrapper.classList.add("img-failed");
+        }
       }
       runningLoads--;
       processImageQueue();
@@ -4261,7 +4267,8 @@ async function fetchFriendAvatars(userId, listEl) {
         }
         
         // 3. Try AvtrDB by ID (V3)
-        const avtrUrl = `https://api.avtrdb.com/v3/avatar/search/vrcx?id=${av.id}`;
+        // Using ?search=AV_ID instead of ?id= to avoid 400 Bad Request
+        const avtrUrl = `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${av.id}`;
         const avtrResp = await apiCall(`/api/proxy?url=${encodeURIComponent(avtrUrl)}`);
         if (avtrResp.ok) {
           const avtrData = await avtrResp.json();
