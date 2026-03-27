@@ -4082,12 +4082,31 @@ function updateAvatarNameInUI(listEl, avId, newName) {
   if (!listEl) return;
   const cards = listEl.querySelectorAll('.avatar-card');
   cards.forEach(card => {
-    // Check if this card belongs to the avatar id
     if (card.dataset.id === avId) {
-      const nameEl = card.querySelector('.avatar-name-overlay'); // Changed from .avatar-name to .avatar-name-overlay
+      const nameEl = card.querySelector('.avatar-name-overlay');
       if (nameEl) nameEl.textContent = newName;
     }
   });
+}
+
+// Build a global map of ID -> Name from all locally cached favorites
+async function buildLocalFavoriteNameMap() {
+  const map = new Map();
+  try {
+    const keys = await idb.keys();
+    const favKeys = keys.filter(k => k.startsWith('avatars_avatars'));
+    for (const key of favKeys) {
+      const list = await idb.get(key);
+      if (Array.isArray(list)) {
+        list.forEach(av => {
+          if (av.id && av.name && av.name !== 'Unknown') {
+            map.set(av.id, av.name);
+          }
+        });
+      }
+    }
+  } catch (e) { console.warn('Failed to build local name map', e); }
+  return map;
 }
 
 async function fetchFriendAvatars(userId, listEl) {
@@ -4130,6 +4149,9 @@ async function fetchFriendAvatars(userId, listEl) {
     const results = await Promise.allSettled(promises);
     const flattenedResults = results.map(r => r.status === 'fulfilled' ? r.value : []).flat();
 
+    // Build local name map to recover from favorites
+    const localNameMap = await buildLocalFavoriteNameMap();
+
     // Merge and deduplicate
     const allAvatars = [];
     const seenIds = new Set();
@@ -4142,6 +4164,12 @@ async function fetchFriendAvatars(userId, listEl) {
         
         // Comprehensive field normalization
         let name = av.name || av.Name || av.getName || av.displayName || av.AvatarName;
+        
+        // Check local favorites map first
+        if ((!name || name === 'Unknown') && localNameMap.has(id)) {
+          name = localNameMap.get(id);
+        }
+
         // If still no name, use ID as a fallback to avoid "Unknown" for all
         if (!name || name === 'Unknown') {
           name = `Model ${id.substring(5, 13)}`; 
@@ -4183,6 +4211,40 @@ async function fetchFriendAvatars(userId, listEl) {
     }).join('');
     
     el.querySelectorAll('.avatar-thumb[data-src]').forEach(img => avatarObserver.observe(img));
+
+    // ═══════════════════════════════════════════════════════════════
+    // Background Recovery Logic (favorites -> AvatarRecovery -> VRChat)
+    // ═══════════════════════════════════════════════════════════════
+    const unknownAvs = allAvatars.filter(av => !av.name || av.name.startsWith('Model ') || av.name === 'Unknown').slice(0, 20);
+    unknownAvs.forEach(async av => {
+      try {
+        // 1. Check local favorites map (built during initial render)
+        if (localNameMap && localNameMap.has(av.id)) {
+          updateAvatarNameInUI(el, av.id, localNameMap.get(av.id));
+          return;
+        }
+
+        // 2. Try AvatarRecovery search by ID (Proxy)
+        const arUrl = `https://api.avatarrecovery.com/Avatar/vrcx?avatarId=${av.id}`;
+        const arResp = await apiCall(`/api/proxy?url=${encodeURIComponent(arUrl)}`);
+        if (arResp.ok) {
+          const arData = await arResp.json();
+          if (arData && arData.name && arData.name !== 'Unknown') {
+            updateAvatarNameInUI(el, av.id, arData.name);
+            return;
+          }
+        }
+        
+        // 3. Fallback to official API detail (Proxy)
+        const r = await apiCall(`/api/vrc/avatars/${av.id}`);
+        if (r.ok) {
+          const det = await r.json();
+          if (det.name && det.name !== 'Unknown') {
+            updateAvatarNameInUI(el, av.id, det.name);
+          }
+        }
+      } catch (e) { /* silent fail */ }
+    });
     
   } catch(e) { 
     console.error('fetchFriendAvatars error:', e);
