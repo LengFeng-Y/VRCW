@@ -1260,92 +1260,9 @@ async function cleanInvalidFavorites() {
 }
 
 // ── Open Local Avatar Detail Modal ──
-function openLocalDetail(id) {
+function openLocalDetail(id) { 
   const av = visibleAvatars.find(a => a.id === id);
-  if (!av) return;
-
-  const modal = document.getElementById("avtrdbDetailModal");
-  if (!modal) return;
-
-  let thumb = av.thumbnailImageUrl || av.imageUrl || "";
-  if (thumb && (thumb.includes("api.vrchat.cloud") || thumb.includes("files.vrchat.cloud"))) {
-    thumb = `${API_BASE}/api/image?url=${encodeURIComponent(thumb)}&auth=${encodeURIComponent(vrcAuth || "")}`;
-  }
-  document.getElementById("avtrdbDetailImg").src = thumb;
-  document.getElementById("avtrdbDetailName").textContent = av.name || "未知模型";
-  document.getElementById("avtrdbDetailAuthor").textContent = av.authorName || "Unknown";
-  document.getElementById("avtrdbDetailId").textContent = av.id || "";
-
-  const fmt = d => d ? new Date(d).toLocaleString("zh-CN", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }) : "-";
-  document.getElementById("avtrdbDetailCreated").textContent = fmt(av.createdAt || av.created_at);
-  document.getElementById("avtrdbDetailUpdated").textContent = fmt(av.updatedAt || av.updated_at);
-
-  const platMap = { standalonewindows: "PC", android: "Quest", ios: "Apple" };
-  const plats = new Set();
-  (av.unityPackages || []).forEach(p => { 
-    if (p.platform && p.performanceRating && p.performanceRating !== "None") {
-      plats.add(p.platform); 
-    }
-  });
-  
-  const platBadges = Array.from(plats).map(p =>
-    `<span class="avtrdb-badge" style="font-size:0.85em;padding:3px 10px;">${platMap[p] || p}</span>`
-  ).join("") || "<span style='color:rgba(255,255,255,0.4)'>-</span>";
-  document.getElementById("avtrdbDetailPlats").innerHTML = platBadges;
-
-  const ratingColor = r => ({ VeryPoor:"#ef4444", Poor:"#f59e0b", Medium:"#eab308", Good:"#22c55e", Excellent:"#a3e635" }[r] || "#64748b");
-  const ratingHtml = (label, r) => r && r !== "None" ? `<span style="font-size:0.75em;color:${ratingColor(r)};background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:4px;border:1px solid ${ratingColor(r)}40;">${label}: ${r}</span>` : "";
-  
-  let perfHtmlArr = [];
-  (av.unityPackages || []).forEach(p => {
-    if (p.platform === "standalonewindows" && p.performanceRating) perfHtmlArr.push(ratingHtml("PC", p.performanceRating));
-    if (p.platform === "android" && p.performanceRating) perfHtmlArr.push(ratingHtml("Quest", p.performanceRating));
-    if (p.platform === "ios" && p.performanceRating) perfHtmlArr.push(ratingHtml("Apple", p.performanceRating));
-  });
-  const perfHtml = Array.from(new Set(perfHtmlArr)).filter(Boolean).join(" ") || "<span style='color:rgba(255,255,255,0.4)'>-</span>";
-  document.getElementById("avtrdbDetailPerf").innerHTML = perfHtml;
-
-  const descRow = document.getElementById("avtrdbDetailDescRow");
-  document.getElementById("avtrdbDetailDesc").textContent = av.description || "";
-  descRow.style.display = av.description ? "" : "none";
-
-  document.getElementById("avtrdbFavStatus").textContent = "";
-  document.getElementById("avtrdbFavStatus").className = "";
-  document.getElementById("avtrdbFavMenu")?.classList.add("hidden");
-
-  // Local model -> switch using avatar ID
-  const switchBtn = document.getElementById("avtrdbDetailSwitchBtn");
-  if (switchBtn) {
-    switchBtn.onclick = () => switchAvatar(av.id);
-  }
-
-  const favBtn = document.getElementById("avtrdbDetailFavBtn");
-  if (favoriteIdMap.has(av.id)) {
-     favBtn.innerHTML = "⭐ 移除收藏";
-     favBtn.className = "btn btn-danger-full";
-     favBtn.style.color = "";
-     favBtn.onclick = async (e) => {
-         e.stopPropagation();
-         await unfavorite(av.id, av.name);
-     };
-  } else {
-     favBtn.innerHTML = "⭐ 收藏";
-     favBtn.className = "btn btn-secondary";
-     favBtn.onclick = toggleAvtrdbFavMenu;
-     
-     const favList = document.getElementById("avtrdbFavGroupList");
-     if (favList) {
-        if (favoriteGroups.length === 0) {
-          favList.innerHTML = `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
-        } else {
-          favList.innerHTML = favoriteGroups.map(g =>
-            `<button class="avtrdb-fav-group-btn" onclick="addToFavorite('${escHtml(av.id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>`
-          ).join("");
-        }
-     }
-  }
-
-  modal.classList.remove("hidden");
+  if (av) displayAvatarDetail(av); 
 }
 
 function renderAvatars() {
@@ -3074,90 +2991,108 @@ async function avtrdbFetch(append) {
   }
 }
 
-function openAvtrdbDetail(av) {
+function displayAvatarDetail(av) {
   const modal = document.getElementById("avtrdbDetailModal");
   if (!modal) return;
 
-  document.getElementById("avtrdbDetailImg").src = av.image_url || "";
-  document.getElementById("avtrdbDetailName").textContent = av.name || "未知模型";
-  document.getElementById("avtrdbDetailAuthor").textContent = av.author?.name || "Unknown";
-  document.getElementById("avtrdbDetailId").textContent = av.vrc_id || "";
+  // 1. Normalize fields (handle both VRChat API and AvtrDB/VRCX formats)
+  const id = av.vrc_id || av.id || "";
+  const name = av.name || av.avatarName || "未知模型";
+  const author = av.author?.name || av.authorName || "Unknown";
+  const desc = av.description || "";
+  let thumb = av.image_url || av.thumbnailImageUrl || av.imageUrl || "";
+  
+  // Proxy VRChat images
+  if (thumb && (thumb.includes("api.vrchat.cloud") || thumb.includes("files.vrchat.cloud"))) {
+    thumb = `${API_BASE}/api/image?url=${encodeURIComponent(thumb)}&auth=${encodeURIComponent(vrcAuth || "")}`;
+  }
+
+  const createdAt = av.created_at || av.createdAt;
+  const updatedAt = av.updated_at || av.updatedAt;
+
+  // 2. Populate UI
+  document.getElementById("avtrdbDetailImg").src = thumb;
+  document.getElementById("avtrdbDetailName").textContent = name;
+  document.getElementById("avtrdbDetailAuthor").textContent = author;
+  document.getElementById("avtrdbDetailId").textContent = id;
 
   const fmt = d => d ? new Date(d).toLocaleString("zh-CN", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }) : "-";
-  document.getElementById("avtrdbDetailCreated").textContent = fmt(av.created_at);
-  document.getElementById("avtrdbDetailUpdated").textContent = fmt(av.updated_at);
+  document.getElementById("avtrdbDetailCreated").textContent = fmt(createdAt);
+  document.getElementById("avtrdbDetailUpdated").textContent = fmt(updatedAt);
 
-  const perf = av.performance || {};
-  const platMap = { pc: "PC", android: "Quest", ios: "Apple" };
-  const actualPlats = (av.compatibility || []).filter(p => {
-    if (p === "pc") return !!perf.pc_rating;
-    if (p === "android") return !!perf.android_rating;
-    if (p === "ios") return !!perf.ios_rating;
-    return true;
-  });
+  // 3. Platform & Performance Logic
+  const platMap = { pc: "PC", android: "Quest", ios: "Apple", standalonewindows: "PC" };
+  const ratingColor = r => ({ VeryPoor:"#ef4444", Poor:"#f59e0b", Medium:"#eab308", Good:"#22c55e", Excellent:"#a3e635" }[r] || "#64748b");
+  const ratingHtml = (label, r) => r && r !== "None" ? `<span style="font-size:0.75em;color:${ratingColor(r)};background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:4px;border:1px solid ${ratingColor(r)}40;">${label}: ${r}</span>` : "";
 
-  const platBadges = actualPlats.map(p =>
+  let plats = new Set();
+  let perfumes = [];
+
+  if (av.unityPackages) {
+    // VRChat API format
+    av.unityPackages.forEach(p => {
+       if (p.platform && p.performanceRating && p.performanceRating !== "None") {
+         plats.add(p.platform);
+         perfumes.push(ratingHtml(platMap[p.platform] || p.platform, p.performanceRating));
+       }
+    });
+  } else if (av.performance) {
+    // AvtrDB/VRCX format
+    if (av.performance.pc_rating) { plats.add("pc"); perfumes.push(ratingHtml("PC", av.performance.pc_rating)); }
+    if (av.performance.android_rating) { plats.add("android"); perfumes.push(ratingHtml("Quest", av.performance.android_rating)); }
+    if (av.performance.ios_rating) { plats.add("ios"); perfumes.push(ratingHtml("Apple", av.performance.ios_rating)); }
+    // Fallback platforms from compatibility
+    if (av.compatibility) av.compatibility.forEach(p => plats.add(p));
+  }
+
+  const platBadges = Array.from(plats).map(p =>
     `<span class="avtrdb-badge" style="font-size:0.85em;padding:3px 10px;">${platMap[p] || p}</span>`
   ).join("") || "<span style='color:rgba(255,255,255,0.4)'>-</span>";
   document.getElementById("avtrdbDetailPlats").innerHTML = platBadges;
 
-  const ratingColor = r => ({ VeryPoor:"#ef4444", Poor:"#f59e0b", Medium:"#eab308", Good:"#22c55e", Excellent:"#a3e635" }[r] || "#64748b");
-  const ratingHtml = (label, r) => r ? `<span style="font-size:0.75em;color:${ratingColor(r)};background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:4px;border:1px solid ${ratingColor(r)}40;">${label}: ${r}</span>` : "";
-  const perfHtml = [ratingHtml("PC", perf.pc_rating), ratingHtml("Quest", perf.android_rating), ratingHtml("Apple", perf.ios_rating)].filter(Boolean).join(" ") || "<span style='color:rgba(255,255,255,0.4)'>-</span>";
+  const perfHtml = perfumes.filter(Boolean).join(" ") || "<span style='color:rgba(255,255,255,0.4)'>-</span>";
   document.getElementById("avtrdbDetailPerf").innerHTML = perfHtml;
 
   const descRow = document.getElementById("avtrdbDetailDescRow");
-  document.getElementById("avtrdbDetailDesc").textContent = av.description || "";
-  descRow.style.display = av.description ? "" : "none";
+  document.getElementById("avtrdbDetailDesc").textContent = desc;
+  descRow.style.display = desc ? "" : "none";
 
-  // Reset fav status
+  // 4. Favorites Status
   document.getElementById("avtrdbFavStatus").textContent = "";
   document.getElementById("avtrdbFavMenu")?.classList.add("hidden");
 
   const favBtn = document.getElementById("avtrdbDetailFavBtn");
-  
-  // Cross-interface Favorited check
-  if (favoriteIdMap.has(av.vrc_id)) { // Changed av.id to av.vrc_id based on context
+  if (favoriteIdMap.has(id)) {
      favBtn.innerHTML = "⭐ 移除收藏";
      favBtn.className = "btn btn-danger-full";
-     favBtn.style.color = "";
-     favBtn.onclick = async (e) => {
-         e.stopPropagation();
-         await unfavorite(av.vrc_id, av.name); // Changed av.id to av.vrc_id
-     };
+     favBtn.onclick = (e) => { e.stopPropagation(); unfavorite(id, name); };
   } else {
      favBtn.innerHTML = "⭐ 收藏";
      favBtn.className = "btn btn-secondary";
      favBtn.onclick = toggleAvtrdbFavMenu;
-     
      const favList = document.getElementById("avtrdbFavGroupList");
      if (favList) {
-        if (favoriteGroups.length === 0) {
-          favList.innerHTML = `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
-        } else {
-          favList.innerHTML = favoriteGroups.map(g =>
-            `<button class="avtrdb-fav-group-btn" onclick="addToFavorite('${escHtml(av.vrc_id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>` // Changed av.id to av.vrc_id
-          ).join("");
-        }
+        if (favoriteGroups.length === 0) favList.innerHTML = `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
+        else favList.innerHTML = favoriteGroups.map(g =>
+          `<button class="avtrdb-fav-group-btn" onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>`
+        ).join("");
      }
   }
 
-  // Switch avatar button
-  document.getElementById("avtrdbDetailSwitchBtn").onclick = () => { switchAvatar(av.vrc_id); };
-
-  const favList = document.getElementById("avtrdbFavGroupList");
-  if (favList) {
-    if (favoriteGroups.length === 0) {
-      favList.innerHTML = `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先登录并加载收藏夹</div>`;
-    } else {
-      favList.innerHTML = favoriteGroups.map(g =>
-        `<button class="avtrdb-fav-group-btn" onclick="addToFavorite('${escHtml(av.vrc_id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>`
-      ).join("");
-    }
-  }
+  // 5. Actions
+  const switchBtn = document.getElementById("avtrdbDetailSwitchBtn");
+  if (switchBtn) switchBtn.onclick = () => switchAvatar(id);
 
   modal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
 }
+
+function openAvtrdbDetail(av) { displayAvatarDetail(av); }
+function openLocalDetail(id) { 
+  const av = visibleAvatars.find(a => a.id === id);
+  if (av) displayAvatarDetail(av); 
+}
+
 
 function closeAvtrdbDetail() {
   document.getElementById("avtrdbDetailModal")?.classList.add("hidden");
@@ -4126,17 +4061,26 @@ async function fetchFriendAvatars(userId) {
   el.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:rgba(255,255,255,0.3);text-align:center;">加载中...</div>';
   try {
     const r = await apiCall(`/api/vrc/avatars?userId=${userId}&releaseStatus=public&n=20`);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if (!r.ok) {
+        if (r.status === 401 || r.status === 403) throw new Error("无法查看该玩家的公开模型 (私有或受限)");
+        throw new Error(`HTTP ${r.status}`);
+    }
     const avList = await r.json();
     if (!avList || !avList.length) { el.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:rgba(255,255,255,0.3);">暂无公开模型</div>'; return; }
+    
+    // Store globally so detail modal can find them if needed
+    window._friendAvatars = avList;
+
     const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    el.innerHTML = avList.map(av => `<div class="avatar-card">
-      <div class="avatar-thumb-wrapper img-loading">
-        <img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(proxyImg(av.thumbnailImageUrl||av.imageUrl||''))}" alt="">
-        <div class="avatar-name-overlay">${escHtml(av.name||'')}</div>
-      </div></div>`).join('');
+    el.innerHTML = avList.map((av, idx) => {
+        return `<div class="avatar-card" style="cursor:pointer;" onclick="displayAvatarDetail(window._friendAvatars[${idx}])">
+          <div class="avatar-thumb-wrapper img-loading">
+            <img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(proxyImg(av.thumbnailImageUrl||av.imageUrl||''))}" alt="">
+            <div class="avatar-name-overlay">${escHtml(av.name||'')}</div>
+          </div></div>`;
+    }).join('');
     el.querySelectorAll('.avatar-thumb[data-src]').forEach(img => avatarObserver.observe(img));
-  } catch(e) { el.innerHTML = `<div style="grid-column:1/-1;padding:20px;color:var(--error);">${escHtml(e.message)}</div>`; }
+  } catch(e) { el.innerHTML = `<div style="grid-column:1/-1;padding:20px;color:var(--text-muted);font-size:0.85em;text-align:center;">${escHtml(e.message)}</div>`; }
 }
 
 async function deleteFriend(userId, name) {
