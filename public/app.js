@@ -4059,28 +4059,86 @@ async function fetchFriendAvatars(userId) {
   const el = document.getElementById('fpAvatarsList');
   if(!el) return;
   el.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:rgba(255,255,255,0.3);text-align:center;">加载中...</div>';
+  
   try {
-    const r = await apiCall(`/api/vrc/avatars?userId=${userId}&releaseStatus=public&n=20`);
-    if (!r.ok) {
-        if (r.status === 401 || r.status === 403) throw new Error("无法查看该玩家的公开模型 (私有或受限)");
-        throw new Error(`HTTP ${r.status}`);
+    const promises = [];
+    
+    // 1. Official VRChat API (may return 401/403 for non-friends or restricted users)
+    promises.push(apiCall(`/api/vrc/avatars?userId=${userId}&releaseStatus=public&n=20`)
+      .then(async r => {
+        if (!r.ok) return [];
+        return await r.json() || [];
+      }).catch(() => []));
+
+    // 2. VRCX Database (via Proxy)
+    promises.push(apiCall(`/api/proxy?url=${encodeURIComponent(`https://vrcx.vrcdb.com/avatars/Avatar/VRCX?authorId=${userId}`)}`)
+      .then(async r => {
+        if (!r.ok) return [];
+        return await r.json() || [];
+      }).catch(() => []));
+
+    // 3. AvatarRecovery (via Proxy)
+    promises.push(apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?authorId=${userId}`)}`)
+      .then(async r => {
+        if (!r.ok) return [];
+        return await r.json() || [];
+      }).catch(() => []));
+      
+    // 4. AvtrDB (Direct, supports CORS)
+    promises.push(fetch(`https://api.avtrdb.com/v2/avatar/search?author_id=${userId}&page_size=20`)
+      .then(async r => {
+        if (!r.ok) return [];
+        const data = await r.json();
+        return data.avatars || [];
+      }).catch(() => []));
+
+    const results = await Promise.all(promises);
+    
+    // Merge and deduplicate
+    const allAvatars = [];
+    const seenIds = new Set();
+    
+    results.flat().forEach(av => {
+      const id = av.id || av.Id; // Handle different casing
+      if (id && !seenIds.has(id)) {
+        seenIds.add(id);
+        // Normalize fields
+        allAvatars.push({
+          id,
+          name: av.name || av.Name || 'Unknown',
+          authorName: av.authorName || av.AuthorName || '',
+          imageUrl: av.imageUrl || av.ImageUrl || '',
+          thumbnailImageUrl: av.thumbnailImageUrl || av.ThumbnailImageUrl || '',
+          releaseStatus: av.releaseStatus || av.ReleaseStatus || 'public',
+          version: av.version || av.Version || 0,
+          unityPackages: av.unityPackages || av.UnityPackages || []
+        });
+      }
+    });
+
+    if (!allAvatars.length) { 
+      el.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:rgba(255,255,255,0.3);text-align:center;">暂无公开模型 (No public avatars found)</div>'; 
+      return; 
     }
-    const avList = await r.json();
-    if (!avList || !avList.length) { el.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:rgba(255,255,255,0.3);">暂无公开模型</div>'; return; }
     
     // Store globally so detail modal can find them if needed
-    window._friendAvatars = avList;
+    window._friendAvatars = allAvatars;
 
     const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    el.innerHTML = avList.map((av, idx) => {
+    el.innerHTML = allAvatars.map((av, idx) => {
         return `<div class="avatar-card" style="cursor:pointer;" onclick="displayAvatarDetail(window._friendAvatars[${idx}])">
           <div class="avatar-thumb-wrapper img-loading">
             <img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(proxyImg(av.thumbnailImageUrl||av.imageUrl||''))}" alt="">
             <div class="avatar-name-overlay">${escHtml(av.name||'')}</div>
           </div></div>`;
     }).join('');
+    
     el.querySelectorAll('.avatar-thumb[data-src]').forEach(img => avatarObserver.observe(img));
-  } catch(e) { el.innerHTML = `<div style="grid-column:1/-1;padding:20px;color:var(--text-muted);font-size:0.85em;text-align:center;">${escHtml(e.message)}</div>`; }
+    
+  } catch(e) { 
+    console.error('fetchFriendAvatars error:', e);
+    el.innerHTML = `<div style="grid-column:1/-1;padding:20px;color:var(--text-muted);font-size:0.85em;text-align:center;">读取列表时出错: ${escHtml(e.message)}</div>`; 
+  }
 }
 
 async function deleteFriend(userId, name) {
