@@ -3915,7 +3915,7 @@ function _renderFriendProfileUI(f, modal) {
   const showcased = (f.badges||[]).filter(b=>b.showcased).slice(0,8);
   const bdRow = document.getElementById('fpBadgesRow');
   if (bdRow) bdRow.innerHTML = showcased.map(b=>
-    `<img src="${escHtml(b.badgeImageUrl||'')}" title="${escHtml(b.badgeName||'')}" style="width:30px;height:30px;border-radius:5px;" onerror="this.style.display=\'none\'">`
+    `<img src="${escHtml(b.badgeImageUrl||'')}" title="${escHtml(b.badgeName||'')}" style="width:30px;height:30px;border-radius:5px;" onerror="this.style.display='none'">`
   ).join('') || '<span style="font-size:0.75em;color:var(--text-muted);">无展示徽章</span>';
 
   // Bug#1 fix: show formatted location
@@ -3935,10 +3935,20 @@ function _renderFriendProfileUI(f, modal) {
   if (f.bio) { bioSection.style.display=''; document.getElementById('fpBio').textContent=(f.bio||'').replace(/\\n/g, String.fromCharCode(10)); }
   else bioSection.style.display='none';
 
-  const statField = (label, val) =>
-    `<div class="fp-stat-item"><div class="fp-stat-label">${label}</div><div class="fp-stat-value">${escHtml(val||'')||'–'}</div></div>`;
+  const statField = (label, val, placeholder = '–') =>
+    `<div class="fp-stat-item"><div class="fp-stat-label">${label}</div><div class="fp-stat-value">${escHtml(val||'')||placeholder}</div></div>`;
+  
+  // Format Date Joined (Account Creation)
+  let joinedStr = f.date_joined || '';
+  if (joinedStr) {
+    const d = new Date(joinedStr);
+    joinedStr = d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  } else {
+    joinedStr = '未知 (非好友可见性限制)';
+  }
+
   document.getElementById('fpStatsGrid').innerHTML =
-    statField('账号创建日期', f.date_joined) +
+    statField('账号创建日期', joinedStr) +
     statField('最后活跃', f.last_activity ? new Date(f.last_activity).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '') +
     statField('允许克隆模型', f.allowAvatarCopying ? '允许' : '不允许');
 
@@ -3946,10 +3956,23 @@ function _renderFriendProfileUI(f, modal) {
     `<span style="font-family:monospace;font-size:0.9em;">${escHtml(f.id||'')}</span>
     <button onclick="navigator.clipboard.writeText('${escHtml(f.id||'')}').then(()=>this.textContent='✓')" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.9em;">复制</button>`;
 
-  document.getElementById('fpActions').innerHTML =
-    `<button class="btn btn-secondary" style="font-size:0.82em;padding:6px 14px;" onclick="showFriendContextMenu(event)">··· 操作菜单</button>
-     <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escHtml(f.id||'')}','_blank')">🔗 VRChat 主页</button>
-     <button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);font-size:0.82em;" onclick="deleteFriend('${escHtml(f.id||'')}','${escHtml(f.displayName||'')}')">🗑️ 删除好友</button>`;
+  const isSelf = f.id === (window._myUser && window._myUser.id);
+  const isFriend = f.isFriend || (allFriends && allFriends.some(af => af.id === f.id));
+  
+  let actionButtons = `
+    <button class="btn btn-secondary" style="font-size:0.82em;padding:6px 14px;" onclick="showFriendContextMenu(event)">··· 操作菜单</button>
+    <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escHtml(f.id||'')}','_blank')">🔗 VRChat 主页</button>
+  `;
+
+  if (!isSelf) {
+    if (isFriend) {
+      actionButtons += `<button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);font-size:0.82em;" onclick="deleteFriend('${escHtml(f.id||'')}','${escHtml(f.displayName||'')}')">🗑️ 删除好友</button>`;
+    } else {
+      actionButtons += `<button class="btn" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);font-size:0.82em;" onclick="sendFriendRequest('${escHtml(f.id||'')}','${escHtml(f.displayName||'')}')">➕ 添加好友</button>`;
+    }
+  }
+
+  document.getElementById('fpActions').innerHTML = actionButtons;
 
   // Always restore the mutual friends tab for non-self profiles
   const mutualTabBtn = document.getElementById('fpTabMutual');
@@ -4092,7 +4115,7 @@ async function fetchFriendAvatars(userId) {
         return data.avatars || data || []; // Handle both {avatars: []} and []
       }).catch(() => []));
 
-    const results = await Promise.allUnsettled(promises);
+    const results = await Promise.allSettled(promises);
     const flattenedResults = results.map(r => r.status === 'fulfilled' ? r.value : []).flat();
 
     // Merge and deduplicate
@@ -4165,6 +4188,15 @@ async function deleteFriend(userId, name) {
     filterFriends();
     friendLogMsg(`✓ 已删除好友 ${name}`, 'success');
   } catch(e) { friendLogMsg(`✗ 删除失败: ${e.message}`, 'error'); }
+}
+
+async function sendFriendRequest(userId, name) {
+  try {
+    const r = await apiCall(`/api/vrc/user/${userId}/friendRequest`, { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    friendLogMsg(`✓ 已向 ${name} 发送好友申请`, 'success');
+    _renderFriendProfileUI(currentFriendProfile, document.getElementById('friendProfileModal')); // Refresh UI
+  } catch(e) { friendLogMsg(`✗ 发送失败: ${e.message}`, 'error'); }
 }
 
 

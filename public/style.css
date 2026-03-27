@@ -82,7 +82,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
   background: rgba(23, 23, 30, 0.95);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px; overflow: hidden; z-index: 1000;
+  border-radius: 16px; overflow: hidden; z-index: 2000;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
   opacity: 0; transform: translateY(-10px); pointer-events: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -105,15 +105,16 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 }
 
 /* ── Updated Search Bar Premium ── */
-.search-container-premium { width: 100%; max-width: 1000px; margin: 0 auto; padding: 20px 0; }
+.search-container-premium { width: 100%; max-width: 1000px; margin: 0 auto; padding: 16px 20px; }
 .search-box-glass {
   display: flex; align-items: center;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-glass);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   border-radius: 100px; padding: 4px 6px 4px 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  transition: all 0.3s ease;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative; z-index: 100;
 }
 .search-box-glass:focus-within {
   background: rgba(255, 255, 255, 0.07);
@@ -164,13 +165,14 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 /* ── Main Layout ── */
 
 /* ── Sidebar ── */
-.sidebar { width: 260px; min-width: 260px; border-right: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
-.sidebar-section { background: var(--bg-glass); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
-.sidebar-section h3 { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 8px; }
+.sidebar { width: 260px; min-width: 260px; border-right: 1px solid var(--border); padding: 16px 12px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.sidebar-section { background: var(--bg-glass); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 8px; }
+.sidebar-section:last-child { margin-bottom: 0; }
+.sidebar-section h3 { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 10px; }
 
 /* ── Grid ── */
 .grid-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.avatar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); grid-auto-rows: max-content; gap: 12px; padding: 16px 24px; width: 100%; overflow-y: auto; flex: 1; align-content: start; }
+.avatar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); grid-auto-rows: max-content; gap: 14px; padding: 20px 24px; width: 100%; overflow-y: auto; flex: 1; align-content: start; }
 
 /* ── Cards ── */
 .avatar-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; cursor: pointer; transition: all var(--transition); position: relative; content-visibility: auto; contain-intrinsic-size: auto 240px; }
@@ -311,7 +313,11 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
     .download-panel.active { position: relative; overflow: hidden; }
 }
 
-.sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: calc(56px + env(safe-area-inset-bottom)); background: rgba(0,0,0,0.5); z-index: 899; backdrop-filter: blur(2px); }
+.sidebar-overlay { 
+  display: none; position: fixed; top: 0; left: 0; right: 0; 
+  bottom: calc(64px + env(safe-area-inset-bottom)); /* Fixed to clear docked bar */
+  background: rgba(0,0,0,0.6); z-index: 899; backdrop-filter: blur(4px); 
+}
 .sidebar-overlay.active { display: block; }
 
 .bottom-nav { z-index: 1000; } /* Ensure bottom nav is above overlay */
@@ -352,9 +358,9 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
 .avtrdb-fav-group-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Friends Tab ── */
-.friend-card { display: flex; align-items: center; gap: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; transition: all var(--transition); cursor: default; content-visibility: auto; contain-intrinsic-size: auto 70px; }
-.friend-card:hover { border-color: var(--border-hover); background: rgba(17,24,39,0.9); }
-.friend-avatar-wrap { position: relative; flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: var(--bg-secondary); }
+.friend-card { display: flex; align-items: center; gap: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; transition: all var(--transition); cursor: default; content-visibility: auto; contain-intrinsic-size: auto 64px; margin-bottom: 2px; }
+.friend-card:hover { border-color: var(--border-hover); background: rgba(255, 255, 255, 0.05); }
+.friend-avatar-wrap { position: relative; flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%; overflow: hidden; background: var(--bg-secondary); border: 1px solid var(--border); }
 .friend-avatar-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .friend-status-dot { position: absolute; bottom: 1px; right: 1px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--bg-primary); }
 .friend-status-dot.online { background: #22c55e; }
@@ -578,6 +584,8 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     backdrop-filter: blur(10px) !important;
     height: 42px !important;
+    position: relative !important;
+    z-index: 50 !important;
 }
 
 .glass-search-input-pill:focus-within {
@@ -663,7 +671,7 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
   .grid-area, .download-panel.active, .upload-panel.active {
     width: 100%; min-height: 0;
   }
-  .avatar-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); padding: 8px 6px !important; gap: 8px !important; }
+  .avatar-grid { grid-template-columns: repeat(2, 1fr) !important; padding: 12px 8px !important; gap: 10px !important; }
 
   /* Modal: full-screen on mobile */
   .modal { align-items: flex-end; padding: 0; z-index: 1000; }
