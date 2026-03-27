@@ -166,7 +166,7 @@
                 </div>
                 <div class="grid-area" style="display: flex; flex-direction: column; overflow: hidden;">
                     <!-- Filter Bar -->
-                    <div class="filter-bar" style="display: flex; gap: 10px; padding: 16px 24px 0 24px; flex-shrink: 0;">
+                    <div class="filter-bar avatar-filter-bar" style="display: flex; gap: 10px; padding: 16px 24px 0 24px; flex-shrink: 0;">
                         <div class="glass-search-input-pill" style="flex: 1;">
                             <span style="opacity: 0.5; font-size: 0.9em;">🔍</span>
                             <input type="text" id="searchInput" class="input-field" data-i18n-placeholder="searchPlaceholder" placeholder="Search name, desc, tags..." oninput="applyFilters()">
@@ -311,7 +311,7 @@
                             <div class="search-box-divider"></div>
                             <input type="text" id="avtrdbSearch" placeholder="搜索模型、玩家、世界..." oninput="onAvtrdbInput()" onkeydown="if(event.key==='Enter')doAvtrdbSearch()">
                             <div class="search-box-divider mobile-hide"></div>
-                            <div class="search-platform-select mobile-hide">
+                            <div class="search-platform-select" style="display:none;">
                                 <div class="glass-select" id="platGlassSelect" onclick="toggleGlassSelect(event, this)" style="min-width:140px;">
                                     <div class="glass-select-trigger">
                                         <span class="selected-label">所有平台 (All)</span>

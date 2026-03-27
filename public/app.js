@@ -2816,9 +2816,9 @@ function onSearchCategoryChange() {
   const platWrap = document.querySelector(".search-platform-select");
 
   if (cat === "avatars") {
-    if (platWrap) platWrap.classList.remove("mobile-hide");
+    if (platWrap) platWrap.style.display = "block";
   } else {
-    if (platWrap) platWrap.classList.add("mobile-hide");
+    if (platWrap) platWrap.style.display = "none";
   }
   doAvtrdbSearch();
 }
@@ -3442,7 +3442,7 @@ function switchFriendCategory(cat) {
   }
 }
 
-async function fetchMyProfile() {
+async function fetchMyProfile(forceRefresh = false) {
   // Show the inline view (not modal) in the right panel
   const myView = document.getElementById('friendMyProfileView');
   const listView = document.getElementById('friendListView');
@@ -3453,11 +3453,11 @@ async function fetchMyProfile() {
   const catBtn = document.getElementById('friendCatMyprofile');
   if (catBtn) { catBtn.classList.add('active','btn-primary'); catBtn.style.display = ''; }
   try {
-    if (!myProfileData) {
+    if (!forceRefresh && !myProfileData) {
       const cached = await idb.get('my_profile');
       if (cached) myProfileData = cached;
     }
-    if (!myProfileData) {
+    if (forceRefresh || !myProfileData) {
       const resp = await apiCall('/api/vrc/auth/user');
       if (!resp.ok) throw new Error('Failed to fetch profile');
       myProfileData = await resp.json();
@@ -3566,6 +3566,7 @@ function renderMyProfile(u) {
 
     <!-- Action buttons -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+      <button class="btn btn-primary" style="padding:6px 14px;font-size:0.82em;" onclick="fetchMyProfile(true)">🔄 刷新资料</button>
       <button class="btn btn-secondary" style="padding:6px 14px;font-size:0.82em;" onclick="showSelfContextMenu(event)">··· 操作菜单</button>
       <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escHtml(u.id||'')}','_blank')">🔗 VRChat 主页</button>
       <button class="btn btn-secondary" style="font-size:0.82em;" onclick="navigator.clipboard.writeText('${escHtml(u.id||'')}').then(()=>this.textContent='✓ 已复制').catch(()=>{})">📋 复制 ID</button>

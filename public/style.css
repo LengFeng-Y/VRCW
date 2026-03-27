@@ -729,6 +729,27 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
   .mobile-hide { display: none !important; }
   #fpName { max-width: 160px !important; }
 
+  /* Avatar Filter Bar specific fixes */
+  .avatar-filter-bar {
+    padding: 10px 10px 0 !important;
+    gap: 6px !important;
+  }
+  .avatar-filter-bar .glass-select {
+    min-width: 90px !important;
+    flex: 1;
+  }
+  .avatar-filter-bar .glass-search-input-pill {
+    min-width: 42px !important;
+    width: 42px !important;
+    padding: 0 !important;
+    justify-content: center;
+    flex: 0 0 42px;
+  }
+  .avatar-filter-bar .glass-select-trigger {
+    padding: 10px 6px !important;
+    font-size: 0.72rem;
+  }
+
   /* My Profile Layout Tweaks */
   .my-profile-banner { margin: -14px -14px 0; }
 }
