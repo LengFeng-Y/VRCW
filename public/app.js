@@ -4245,16 +4245,16 @@ async function fetchFriendAvatars(userId, listEl) {
     // Background Recovery Logic (favorites -> AvatarRecovery -> VRChat)
     // ═══════════════════════════════════════════════════════════════
     const unknownAvs = allAvatars.filter(av => !av.name || av.name.startsWith('Model ') || av.name === 'Unknown').slice(0, 20);
-    unknownAvs.forEach(async av => {
+    for (const av of unknownAvs) {
+      await new Promise(r => setTimeout(r, 100)); // 100ms rate limit
       try {
         // 1. Check local favorites map (built during initial render)
         if (localNameMap && localNameMap.has(av.id)) {
           updateAvatarNameInUI(el, av.id, localNameMap.get(av.id));
-          return;
+          continue;
         }
 
         // 2. Try AvatarRecovery search by ID (Proxy)
-        // Using ?search=AV_ID often works better across various providers
         const arUrl = `https://api.avatarrecovery.com/Avatar/vrcx?search=${av.id}`;
         const arResp = await apiCall(`/api/proxy?url=${encodeURIComponent(arUrl)}`);
         if (arResp.ok) {
@@ -4262,12 +4262,11 @@ async function fetchFriendAvatars(userId, listEl) {
           const found = Array.isArray(arData) ? arData.find(x => x.id === av.id) : arData;
           if (found && found.name && found.name !== 'Unknown') {
             updateAvatarNameInUI(el, av.id, found.name);
-            return;
+            continue;
           }
         }
         
         // 3. Try AvtrDB by ID (V3)
-        // Using ?search=AV_ID instead of ?id= to avoid 400 Bad Request
         const avtrUrl = `https://api.avtrdb.com/v3/avatar/search/vrcx?search=${av.id}`;
         const avtrResp = await apiCall(`/api/proxy?url=${encodeURIComponent(avtrUrl)}`);
         if (avtrResp.ok) {
@@ -4275,7 +4274,7 @@ async function fetchFriendAvatars(userId, listEl) {
           const found = avtrData.avatars && avtrData.avatars[0] ? avtrData.avatars[0] : (Array.isArray(avtrData) ? avtrData[0] : avtrData);
           if (found && found.name && found.name !== 'Unknown') {
             updateAvatarNameInUI(el, av.id, found.name);
-            return;
+            continue;
           }
         }
         
@@ -4288,7 +4287,7 @@ async function fetchFriendAvatars(userId, listEl) {
           }
         }
       } catch (e) { /* silent fail */ }
-    });
+    }
     
   } catch(e) { 
     console.error('fetchFriendAvatars error:', e);
