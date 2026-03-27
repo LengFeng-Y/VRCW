@@ -4084,28 +4084,34 @@ async function fetchFriendAvatars(userId) {
         return await r.json() || [];
       }).catch(() => []));
       
-    // 4. AvtrDB (Direct, supports CORS)
-    promises.push(fetch(`https://api.avtrdb.com/v2/avatar/search?author_id=${userId}&page_size=20`)
+    // 4. AvtrDB (V3, as used in VRCX)
+    promises.push(fetch(`https://api.avtrdb.com/v3/avatar/search/vrcx?authorId=${userId}&n=50`)
       .then(async r => {
         if (!r.ok) return [];
         const data = await r.json();
-        return data.avatars || [];
+        return data.avatars || data || []; // Handle both {avatars: []} and []
       }).catch(() => []));
 
-    const results = await Promise.all(promises);
-    
+    const results = await Promise.allUnsettled(promises);
+    const flattenedResults = results.map(r => r.status === 'fulfilled' ? r.value : []).flat();
+
     // Merge and deduplicate
     const allAvatars = [];
     const seenIds = new Set();
     
-    results.flat().forEach(av => {
+    flattenedResults.forEach(av => {
       if (!av) return;
-      const id = av.id || av.Id || av.id_vrc || ''; // Handle multiple ID variants
+      const id = av.id || av.Id || av.id_vrc || '';
       if (id && !seenIds.has(id)) {
         seenIds.add(id);
         
-        // Comprehensive field normalization for various third-party databases (VRCX, AvtrDB, etc.)
-        const name = av.name || av.Name || av.getName || av.displayName || av.AvatarName || 'Unknown';
+        // Comprehensive field normalization
+        let name = av.name || av.Name || av.getName || av.displayName || av.AvatarName;
+        // If still no name, use ID as a fallback to avoid "Unknown" for all
+        if (!name || name === 'Unknown') {
+          name = `Model ${id.substring(5, 13)}`; 
+        }
+        
         const authorName = av.authorName || av.AuthorName || av.ownerName || av.author_name || '';
         const thumb = av.thumbnailImageUrl || av.ThumbnailImageUrl || av.thumbnail_url || av.imageUrl || av.ImageUrl || av.image_url || '';
         const fullImg = av.imageUrl || av.ImageUrl || av.image_url || av.thumbnailImageUrl || av.ThumbnailImageUrl || '';
