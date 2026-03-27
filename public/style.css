@@ -614,7 +614,7 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
     width: 100% !important; min-width: 100% !important;
     height: 56px; flex-direction: row;
     border-right: none; border-top: 1px solid var(--border);
-    z-index: 500; padding: 0;
+    z-index: 1000; padding: 0;
     padding-bottom: env(safe-area-inset-bottom);
     height: calc(56px + env(safe-area-inset-bottom));
   }
@@ -657,7 +657,7 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
     background: var(--bg-secondary); padding: 8px 10px;
   }
   .sidebar.open { left: 0; box-shadow: 8px 0 24px rgba(0,0,0,0.5); }
-  .sidebar-overlay { z-index: 799; bottom: 56px; }
+  .sidebar-overlay { z-index: 799; bottom: calc(56px + env(safe-area-inset-bottom)); }
 
   /* Content areas: full width, scrollable */
   .grid-area, .download-panel.active, .upload-panel.active {
