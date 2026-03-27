@@ -167,18 +167,36 @@
                 <div class="grid-area" style="display: flex; flex-direction: column; overflow: hidden;">
                     <!-- Filter Bar -->
                     <div class="filter-bar" style="display: flex; gap: 10px; padding: 16px 24px 0 24px; flex-shrink: 0;">
-                        <input type="text" id="searchInput" class="input-field" data-i18n-placeholder="searchPlaceholder" placeholder="Search name, desc, tags..." oninput="applyFilters()" style="flex: 1;">
-                        <select id="filterStatus" class="input-field" onchange="applyFilters()" style="width: 130px;">
-                            <option value="all" data-i18n="filterAllStatus">All Status</option>
-                            <option value="public" data-i18n="filterPublic">Public</option>
-                            <option value="private" data-i18n="filterPrivate">Private</option>
-                        </select>
-                        <select id="filterPlatform" class="input-field" onchange="applyFilters()" style="width: 160px;">
-                            <option value="all">所有平台</option>
-                            <option value="pc">含 PC</option>
-                            <option value="pc-quest">含 PC + Quest</option>
-                            <option value="pc-quest-apple">PC + Quest + Apple</option>
-                        </select>
+                        <div class="glass-search-input-pill" style="flex: 1;">
+                            <span style="opacity: 0.5; font-size: 0.9em;">🔍</span>
+                            <input type="text" id="searchInput" class="input-field" data-i18n-placeholder="searchPlaceholder" placeholder="Search name, desc, tags..." oninput="applyFilters()">
+                        </div>
+                        <div class="glass-select" style="min-width: 130px;" onclick="toggleGlassSelect(event, this)">
+                            <div class="glass-select-trigger">
+                                <span class="selected-label" data-i18n="filterAllStatus">All Status</span>
+                                <span class="chevron">▼</span>
+                            </div>
+                            <div class="glass-select-options">
+                                <div class="glass-option selected" data-i18n="filterAllStatus" onclick="selectGlassOption(event, this, 'all', 'applyFilters')">All Status</div>
+                                <div class="glass-option" data-i18n="filterPublic" onclick="selectGlassOption(event, this, 'public', 'applyFilters')">Public</div>
+                                <div class="glass-option" data-i18n="filterPrivate" onclick="selectGlassOption(event, this, 'private', 'applyFilters')">Private</div>
+                            </div>
+                            <input type="hidden" id="filterStatus" value="all">
+                        </div>
+
+                        <div class="glass-select" style="min-width: 160px;" onclick="toggleGlassSelect(event, this)">
+                            <div class="glass-select-trigger">
+                                <span class="selected-label" data-i18n="filterAllPlatform">所有平台</span>
+                                <span class="chevron">▼</span>
+                            </div>
+                            <div class="glass-select-options">
+                                <div class="glass-option selected" data-i18n="filterAllPlatform" onclick="selectGlassOption(event, this, 'all', 'applyFilters')">所有平台</div>
+                                <div class="glass-option" data-i18n="filterPC" onclick="selectGlassOption(event, this, 'pc', 'applyFilters')">含 PC</div>
+                                <div class="glass-option" data-i18n="filterPCQuest" onclick="selectGlassOption(event, this, 'pc-quest', 'applyFilters')">含 PC + Quest</div>
+                                <div class="glass-option" data-i18n="filterPCQuestApple" onclick="selectGlassOption(event, this, 'pc-quest-apple', 'applyFilters')">PC + Quest + Apple</div>
+                            </div>
+                            <input type="hidden" id="filterPlatform" value="all">
+                        </div>
                     </div>
                     <div id="avatarGrid" class="avatar-grid" style="flex: 1; overflow-y: auto;"></div>
                 </div>
@@ -241,9 +259,16 @@
                         <div id="updateFields" class="hidden">
                             <div class="form-group">
                                 <label data-i18n="selectAvatar">Select Avatar to Update</label>
-                                <select id="avatarSelect" class="input-field">
-                                    <option value="">-- Select --</option>
-                                </select>
+                                <div class="glass-select" style="flex: 1;" onclick="toggleGlassSelect(event, this)">
+                                    <div class="glass-select-trigger">
+                                        <span class="selected-label" data-i18n="selectAvatar">Select avatar...</span>
+                                        <span class="chevron">▼</span>
+                                    </div>
+                                    <div class="glass-select-options" id="avatarSelectOptions">
+                                        <!-- Will be populated by JS -->
+                                    </div>
+                                    <input type="hidden" id="avatarSelect">
+                                </div>
                             </div>
                         </div>
 
@@ -266,25 +291,48 @@
             <div id="searchPanel" class="upload-panel">
                 <div class="upload-area" style="max-width:100%;padding:0;">
                     <!-- Search bar -->
-                    <div style="display:flex;gap:10px;padding:20px 24px 0;flex-shrink:0;flex-wrap:wrap;">
-                        <select id="searchCategory" class="input-field" style="width:120px;" onchange="doAvtrdbSearch()">
-                            <option value="avatars">模型 (Avatars)</option>
-                            <option value="users">玩家 (Users)</option>
-                            <option value="worlds">世界 (Worlds)</option>
-                            <option value="groups">群组 (Groups)</option>
-                        </select>
-                        <input type="text" id="avtrdbSearch" class="input-field"
-                            placeholder="输入关键词进行搜索..."
-                            style="flex:1;" oninput="onAvtrdbInput()" onkeydown="if(event.key==='Enter')doAvtrdbSearch()">
-                        <select id="avtrdbPlatform" class="input-field" style="width:130px;" onchange="doAvtrdbSearch()">
-                            <option value="">所有平台</option>
-                            <option value="pc">PC</option>
-                            <option value="android">Quest</option>
-                            <option value="ios">Apple</option>
-                            <option value="pc+android">PC + Quest</option>
-                            <option value="pc+android+ios">PC + Quest + Apple</option>
-                        </select>
-                        <button class="btn btn-primary" onclick="doAvtrdbSearch()">搜索</button>
+                    <div class="search-container-premium">
+                        <div class="search-box-glass">
+                            <div class="search-category-select">
+                                <div class="glass-select" id="catGlassSelect" onclick="toggleGlassSelect(event, this)">
+                                    <div class="glass-select-trigger">
+                                        <span class="selected-label">模型 (Avatar)</span>
+                                        <span class="chevron">▼</span>
+                                    </div>
+                                    <div class="glass-select-options">
+                                        <div class="glass-option selected" onclick="selectGlassOption(event, this, 'avatars', 'onSearchCategoryChange')">模型 (Avatar)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event, this, 'users', 'onSearchCategoryChange')">玩家 (User)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event, this, 'worlds', 'onSearchCategoryChange')">世界 (World)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event, this, 'groups', 'onSearchCategoryChange')">群组 (Group)</div>
+                                    </div>
+                                    <input type="hidden" id="searchCategory" value="avatars">
+                                </div>
+                            </div>
+                            <div class="search-box-divider"></div>
+                            <input type="text" id="avtrdbSearch" placeholder="搜索模型、玩家、世界..." oninput="onAvtrdbInput()" onkeydown="if(event.key==='Enter')doAvtrdbSearch()">
+                            <div class="search-box-divider mobile-hide"></div>
+                            <div class="search-platform-select mobile-hide">
+                                <div class="glass-select" id="platGlassSelect" onclick="toggleGlassSelect(event, this)" style="min-width:140px;">
+                                    <div class="glass-select-trigger">
+                                        <span class="selected-label">所有平台 (All)</span>
+                                        <span class="chevron">▼</span>
+                                    </div>
+                                    <div class="glass-select-options">
+                                        <div class="glass-option selected" data-i18n="filterAllPlatform" onclick="selectGlassOption(event, this, '', 'doAvtrdbSearch')">所有平台 (All)</div>
+                                        <div class="glass-option" data-i18n="filterPC" onclick="selectGlassOption(event, this, 'pc', 'doAvtrdbSearch')">PC Only</div>
+                                        <div class="glass-option" data-i18n="filterQuest" onclick="selectGlassOption(event, this, 'android', 'doAvtrdbSearch')">Quest Only</div>
+                                        <div class="glass-option" data-i18n="filterApple" onclick="selectGlassOption(event, this, 'ios', 'doAvtrdbSearch')">Apple Only</div>
+                                        <div class="glass-option" data-i18n="filterPCQuest" onclick="selectGlassOption(event, this, 'pc+android', 'doAvtrdbSearch')">PC + Quest</div>
+                                        <div class="glass-option" data-i18n="filterPCQuestAppleShort" onclick="selectGlassOption(event, this, 'pc+android+ios', 'doAvtrdbSearch')">PC + Q + A</div>
+                                    </div>
+                                    <input type="hidden" id="avtrdbPlatform" value="">
+                                </div>
+                            </div>
+                            <button class="search-btn-premium" onclick="doAvtrdbSearch()">
+                                <span class="search-btn-icon">🔍</span>
+                                <span class="search-btn-text">搜索</span>
+                            </button>
+                        </div>
                     </div>
                     <!-- Stats -->
                     <div id="avtrdbStats" style="padding:8px 24px;font-size:0.8em;color:rgba(255,255,255,0.4);"></div>
@@ -345,15 +393,23 @@
                     <div id="friendListView" style="display:none;flex-direction:column;height:100%;overflow:hidden;">
                         <!-- Toolbar -->
                         <div style="display:flex;gap:8px;padding:16px 24px 0;flex-shrink:0;flex-wrap:wrap;align-items:center;">
-                            <input type="text" id="friendSearch" class="input-field"
-                                placeholder="搜索好友 / Search..." style="flex:1;min-width:140px;" oninput="filterFriends()">
-                            <select id="friendSortBy" class="input-field" style="width:130px;" onchange="filterFriends()">
-                                <option value="status">在线优先</option>
-                                <option value="name_asc">名字 A→Z</option>
-                                <option value="name_desc">名字 Z→A</option>
-                                <option value="trust">信任等级</option>
-                                <option value="last_active">最近活跃</option>
-                            </select>
+                            <div class="glass-search-input-pill" style="flex:1; min-width:140px;">
+                                <span style="opacity: 0.5; font-size: 0.9em;">🔍</span>
+                                <input type="text" id="friendSearch" class="input-field"
+                                    placeholder="搜索好友 / Search..." oninput="filterFriends()">
+                            </div>
+                            <div class="glass-select" style="min-width: 130px;" onclick="toggleGlassSelect(event, this)">
+                                <div class="glass-select-trigger">
+                                    <span class="selected-label" data-i18n="friendSortStatus">Sort by Status</span>
+                                    <span class="chevron">▼</span>
+                                </div>
+                                <div class="glass-select-options">
+                                    <div class="glass-option selected" data-i18n="friendSortStatus" onclick="selectGlassOption(event, this, 'status', 'filterFriends')">在线优先</div>
+                                    <div class="glass-option" data-i18n="friendSortName" onclick="selectGlassOption(event, this, 'name', 'filterFriends')">名字 A→Z</div>
+                                    <div class="glass-option" data-i18n="friendSortActivity" onclick="selectGlassOption(event, this, 'activity', 'filterFriends')">最近活跃</div>
+                                </div>
+                                <input type="hidden" id="friendSortBy" value="status">
+                            </div>
                             <button class="btn btn-secondary" onclick="fetchCurrentFriendCategory(true)">🔄 刷新</button>
                         </div>
                         <div id="friendStats" style="padding:6px 24px;font-size:0.8em;color:rgba(255,255,255,0.4);flex-shrink:0;"></div>
@@ -387,8 +443,24 @@
                 <!-- Main content -->
                 <div class="grid-area" style="display:flex;flex-direction:column;overflow:hidden;">
                     <div style="display:flex;gap:8px;padding:16px 24px 0;flex-shrink:0;flex-wrap:wrap;align-items:center;">
-                        <input type="text" id="worldSearch" class="input-field"
-                            placeholder="搜索世界 / Search worlds..." style="flex:1;min-width:160px;" oninput="filterWorlds()">
+                        <div class="glass-search-input-pill" style="flex:1; min-width:160px;">
+                            <span style="opacity: 0.5; font-size: 0.9em;">🔍</span>
+                            <input type="text" id="worldSearch" class="input-field"
+                                placeholder="搜索世界 / Search worlds..." oninput="filterWorlds()">
+                        </div>
+                        <div class="glass-select" style="min-width: 140px;" onclick="toggleGlassSelect(event, this)">
+                            <div class="glass-select-trigger">
+                                <span class="selected-label" data-i18n="filterAllPlatform">所有平台</span>
+                                <span class="chevron">▼</span>
+                            </div>
+                            <div class="glass-select-options">
+                                <div class="glass-option selected" data-i18n="filterAllPlatform" onclick="selectGlassOption(event, this, 'all', 'filterWorlds')">所有平台</div>
+                                <div class="glass-option" data-i18n="filterPC" onclick="selectGlassOption(event, this, 'pc', 'filterWorlds')">含 PC</div>
+                                <div class="glass-option" data-i18n="filterQuest" onclick="selectGlassOption(event, this, 'android', 'filterWorlds')">Quest Only</div>
+                                <div class="glass-option" data-i18n="filterApple" onclick="selectGlassOption(event, this, 'ios', 'filterWorlds')">Apple Only</div>
+                            </div>
+                            <input type="hidden" id="worldFilterPlatform" value="all">
+                        </div>
                         <button class="btn btn-secondary" onclick="fetchWorlds(currentWorldCategory, true)">🔄 刷新</button>
                     </div>
                     <div id="worldStats" style="padding:6px 24px;font-size:0.8em;color:rgba(255,255,255,0.4);flex-shrink:0;"></div>
@@ -598,10 +670,17 @@
             </div>
             <div class="form-group">
                 <label data-i18n="editStatus">Release Status</label>
-                <select id="editStatus" class="input-field">
-                    <option value="private">Private</option>
-                    <option value="public">Public</option>
-                </select>
+                <div class="glass-select" style="width:100%;" onclick="toggleGlassSelect(event, this)">
+                    <div class="glass-select-trigger">
+                        <span class="selected-label" data-i18n="filterPrivate">Private</span>
+                        <span class="chevron">▼</span>
+                    </div>
+                    <div class="glass-select-options">
+                        <div class="glass-option selected" data-i18n="filterPrivate" onclick="selectGlassOption(event, this, 'private')">Private</div>
+                        <div class="glass-option" data-i18n="filterPublic" onclick="selectGlassOption(event, this, 'public')">Public</div>
+                    </div>
+                    <input type="hidden" id="editStatus" value="private">
+                </div>
             </div>
             <div class="form-group">
                 <label data-i18n="editTags">Tags (comma separated)</label>

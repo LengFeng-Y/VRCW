@@ -125,6 +125,19 @@ const I18N = {
     filterPrivate: "Private",
     filterAllPlatform: "All Platforms",
     filterCross: "Cross-Platform",
+    filterPC: "Contains PC",
+    filterQuest: "Contains Quest",
+    filterApple: "Contains Apple",
+    filterPCQuest: "PC + Quest",
+    filterPCQuestApple: "PC + Quest + Apple",
+    filterPCQuestAppleShort: "PC + Q + A",
+    editName: "Resource Name",
+    friendSortStatus: "Sort by Status",
+    friendSortName: "Sort by Name",
+    friendSortActivity: "Recently Active",
+    myProfile: "My Profile",
+    coLocatedFriends: "Friends here",
+    loading: "Loading...",
   },
   zh: {
     loginSubtitle: "使用 VRChat 账号登录",
@@ -181,6 +194,19 @@ const I18N = {
     filterPrivate: "私有",
     filterAllPlatform: "所有平台",
     filterCross: "双端兼容 (PC+Quest)",
+    filterPC: "含 PC",
+    filterQuest: "含 Quest",
+    filterApple: "含 Apple",
+    filterPCQuest: "含 PC + Quest",
+    filterPCQuestApple: "PC + Quest + Apple",
+    filterPCQuestAppleShort: "PC + Q + A",
+    editName: "资源名称",
+    friendSortStatus: "在线优先",
+    friendSortName: "名字 A→Z",
+    friendSortActivity: "最近活跃",
+    myProfile: "我的资料",
+    coLocatedFriends: "在此实例的好友",
+    loading: "加载中...",
   },
   ja: {
     loginSubtitle: "VRChatアカウントでログイン",
@@ -237,6 +263,12 @@ const I18N = {
     filterPrivate: "非公開",
     filterAllPlatform: "すべてのプラットフォーム",
     filterCross: "クロスプラットフォーム",
+    friendSortStatus: "オンライン優先",
+    friendSortName: "名前順",
+    friendSortActivity: "最近のアクティビティ",
+    myProfile: "マイプロフィール",
+    coLocatedFriends: "このインスタンスのフレンド",
+    loading: "読み込み中...",
   },
 };
 
@@ -247,25 +279,28 @@ function t(key) {
 function setLang(lang) {
   currentLang = lang;
   localStorage.setItem("vrc_lang", lang);
-  document.querySelectorAll("[data-i18n]").forEach((el) => {
+  applyI18n();
+  
+  document.querySelectorAll(".lang-btn").forEach((b) =>
+    b.classList.toggle(
+      "active",
+      b.textContent.trim() ===
+        ({ en: "EN", zh: "中文", ja: "日本語" }[lang] || "")
+    )
+  );
+}
+
+function applyI18n(root = document) {
+  root.querySelectorAll("[data-i18n]").forEach((el) => {
     const key = el.getAttribute("data-i18n");
     const val = t(key);
     if (val) el.textContent = val;
   });
-  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+  root.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
     const key = el.getAttribute("data-i18n-placeholder");
     const val = t(key);
     if (val) el.placeholder = val;
   });
-  document
-    .querySelectorAll(".lang-btn")
-    .forEach((b) =>
-      b.classList.toggle(
-        "active",
-        b.textContent.trim() ===
-          ({ en: "EN", zh: "中文", ja: "日本語" }[lang] || ""),
-      ),
-    );
 }
 
 // ── API Helper ──
@@ -856,15 +891,18 @@ async function fetchAvatars(forceRefresh = false) {
       });
     }
 
-    // Also populate upload avatar select
-    const sel = document.getElementById("avatarSelect");
-    sel.innerHTML = '<option value="">-- Select --</option>';
-    avatars.forEach((a) => {
-      const opt = document.createElement("option");
-      opt.value = a.id;
-      opt.textContent = a.name;
-      sel.appendChild(opt);
-    });
+    // Also populate upload avatar select (custom glass select)
+    const selOptions = document.getElementById("avatarSelectOptions");
+    if (selOptions) {
+      selOptions.innerHTML = '<div class="glass-option" onclick="selectGlassOption(event, this, \'\')">-- Select --</div>';
+      avatars.forEach((a) => {
+        const opt = document.createElement("div");
+        opt.className = "glass-option";
+        opt.textContent = a.name;
+        opt.onclick = (e) => selectGlassOption(e, opt, a.id);
+        selOptions.appendChild(opt);
+      });
+    }
   } catch (e) {
     logMsg("Error: " + e.message, "error");
   }
@@ -2717,15 +2755,77 @@ async function startUpload() {
 }
 
 // ── avtrDB Public Avatar Search ──
+// ── Custom Glass Select Managers ──
+function toggleGlassSelect(e, el) {
+  e.stopPropagation();
+  // Close others
+  document.querySelectorAll('.glass-select').forEach(s => {
+    if (s !== el) s.classList.remove('active');
+  });
+  el.classList.toggle('active');
+}
+
+function selectGlassOption(e, el, val, callbackName) {
+  e.stopPropagation();
+  const select = el.closest('.glass-select');
+  const input = select.querySelector('input[type="hidden"]');
+  const label = select.querySelector('.selected-label');
+  
+  // Update state
+  input.value = val;
+  label.textContent = el.textContent;
+  
+  // Handle translation attribute if present
+  const i18nKey = el.getAttribute('data-i18n');
+  if (i18nKey) {
+    label.setAttribute('data-i18n', i18nKey);
+    // Explicitly re-translate the label text from the key
+    const translated = t(i18nKey);
+    if (translated) label.textContent = translated;
+  } else {
+    label.removeAttribute('data-i18n');
+  }
+  
+  // Update visual selection
+  select.querySelectorAll('.glass-option').forEach(opt => opt.classList.remove('selected'));
+  el.classList.add('selected');
+  
+  // Close
+  select.classList.remove('active');
+  
+  // Trigger callback
+  if (callbackName && typeof window[callbackName] === 'function') {
+    window[callbackName]();
+  }
+}
+
+// Global click closer
+document.addEventListener('click', () => {
+  document.querySelectorAll('.glass-select').forEach(s => s.classList.remove('active'));
+});
+
+// Original Avtrdb Logic
 let avtrdbPage = 0;
 let avtrdbCurrentQuery = "";
 let avtrdbCurrentPlatform = "";
 let avtrdbDebounceTimer = null;
 let avtrdbTotalLoaded = 0;
 
+function onSearchCategoryChange() {
+  const cat = document.getElementById("searchCategory")?.value;
+  const platWrap = document.querySelector(".search-platform-select");
+
+  if (cat === "avatars") {
+    if (platWrap) platWrap.classList.remove("mobile-hide");
+  } else {
+    if (platWrap) platWrap.classList.add("mobile-hide");
+  }
+  doAvtrdbSearch();
+}
+
 function onAvtrdbInput() {
   clearTimeout(avtrdbDebounceTimer);
-  avtrdbDebounceTimer = setTimeout(doAvtrdbSearch, 350);
+  avtrdbDebounceTimer = setTimeout(doAvtrdbSearch, 600);
 }
 
 
@@ -2772,8 +2872,20 @@ async function vrcdbFetch(cat, query) {
     }
     stats.textContent = `找到 ${data.length} 个结果`;
     
+    // Filter by platform if applicable
+    const plat = document.getElementById("avtrdbPlatform")?.value || "";
+    let filteredData = data;
+    if (plat && cat === 'worlds') {
+      const required = plat.split('+');
+      filteredData = data.filter(w => {
+        const wPlats = w.platforms || (w.unityPackages ? w.unityPackages.map(p => p.platform) : []);
+        return required.every(p => wPlats.includes(p));
+      });
+      stats.textContent = `找到 ${data.length} 个结果 (过滤后 ${filteredData.length})`;
+    }
+
     if (cat === 'users') {
-      grid.innerHTML = data.map(u => {
+      grid.innerHTML = filteredData.map(u => {
         const fJson = JSON.stringify(u).replace(/\\\\/g,'\\\\\\\\').replace(/"/g,'&quot;');
         return `<div class="friend-card" onclick="openFriendProfile(this);" data-friend="${fJson}">
           <div class="friend-avatar-wrap">
@@ -2786,7 +2898,7 @@ async function vrcdbFetch(cat, query) {
         </div>`;
       }).join('');
     } else if (cat === 'worlds') {
-      grid.innerHTML = data.map(w => {
+      grid.innerHTML = filteredData.map(w => {
         return `<div class="avatar-card" onclick="showWorldDetail('${w.id}')">
           <img src="${escHtml(proxyImg(w.thumbnailImageUrl))}" class="avatar-thumb" style="aspect-ratio:16/9;" onerror="this.style.display=\'none\'">
           <div class="avatar-info">
@@ -2796,7 +2908,7 @@ async function vrcdbFetch(cat, query) {
         </div>`;
       }).join('');
     } else if (cat === 'groups') {
-      grid.innerHTML = data.map(g => {
+      grid.innerHTML = filteredData.map(g => {
         return `<div class="friend-card" style="box-shadow: 0 4px 12px rgba(0,0,0,0.5);border:1px solid var(--border);">
           <div class="friend-avatar-wrap" style="border-radius:12px;">
             <img src="${escHtml(proxyImg(g.iconUrl||''))}" style="border-radius:12px;" onerror="this.style.display=\'none\'">
@@ -2828,23 +2940,75 @@ async function avtrdbFetch(append) {
   }
 
   try {
-    // Parse platform filter: value can be "pc", "android", "ios", "pc+android", "pc+android+ios"
+    let combinedResults = [];
+    let hasMoreGlobal = false;
+
+    // We only aggregate all 3 on the first page or if explicitly requested.
+    // For "Load More", we usually follow avtrdb's pagination.
+    const promises = [];
+    
+    // 1. AvtrDB (Full data)
     const requiredPlats = avtrdbCurrentPlatform ? avtrdbCurrentPlatform.split("+") : [];
-    // Send first platform to API for server-side pre-filter (API only supports single value)
-    let url = `https://api.avtrdb.com/v2/avatar/search?query=${encodeURIComponent(avtrdbCurrentQuery)}&page_size=20&page=${avtrdbPage}`;
-    if (requiredPlats.length > 0) url += `&compatibility=${requiredPlats[0]}`;
+    let avtrdbUrl = `https://api.avtrdb.com/v2/avatar/search?query=${encodeURIComponent(avtrdbCurrentQuery)}&page_size=50&page=${avtrdbPage}`;
+    if (requiredPlats.length > 0) avtrdbUrl += `&compatibility=${requiredPlats[0]}`;
+    promises.push(fetch(avtrdbUrl).then(r => r.json()).then(data => ({
+      source: 'avtrdb',
+      list: (data.avatars || []).map(av => ({ ...av, image_url: av.image_url, compatibility: av.compatibility || [] })),
+      hasMore: data.has_more || false
+    })).catch(() => ({ list: [], hasMore: false })));
 
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`avtrDB returned ${resp.status}`);
-    const data = await resp.json();
+    // 2. VRCX compatible sources (Only on first page)
+    if (avtrdbPage === 0) {
+      const dbUrls = [
+        { name: 'vrcdb', url: `/api/proxy?url=${encodeURIComponent(`https://vrcx.vrcdb.com/avatars/Avatar/VRCX?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` },
+        { name: 'avatarrecovery', url: `/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` }
+      ];
+      dbUrls.forEach(db => {
+        promises.push(fetch(db.url).then(r => r.json()).then(data => ({
+          source: db.name,
+          list: (data || []).map(av => ({
+            vrc_id: av.id,
+            name: av.name || av.avatarName || "未知模型",
+            author: { name: av.authorName || "Unknown", id: av.authorId },
+            image_url: av.imageUrl || av.thumbnailImageUrl || "",
+            performance: av.performance || {},
+            compatibility: av.compatibility || (av.imageUrl ? ["pc"] : []),
+            description: av.description || ""
+          })),
+          hasMore: false
+        })).catch(() => ({ list: [], hasMore: false })));
+      });
+    }
 
-    const list = data.avatars || [];
-    const hasMore = data.has_more || false;
+    const settled = await Promise.all(promises);
+    
+    // Deduplication & Aggregation
+    const dedupMap = new Map();
+    settled.forEach(res => {
+      if (res.source === 'avtrdb') hasMoreGlobal = res.hasMore;
+      res.list.forEach(av => {
+        const id = av.vrc_id;
+        if (!id) return;
+        if (!dedupMap.has(id)) {
+          dedupMap.set(id, av);
+        } else {
+          // Merge logic: prefer avtrdb data for better performance metadata
+          const existing = dedupMap.get(id);
+          const hasPerf = o => o.performance?.pc_rating || o.performance?.android_rating;
+          if (!hasPerf(existing) && hasPerf(av)) {
+            dedupMap.set(id, av);
+          }
+        }
+      });
+    });
 
-    // Client-side post-filter: ensure all required platforms are present on each avatar
-    const filteredList = requiredPlats.length > 0
-      ? list.filter(av => requiredPlats.every(p => (av.compatibility || []).includes(p)))
-      : list;
+    const finalResultsList = Array.from(dedupMap.values());
+
+    // Post-filter for compatibility
+    const actualRequiredPlats = avtrdbCurrentPlatform ? avtrdbCurrentPlatform.split("+") : [];
+    const filteredList = actualRequiredPlats.length > 0
+      ? finalResultsList.filter(av => actualRequiredPlats.every(p => (av.compatibility || []).includes(p)))
+      : finalResultsList;
 
     if (!append) grid.innerHTML = "";
 
@@ -2866,17 +3030,24 @@ async function avtrdbFetch(append) {
 
     const platLabelMap = { pc:"PC", android:"Quest", ios:"Apple", "pc+android":"PC + Quest", "pc+android+ios":"PC + Quest + Apple" };
     const platLabel = avtrdbCurrentPlatform ? (platLabelMap[avtrdbCurrentPlatform] || avtrdbCurrentPlatform) : "全平台";
-    stats.textContent = `已显示 ${avtrdbTotalLoaded} 个结果（${platLabel}）${hasMore ? " · 还有更多" : " · 全部加载完毕"}`;
+    stats.textContent = `已显示 ${avtrdbTotalLoaded} 个结果（${platLabel}）${hasMoreGlobal ? " · 还有更多" : " · 全部加载完毕"}`;
 
     filteredList.forEach(av => {
       const card = document.createElement("div");
       card.className = "avatar-card";
       card.style.cursor = "pointer";
       card.title = "点击查看详情";
-      // Store the avatar data and bind click
       card.addEventListener("click", () => openAvtrdbDetail(av));
 
-      const platBadges = (av.compatibility || []).map(p => {
+      const perf = av.performance || {};
+      const actualPlats = (av.compatibility || []).filter(p => {
+        if (p === "pc") return !!perf.pc_rating;
+        if (p === "android") return !!perf.android_rating;
+        if (p === "ios") return !!perf.ios_rating;
+        return true;
+      });
+
+      const platBadges = actualPlats.map(p => {
         const label = { pc: "PC", android: "Quest", ios: "Apple" }[p] || p;
         return `<span class="avtrdb-badge">${label}</span>`;
       }).join("");
@@ -2896,7 +3067,7 @@ async function avtrdbFetch(append) {
       grid.appendChild(card);
     });
 
-    loadMoreBtn.style.display = hasMore ? "inline-block" : "none";
+    loadMoreBtn.style.display = hasMoreGlobal ? "inline-block" : "none";
 
   } catch (e) {
     if (!append) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#ef4444;">搜索失败: ${escHtml(e.message)}</div>`;
@@ -2916,13 +3087,20 @@ function openAvtrdbDetail(av) {
   document.getElementById("avtrdbDetailCreated").textContent = fmt(av.created_at);
   document.getElementById("avtrdbDetailUpdated").textContent = fmt(av.updated_at);
 
+  const perf = av.performance || {};
   const platMap = { pc: "PC", android: "Quest", ios: "Apple" };
-  const platBadges = (av.compatibility || []).map(p =>
+  const actualPlats = (av.compatibility || []).filter(p => {
+    if (p === "pc") return !!perf.pc_rating;
+    if (p === "android") return !!perf.android_rating;
+    if (p === "ios") return !!perf.ios_rating;
+    return true;
+  });
+
+  const platBadges = actualPlats.map(p =>
     `<span class="avtrdb-badge" style="font-size:0.85em;padding:3px 10px;">${platMap[p] || p}</span>`
   ).join("") || "<span style='color:rgba(255,255,255,0.4)'>-</span>";
   document.getElementById("avtrdbDetailPlats").innerHTML = platBadges;
 
-  const perf = av.performance || {};
   const ratingColor = r => ({ VeryPoor:"#ef4444", Poor:"#f59e0b", Medium:"#eab308", Good:"#22c55e", Excellent:"#a3e635" }[r] || "#64748b");
   const ratingHtml = (label, r) => r ? `<span style="font-size:0.75em;color:${ratingColor(r)};background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:4px;border:1px solid ${ratingColor(r)}40;">${label}: ${r}</span>` : "";
   const perfHtml = [ratingHtml("PC", perf.pc_rating), ratingHtml("Quest", perf.android_rating), ratingHtml("Apple", perf.ios_rating)].filter(Boolean).join(" ") || "<span style='color:rgba(255,255,255,0.4)'>-</span>";
@@ -3103,14 +3281,12 @@ document.addEventListener("DOMContentLoaded", () => {
 // ── Common Tools ──
 // ═══════════════════════════════════════════════════════════════
 
-function getStatusLabel(state) {
-  if (state === 'active') return (loc && loc !== 'offline' && loc !== '') ? '游戏中' : '网页在线';
-  if (state === 'online') return '游戏中';
-  if (state === 'join me') return '邀请加入';
-  if (state === 'ask me') return '请求加入';
-  if (state === 'busy') return '请勿打扰';
-  if (state === 'offline') return '离线';
-  return state || '离线';
+function getStatusLabel(f) {
+  if (!f) return '离线';
+  if (f.state === 'active') return '网页在线';
+  if (f.state === 'online') return '游戏中';
+  if (f.location && f.location !== 'offline') return '游戏中';
+  return '离线';
 }
 
 function getTrustInfo(tags = []) {
@@ -3390,7 +3566,7 @@ function renderMyProfile(u) {
 
     <!-- Action buttons -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
-      <button class="btn btn-secondary" style="padding:6px 14px;font-size:0.82em;" onclick="showSelfContextMenu(event,'${escHtml(u.id||'')}','${escHtml(u.displayName||'')}')">··· 操作菜单</button>
+      <button class="btn btn-secondary" style="padding:6px 14px;font-size:0.82em;" onclick="showSelfContextMenu(event)">··· 操作菜单</button>
       <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escHtml(u.id||'')}','_blank')">🔗 VRChat 主页</button>
       <button class="btn btn-secondary" style="font-size:0.82em;" onclick="navigator.clipboard.writeText('${escHtml(u.id||'')}').then(()=>this.textContent='✓ 已复制').catch(()=>{})">📋 复制 ID</button>
     </div>
@@ -3413,11 +3589,15 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
   const statsEl = document.getElementById('friendStats');
   if (!listEl) return;
   listEl.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">加载中...</div>';
+  if (statsEl) statsEl.textContent = '加载中...';
 
   try {
+    let friendsList = [];
+    let cacheKey = '';
+
     if (cat.startsWith('fav_')) {
       const groupName = cat.slice(4);
-      const cacheKey = 'friends_fav_' + groupName;
+      cacheKey = 'friends_fav_' + groupName;
       if (!forceRefresh) {
         const cached = await idb.get(cacheKey);
         if (cached && cached.length > 0) {
@@ -3450,11 +3630,10 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
         results.forEach(res => { if (res.status==='fulfilled' && res.value) users.push(res.value); });
         if (i + 10 < userIds.length) await new Promise(r => setTimeout(r, 400));
       }
-      allFriends = users;
-      await idb.set(cacheKey, users);
+      friendsList = users;
     } else {
       const onlineOnly = (cat === 'online');
-      const cacheKey   = 'friends_' + cat;
+      cacheKey = 'friends_' + cat;
       if (!forceRefresh) {
         const cached = await idb.get(cacheKey);
         if (cached && cached.length > 0) {
@@ -3463,7 +3642,6 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
           return;
         }
       }
-      let friends = [];
       let offset  = 0;
       // Always fetch online friends first
       while (true) {
@@ -3471,7 +3649,7 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
         if (!r.ok) break;
         const batch = await r.json();
         if (!batch || !batch.length || batch.error) break;
-        friends = friends.concat(batch);
+        friendsList = friendsList.concat(batch);
         if (batch.length < 100) break;
         offset += 100;
         await new Promise(r => setTimeout(r, 300));
@@ -3484,20 +3662,23 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
           if (!r.ok) break;
           const batch = await r.json();
           if (!batch || !batch.length || batch.error) break;
-          friends = friends.concat(batch);
+          friendsList = friendsList.concat(batch);
           if (batch.length < 100) break;
           offset += 100;
           await new Promise(r => setTimeout(r, 300));
         }
       }
-      allFriends = friends;
-      await idb.set(cacheKey, friends);
     }
+    if (cat !== currentFriendCategory) return; // Cancel if changed
+    allFriends = friendsList;
+    if (cacheKey) await idb.set(cacheKey, friendsList);
     filterFriends();
     if (statsEl) statsEl.textContent = `共 ${allFriends.length} 位好友`;
     friendLogMsg(`✅ 加载了 ${allFriends.length} 位好友`, 'success');
   } catch(e) {
+    if (cat !== currentFriendCategory) return;
     listEl.innerHTML = `<div style="text-align:center;padding:40px;color:var(--error);">加载失败: ${escHtml(e.message)}</div>`;
+    if (statsEl) statsEl.textContent = '加载失败';
     friendLogMsg('❌ ' + e.message, 'error');
   }
 }
@@ -3586,26 +3767,12 @@ function renderFriendList(list) {
 
   for (const f of list) {
     const loc = f.location || '';
-    const isOffline = f.status === 'offline' || !f.status || loc === 'offline';
+    const isOffline = f.state === 'offline' || !f.state;
     if (isOffline) { offline.push(f); continue; }
-    if (!loc || loc === 'offline' || loc === 'private') { 
-        if (loc === 'private' || (loc === '' && statusCss !== 'offline')) {
-            // "private" implicitly means in-game. "empty" usually means Website, but sometimes VRChat hides private instances as empty strings if we aren't friends.
-            // Since it's a friend list, an empty location with 'active' status usually strictly means 'Web Online'
-            if (loc === 'private') {
-                // handle private grouping
-                let privGroup = instanceMap.get('private');
-                if (!privGroup) { privGroup = []; instanceMap.set('private', privGroup); }
-                privGroup.push(f);
-                continue;
-            } else {
-                webOnline.push(f); continue;
-            }
-        } else {
-            webOnline.push(f);
-            continue; 
-        }
-    }
+    
+    // state 'active' usually means web/mobile. 
+    // state 'online' means in-game.
+    if (f.state === 'active') { webOnline.push(f); continue; }
     if (!instanceMap.has(loc)) instanceMap.set(loc, []);
     instanceMap.get(loc).push(f);
   }
@@ -3718,11 +3885,11 @@ function friendCardHtml(f) {
     <div class="friend-info">
       <div class="friend-name" style="color:${trust.color};">${escHtml(f.displayName||'')} <span style="font-size:0.75em;opacity:0.7;">${langs}</span></div>
       <div class="friend-location" style="display:flex;align-items:center;gap:4px;">
-        <span style="font-weight:600;color:var(--text-primary);">${(f.status==='offline'||!f.status)?'离线':(f.location && f.location !== 'offline' && f.location !== '')?'游戏中':'网页在线'}</span>
+        <span style="font-weight:600;color:var(--text-primary);">${getStatusLabel(f)}</span>
         <span style="opacity:0.6;">|</span>
         ${(f.location && f.location !== 'offline' && f.location !== 'private' && f.location.startsWith('wrld_')) 
             ? `<a href="#" id="${locSpanId}" onclick="showWorldDetail('${f.location.split(':')[0]}'); event.stopPropagation(); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;" title="查看世界">${escHtml(locationText)}</a>` 
-            : `<span>${escHtml(isOnline && f.statusDescription ? f.statusDescription : locationText)}</span>`}
+            : `<span>${escHtml((f.state==='online' && f.statusDescription) ? f.statusDescription : locationText)}</span>`}
       </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
@@ -3827,7 +3994,7 @@ function _renderFriendProfileUI(f, modal) {
     locSection.style.display = 'none';
   }
 
-  document.getElementById('fpStatusDesc').innerHTML = `<span style="font-weight:600;color:var(--text-primary);">${(f.status==='offline'||!f.status)?'离线':(f.location && f.location !== 'offline' && f.location !== '')?'游戏中':'网页在线'}</span> <span style="opacity:0.6">|</span> ` + escHtml(f.status==='offline' ? '离线' : (f.statusDescription||f.status||'').replace(/\\n/g, String.fromCharCode(10)));
+  document.getElementById('fpStatusDesc').innerHTML = `<span style="font-weight:600;color:var(--text-primary);">${getStatusLabel(f)}</span> <span style="opacity:0.6">|</span> ` + escHtml(f.state==='offline' ? '离线' : (f.statusDescription||f.status||'').replace(/\\n/g, String.fromCharCode(10)));
   const bioSection = document.getElementById('fpBioSection');
   if (f.bio) { bioSection.style.display=''; document.getElementById('fpBio').textContent=(f.bio||'').replace(/\\n/g, String.fromCharCode(10)); }
   else bioSection.style.display='none';
@@ -3844,7 +4011,7 @@ function _renderFriendProfileUI(f, modal) {
     <button onclick="navigator.clipboard.writeText('${escHtml(f.id||'')}').then(()=>this.textContent='✓')" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.9em;">复制</button>`;
 
   document.getElementById('fpActions').innerHTML =
-    `<button class="btn btn-secondary" style="font-size:0.82em;padding:6px 14px;" onclick="showFriendContextMenu(event,${JSON.stringify(f)})">··· 操作菜单</button>
+    `<button class="btn btn-secondary" style="font-size:0.82em;padding:6px 14px;" onclick="showFriendContextMenu(event)">··· 操作菜单</button>
      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escHtml(f.id||'')}','_blank')">🔗 VRChat 主页</button>
      <button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);font-size:0.82em;" onclick="deleteFriend('${escHtml(f.id||'')}','${escHtml(f.displayName||'')}')">🗑️ 删除好友</button>`;
 
@@ -4055,8 +4222,12 @@ async function fetchWorlds(category, forceRefresh = false) {
   const gridEl  = document.getElementById('worldGrid');
   const statsEl = document.getElementById('worldStats');
   if (!gridEl) return;
+  allWorlds = []; // Clear previous results immediately
   gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.3);">加载中...</div>';
-  if (statsEl) statsEl.textContent = '加载中...';
+  if (statsEl) {
+      statsEl.textContent = '加载中...';
+      statsEl.style.color = 'var(--accent)'; // Make it stand out during load
+  }
 
   if (!forceRefresh) {
     try {
@@ -4114,21 +4285,37 @@ async function fetchWorlds(category, forceRefresh = false) {
       if (r.ok) worlds = await r.json() || [];
     }
 
+    if (category !== currentWorldCategory) return;
     allWorlds = Array.isArray(worlds) ? worlds : [];
     await idb.set('worlds_' + category, allWorlds);
     filterWorlds();
-    if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界`;
+    if (statsEl) {
+        statsEl.textContent = `${allWorlds.length} 个世界`;
+        statsEl.style.color = ''; 
+    }
     worldLogMsg(`✅ 加载了 ${allWorlds.length} 个世界`, 'success');
   } catch(e) {
+    if (category !== currentWorldCategory) return;
     gridEl.innerHTML = `<div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--error);">${escHtml(e.message)}</div>`;
+    if (statsEl) statsEl.textContent = '加载失败';
     worldLogMsg('❌ ' + e.message, 'error');
   }
 }
 
 function filterWorlds() {
   const q = (document.getElementById('worldSearch')?.value||'').toLowerCase().trim();
+  const plat = document.getElementById('worldFilterPlatform')?.value || 'all';
   let list = allWorlds;
+
   if (q) list = list.filter(w => (w.name||'').toLowerCase().includes(q)||(w.description||'').toLowerCase().includes(q));
+
+  if (plat !== 'all') {
+    list = list.filter(w => {
+      const wPlats = w.platforms || (w.unityPackages ? w.unityPackages.map(p => p.platform) : []);
+      return wPlats.includes(plat);
+    });
+  }
+
   renderWorldGrid(list);
 }
 
@@ -5066,10 +5253,18 @@ function buildCtxMenu(sections) {
 
 function positionCtxMenu(e, menu) {
   e.stopPropagation();
-  const rect = e.currentTarget ? e.currentTarget.getBoundingClientRect() : { bottom: e.clientY, left: e.clientX };
+  let rect;
+  if (e.currentTarget && e.currentTarget.getBoundingClientRect) {
+    rect = e.currentTarget.getBoundingClientRect();
+  } else if (e.target && e.target.getBoundingClientRect) {
+    const btn = e.target.closest('.btn') || e.target;
+    rect = btn.getBoundingClientRect();
+  } else {
+    rect = { bottom: e.clientY, left: e.clientX, top: e.clientY };
+  }
   let top = rect.bottom + 6, left = rect.left;
   const mh = menu.offsetHeight || 300, mw = menu.offsetWidth || 240;
-  if (top + mh > window.innerHeight) top = rect.top - mh - 6;
+  if (top + mh > window.innerHeight) top = (rect.top || e.clientY) - mh - 6;
   if (left + mw > window.innerWidth) left = window.innerWidth - mw - 8;
   menu.style.top = Math.max(8, top) + 'px';
   menu.style.left = Math.max(8, left) + 'px';
@@ -5078,8 +5273,10 @@ function positionCtxMenu(e, menu) {
 // ═══════════════════════════════════════════════════════════
 // FRIEND CONTEXT MENU (VRCX-style)
 // ═══════════════════════════════════════════════════════════
-function showFriendContextMenu(e, f) {
-  if (typeof f === 'string') try { f = JSON.parse(f); } catch(_) {}
+function showFriendContextMenu(e) {
+  e.stopPropagation();
+  const f = currentFriendProfile;
+  if (!f) return;
   const id = f.id || '';
   const name = f.displayName || '';
   const hasLocation = f.location && f.location.startsWith('wrld_');
@@ -5118,7 +5315,7 @@ function showFriendContextMenu(e, f) {
       { icon:'🗑️', label:'删除好友', danger: true, action: () => deleteFriend(id, name) },
     ]},
   ]);
-  requestAnimationFrame(() => positionCtxMenu(e, menu));
+  positionCtxMenu(e, menu);
 }
 
 async function friendRequestJoin(userId, name) {
@@ -5170,7 +5367,12 @@ async function fetchSharedInstances(userId) {
 // ═══════════════════════════════════════════════════════════
 // SELF CONTEXT MENU
 // ═══════════════════════════════════════════════════════════
-function showSelfContextMenu(e, id, name) {
+function showSelfContextMenu(e) {
+  e.stopPropagation();
+  const u = myProfileData;
+  if (!u) return;
+  const id = u.id || '';
+  const name = u.displayName || '';
   const menu = buildCtxMenu([
     { items: [
       { icon:'🔄', label:'刷新我的资料', action: () => { myProfileData=null; fetchMyProfile(); }},
@@ -5192,7 +5394,7 @@ function showSelfContextMenu(e, id, name) {
       { icon:'🏷️', label:'人称代词', action: () => window.open('https://vrchat.com/home/profile', '_blank') },
     ]},
   ]);
-  requestAnimationFrame(() => positionCtxMenu(e, menu));
+  positionCtxMenu(e, menu);
 }
 
 // ═══════════════════════════════════════════════════════════

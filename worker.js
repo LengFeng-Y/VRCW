@@ -250,6 +250,31 @@ export default {
             }
         }
 
+        // GET /api/proxy?url=...
+        // Generic proxy to bypass CORS for third-party JSON API endpoints.
+        if (path === "/api/proxy" && request.method === "GET") {
+            const targetUrl = url.searchParams.get("url");
+            if (!targetUrl) return jsonResp({ error: "Missing url" }, 400);
+
+            try {
+                const proxyResp = await fetch(targetUrl, {
+                    method: "GET",
+                    headers: { "User-Agent": USER_AGENT },
+                });
+                
+                const respBody = await proxyResp.arrayBuffer();
+                return new Response(respBody, {
+                    status: proxyResp.status,
+                    headers: {
+                        "Content-Type": proxyResp.headers.get("content-type") || "application/json",
+                        ...CORS_HEADERS
+                    }
+                });
+            } catch (e) {
+                return jsonResp({ error: e.message }, 500);
+            }
+        }
+
         // POST /api/images/prefetch
         // Batch-downloads images from VRC servers using Worker's high-speed edge bandwidth,
         // storing them in CF Cache API so subsequent /api/image requests are instant cache hits.
