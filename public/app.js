@@ -3006,7 +3006,14 @@ function displayAvatarDetail(av) {
 
   // 1. Normalize fields (handle both VRChat API and AvtrDB/VRCX formats)
   const id = av.vrc_id || av.id || "";
-  const name = av.name || av.avatarName || "未知模型";
+  let name = av.name || av.avatarName || "";
+  
+  // Recovery: Check global favorites map
+  if ((!name || name === 'Unknown' || name.startsWith('Model ')) && window._localNameMap?.has(id)) {
+    name = window._localNameMap.get(id);
+    av.name = name; // Update memory
+  }
+  if (!name || name === 'Unknown') name = `Model ${id.substring(5, 13)}`;
   const author = av.author?.name || av.authorName || "Unknown";
   const desc = av.description || "";
   let thumb = av.image_url || av.thumbnailImageUrl || av.imageUrl || "";
@@ -4088,6 +4095,12 @@ async function fetchFriendWorlds(userId) {
 }
 
 function updateAvatarNameInUI(listEl, avId, newName) {
+  // Update current list object in memory
+  if (window._friendAvatars) {
+    const memAv = window._friendAvatars.find(a => a.id === avId);
+    if (memAv) memAv.name = newName;
+  }
+  
   if (!listEl) return;
   const cards = listEl.querySelectorAll('.avatar-card');
   cards.forEach(card => {
@@ -4160,6 +4173,7 @@ async function fetchFriendAvatars(userId, listEl) {
 
     // Build local name map to recover from favorites
     const localNameMap = await buildLocalFavoriteNameMap();
+    window._localNameMap = localNameMap; // Store globally for modals
 
     // Merge and deduplicate
     const allAvatars = [];
