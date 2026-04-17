@@ -55,28 +55,27 @@ const avatarLookupQueue = {
   }
 };
 
-async function performSingleAvatarRecovery(id) {
+async function fetchOfficialAvatarData(id) {
   // Query all sources in PARALLEL for maximum speed
   const promises = [
     apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?search=${id}`)}`)
       .then(async r => {
         if (!r.ok) { if(r.status===429) throw new Error('429'); return null; }
         const data = await r.json();
-        const found = Array.isArray(data) ? data.find(x => x.id === id) : data;
-        return (found && found.name && found.name !== 'Unknown') ? found.name : null;
+        return Array.isArray(data) ? data.find(x => x.id === id) : data;
       }),
     apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avtrdb.com/v3/avatar/search/vrcx?search=${id}`)}`)
       .then(async r => {
         if (!r.ok) { if(r.status===429) throw new Error('429'); return null; }
         const data = await r.json();
         const found = data.avatars && data.avatars[0] ? data.avatars[0] : (Array.isArray(data) ? data[0] : data);
-        return (found && found.name && found.name !== 'Unknown') ? found.name : null;
+        if (found && found.vrc_id === id) return found;
+        return null;
       }),
     apiCall(`/api/vrc/avatars/${id}`)
       .then(async r => {
         if (!r.ok) return null;
-        const det = await r.json();
-        return (det.name && det.name !== 'Unknown') ? det.name : null;
+        return await r.json();
       })
   ];
   
@@ -93,39 +92,89 @@ async function performSingleAvatarRecovery(id) {
   return null;
 }
 
+// Global Avatar Metadata/Platform Queue
+const avatarMetadataQueue = {
+  pending: [],
+  active: 0,
+  max: 1, // Be conservative with official API
+  paused: false,
+  processed: new Set(),
+  add(id, onUpdated) {
+    if (this.processed.has(id) || this.pending.some(p => p.id === id)) return;
+    this.pending.push({ id, onUpdated });
+    this.next();
+  },
+  async next() {
+    if (this.paused || this.active >= this.max || !this.pending.length) return;
+    this.active++;
+    const { id, onUpdated } = this.pending.shift();
+    try {
+      const data = await fetchOfficialAvatarData(id);
+      if (data) {
+        this.processed.add(id);
+        if (onUpdated) onUpdated(data);
+        // Dispatch global event for other components
+        window.dispatchEvent(new CustomEvent('vrc_avatar_updated', { detail: { id, data } }));
+      }
+    } catch (e) {
+      if (e.message.includes('429')) {
+        this.paused = true;
+        this.pending.unshift({ id, onUpdated });
+        setTimeout(() => { this.paused = false; this.next(); }, 5000);
+      }
+    } finally {
+      this.active--;
+      setTimeout(() => this.next(), 2000); // 2s gap to be safe
+    }
+  }
+};
+
+async function performSingleAvatarRecovery(id) {
+  const data = await fetchOfficialAvatarData(id);
+  return data ? (data.name || data.displayName) : null;
+}
+
 // ── Unified Platform/Performance Helper ──
 function getAvatarPlatforms(av) {
   const ratings = new Map();
 
-  const addPlat = (rawPlat, rawPerf) => {
+  const addPlat = (rawPlat, rawPerf, isFallback = false) => {
     if (!rawPlat || typeof rawPlat !== 'string') return;
     const plat = rawPlat.toLowerCase() === 'standalonewindows' ? 'pc' : rawPlat.toLowerCase();
     if (!['pc', 'android', 'ios'].includes(plat)) return;
     
-    // STRICT RULE: If performance rating is explicitly missing/null/None, 
-    // we do not count it as a native platform (likely an Impostor).
+    // PC EXCEPTION: Always allow PC from compatibility lists even without rating, 
+    // as it's rarely an "Impostor-only" platform in these DBs.
+    if (plat === 'pc' && isFallback) {
+      if (!ratings.has('pc')) ratings.set('pc', "Unknown");
+      return;
+    }
+
+    // STRICT RULE for Android/iOS: Require a valid rating to filter out auto-generated Impostors.
     if (!rawPerf || rawPerf === "None" || rawPerf === "Unknown") {
-      // However, if we already have a valid rating from another source, don't overwrite it.
-      if (!ratings.has(plat)) return; 
       return;
     }
     
     ratings.set(plat, rawPerf);
   };
 
-  // A. unityPackages (Preferred - Official VRChat API)
+  // 1. unityPackages (Preferred - Official VRChat API)
   if (Array.isArray(av.unityPackages)) {
     av.unityPackages.forEach(p => addPlat(p.platform, p.performanceRating));
   }
 
-  // B. performance object (Old Avtrdb/VRCX fallback)
+  // 2. performance object (Old Avtrdb/VRCX fallback)
   if (av.performance) {
     if (av.performance.pc_rating) addPlat('pc', av.performance.pc_rating);
     if (av.performance.android_rating) addPlat('android', av.performance.android_rating);
     if (av.performance.ios_rating) addPlat('ios', av.performance.ios_rating);
   }
-  
-  // Note: compatibility array is ignored here as it includes Impostors without ratings.
+
+  // 3. compatibility array (Final fallback for PC ONLY)
+  const otherPlats = av.compatibility || av.platforms || [];
+  if (Array.isArray(otherPlats)) {
+    otherPlats.forEach(p => addPlat(p, null, true));
+  }
 
   return ratings;
 }
@@ -3148,7 +3197,13 @@ async function avtrdbFetch(append) {
     if (requiredPlats.length > 0) avtrdbUrl += `&compatibility=${requiredPlats[0]}`;
     promises.push(fetch(avtrdbUrl).then(r => r.json()).then(data => ({
       source: 'avtrdb',
-      list: (data.avatars || []).map(av => ({ ...av, image_url: av.image_url, compatibility: av.compatibility || [] })),
+      list: (data.avatars || []).map(av => ({ 
+        ...av, 
+        vrc_id: av.vrc_id,
+        image_url: av.image_url, 
+        compatibility: av.compatibility || [],
+        performance: av.performance || {}
+      })),
       hasMore: data.has_more || false
     })).catch(() => ({ list: [], hasMore: false })));
 
@@ -4774,10 +4829,17 @@ async function fetchFriendAvatars(userId) {
           <div class="avatar-thumb-wrapper img-loading">
             <img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(proxyImg(av.thumbnailImageUrl||av.imageUrl||''))}" alt="">
             <div class="avatar-name-overlay">${escHtml(av.name||'')}</div>
+            <div class="avatar-plat-badges" style="position:absolute;top:6px;right:6px;display:flex;gap:4px;z-index:11;">${platBadges}</div>
           </div>
-          <div style="padding:6px;display:flex;gap:4px;flex-wrap:wrap;">${platBadges}</div>
         </div>`;
     }).join('');
+    
+    // BACKGROUND REFRESH: Queue official verification
+    allAvatars.forEach(av => {
+      avatarMetadataQueue.add(av.id, (data) => {
+        updateAvatarPlatformsInUI(el, av.id, data);
+      });
+    });
     
     el.querySelectorAll('.avatar-thumb[data-src]').forEach(img => avatarObserver.observe(img));
 
