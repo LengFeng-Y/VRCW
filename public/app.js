@@ -3301,8 +3301,10 @@ async function avtrdbFetch(append) {
   const updateStats = () => {
     const platLabelMap = { pc:"PC", android:"Quest", ios:"Apple", "pc+android":"PC + Quest", "pc+android+ios":"PC + Quest + Apple" };
     const platLabel = avtrdbCurrentPlatform ? (platLabelMap[avtrdbCurrentPlatform] || avtrdbCurrentPlatform) : "全平台";
-    avtrdbTotalLoaded = totalRendered;
-    stats.textContent = `已显示 ${totalRendered} 个结果（${platLabel}）${hasMoreGlobal ? " · 还有更多" : ""}`;
+    // Count actual rendered cards in the DOM — never jumps, accumulates across Load More
+    const actualCount = grid.querySelectorAll('.avatar-card').length;
+    avtrdbTotalLoaded = actualCount;
+    stats.textContent = `已显示 ${actualCount} 个结果（${platLabel}）${hasMoreGlobal ? " · 还有更多" : " · 全部加载完毕"}`;
   };
 
   // Loading spinner — shown until 50 cards rendered
