@@ -96,31 +96,37 @@ async function performSingleAvatarRecovery(id) {
 // ── Unified Platform/Performance Helper ──
 function getAvatarPlatforms(av) {
   const ratings = new Map();
+
+  const addPlat = (rawPlat, rawPerf) => {
+    if (!rawPlat || typeof rawPlat !== 'string') return;
+    const plat = rawPlat.toLowerCase() === 'standalonewindows' ? 'pc' : rawPlat.toLowerCase();
+    if (!['pc', 'android', 'ios'].includes(plat)) return;
+    
+    // STRICT RULE: If performance rating is explicitly missing/null/None, 
+    // we do not count it as a native platform (likely an Impostor).
+    if (!rawPerf || rawPerf === "None" || rawPerf === "Unknown") {
+      // However, if we already have a valid rating from another source, don't overwrite it.
+      if (!ratings.has(plat)) return; 
+      return;
+    }
+    
+    ratings.set(plat, rawPerf);
+  };
+
   // A. unityPackages (Preferred - Official VRChat API)
   if (Array.isArray(av.unityPackages)) {
-    av.unityPackages.forEach(p => {
-      const plat = p.platform === 'standalonewindows' ? 'pc' : (p.platform === 'android' ? 'android' : (p.platform === 'ios' ? 'ios' : p.platform));
-      if (plat) {
-        ratings.set(plat, (p.performanceRating && p.performanceRating !== "None") ? p.performanceRating : "Unknown");
-      }
-    });
+    av.unityPackages.forEach(p => addPlat(p.platform, p.performanceRating));
   }
-  // B. compatibility / platforms (Generic fallbacks for third-party search APIs)
-  const otherPlats = av.compatibility || av.platforms || [];
-  if (Array.isArray(otherPlats)) {
-    otherPlats.forEach(p => {
-      const plat = p.toLowerCase() === 'standalonewindows' ? 'pc' : p.toLowerCase();
-      if (['pc', 'android', 'ios'].includes(plat) && !ratings.has(plat)) {
-        ratings.set(plat, "Unknown");
-      }
-    });
-  }
-  // C. performance object (Old Avtrdb/VRCX fallback)
+
+  // B. performance object (Old Avtrdb/VRCX fallback)
   if (av.performance) {
-    if (av.performance.pc_rating && av.performance.pc_rating !== "None" && !ratings.has('pc')) ratings.set('pc', av.performance.pc_rating);
-    if (av.performance.android_rating && av.performance.android_rating !== "None" && !ratings.has('android')) ratings.set('android', av.performance.android_rating);
-    if (av.performance.ios_rating && av.performance.ios_rating !== "None" && !ratings.has('ios')) ratings.set('ios', av.performance.ios_rating);
+    if (av.performance.pc_rating) addPlat('pc', av.performance.pc_rating);
+    if (av.performance.android_rating) addPlat('android', av.performance.android_rating);
+    if (av.performance.ios_rating) addPlat('ios', av.performance.ios_rating);
   }
+  
+  // Note: compatibility array is ignored here as it includes Impostors without ratings.
+
   return ratings;
 }
 
@@ -4740,7 +4746,9 @@ async function fetchFriendAvatars(userId) {
           thumbnailImageUrl: thumb,
           releaseStatus: av.releaseStatus || av.ReleaseStatus || av.release_status || 'public',
           version: av.version || av.Version || 0,
-          unityPackages: av.unityPackages || av.UnityPackages || []
+          unityPackages: av.unityPackages || av.UnityPackages || [],
+          performance: av.performance || av.Performance || null,
+          compatibility: av.compatibility || av.Compatibility || []
         });
       }
     });
