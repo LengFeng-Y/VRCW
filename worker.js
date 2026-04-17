@@ -6,8 +6,7 @@
 
 const VRC_API = "https://api.vrchat.cloud/api/1";
 const API_KEY = "JlGlobalv959ay9puS6p99En0asKuAk";
-const USER_AGENT =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const USER_AGENT = "VRCX/1.6.4 (vrcxml@gmail.com)";
 
 const CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",

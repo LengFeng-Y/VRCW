@@ -56,40 +56,43 @@ const avatarLookupQueue = {
 };
 
 async function fetchOfficialAvatarData(id) {
-  // Query all sources in PARALLEL for maximum speed
-  const promises = [
+  // First-wins race: resolve as soon as ANY source returns valid data
+  return new Promise((resolve, reject) => {
+    let resolved = false;
+    let pending = 3;
+
+    const tryResolve = (data) => {
+      if (resolved) return;
+      if (data) { resolved = true; resolve(data); }
+      else if (--pending === 0) resolve(null); // all failed
+    };
+    const tryReject = (e) => {
+      if (resolved) return;
+      resolved = true;
+      reject(e);
+    };
+
     apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?search=${id}`)}`)
       .then(async r => {
-        if (!r.ok) { if(r.status===429) throw new Error('429'); return null; }
+        if (!r.ok) { if (r.status === 429) tryReject(new Error('429')); else tryResolve(null); return; }
         const data = await r.json();
-        return Array.isArray(data) ? data.find(x => x.id === id) : data;
-      }),
+        tryResolve(Array.isArray(data) ? data.find(x => x.id === id) : data);
+      }).catch(() => { if (--pending <= 0 && !resolved) resolve(null); });
+
     apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avtrdb.com/v3/avatar/search/vrcx?search=${id}`)}`)
       .then(async r => {
-        if (!r.ok) { if(r.status===429) throw new Error('429'); return null; }
+        if (!r.ok) { if (r.status === 429) tryReject(new Error('429')); else tryResolve(null); return; }
         const data = await r.json();
-        const found = data.avatars && data.avatars[0] ? data.avatars[0] : (Array.isArray(data) ? data[0] : data);
-        if (found && found.vrc_id === id) return found;
-        return null;
-      }),
+        const found = data.avatars?.[0] || (Array.isArray(data) ? data[0] : data);
+        tryResolve(found?.vrc_id === id ? found : null);
+      }).catch(() => { if (--pending <= 0 && !resolved) resolve(null); });
+
     apiCall(`/api/vrc/avatars/${id}`)
       .then(async r => {
-        if (!r.ok) return null;
-        return await r.json();
-      })
-  ];
-  
-  try {
-    const results = await Promise.allSettled(promises);
-    // Return first non-null success
-    for (const res of results) {
-       if (res.status === 'fulfilled' && res.value) return res.value;
-       if (res.status === 'rejected' && res.reason.message === '429') throw new Error('429');
-    }
-  } catch (e) {
-    if (e.message === '429') throw e;
-  }
-  return null;
+        if (!r.ok) { tryResolve(null); return; }
+        tryResolve(await r.json());
+      }).catch(() => { if (--pending <= 0 && !resolved) resolve(null); });
+  });
 }
 
 // Global Avatar Platform Cache (sessionStorage-backed, survives tab switches)
@@ -3219,167 +3222,194 @@ async function avtrdbFetch(append) {
     grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:rgba(255,255,255,0.4);">搜索中...</div>`;
   }
 
-  try {
-    let combinedResults = [];
-    let hasMoreGlobal = false;
+  const requiredPlats = avtrdbCurrentPlatform ? avtrdbCurrentPlatform.split("+") : [];
+  const dedupMap = new Map(); // id -> avatar data
+  const renderMap = new Map(); // id -> card element
+  let hasMoreGlobal = false;
+  let totalRendered = 0;
 
-    // We only aggregate all 3 on the first page or if explicitly requested.
-    // For "Load More", we usually follow avtrdb's pagination.
-    const promises = [];
-    
-    // 1. AvtrDB (Full data)
-    const requiredPlats = avtrdbCurrentPlatform ? avtrdbCurrentPlatform.split("+") : [];
-    let avtrdbUrl = `https://api.avtrdb.com/v2/avatar/search?query=${encodeURIComponent(avtrdbCurrentQuery)}&page_size=50&page=${avtrdbPage}`;
-    if (requiredPlats.length > 0) avtrdbUrl += `&compatibility=${requiredPlats[0]}`;
-    promises.push(fetch(avtrdbUrl).then(r => r.json()).then(data => ({
-      source: 'avtrdb',
-      list: (data.avatars || []).map(av => ({ 
-        ...av, 
-        vrc_id: av.vrc_id,
-        image_url: av.image_url, 
-        compatibility: av.compatibility || [],
-        performance: av.performance || {}
-      })),
-      hasMore: data.has_more || false
-    })).catch(() => ({ list: [], hasMore: false })));
+  // ── Shared card renderer ──────────────────────────────────────────────────
+  const renderCard = (av) => {
+    const id = av.vrc_id;
+    if (!id) return;
 
-    // 2. VRCX compatible sources (Only on first page)
-    if (avtrdbPage === 0) {
-      const dbUrls = [
-        { name: 'vrcdb', url: `/api/proxy?url=${encodeURIComponent(`https://vrcx.vrcdb.com/avatars/Avatar/VRCX?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` },
-        { name: 'avatarrecovery', url: `/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` }
-      ];
-      dbUrls.forEach(db => {
-        promises.push(fetch(db.url).then(r => r.json()).then(data => ({
-          source: db.name,
-          list: (data || []).map(av => ({
-            vrc_id: av.id,
-            name: av.name || av.avatarName || "未知模型",
-            author: { name: av.authorName || "Unknown", id: av.authorId },
-            image_url: av.imageUrl || av.thumbnailImageUrl || "",
-            performance: av.performance || {},
-            compatibility: av.compatibility || (av.imageUrl ? ["pc"] : []),
-            description: av.description || ""
-          })),
-          hasMore: false
-        })).catch(() => ({ list: [], hasMore: false })));
-      });
-    }
-
-    const settled = await Promise.all(promises);
-    
-    // Deduplication & Aggregation
-    const dedupMap = new Map();
-    settled.forEach(res => {
-      if (res.source === 'avtrdb') hasMoreGlobal = res.hasMore;
-      res.list.forEach(av => {
-        const id = av.vrc_id;
-        if (!id) return;
-        if (!dedupMap.has(id)) {
-          dedupMap.set(id, av);
-        } else {
-          // Merge logic: prefer avtrdb data for better performance metadata
-          const existing = dedupMap.get(id);
-          const hasPerf = o => o.performance?.pc_rating || o.performance?.android_rating;
-          if (!hasPerf(existing) && hasPerf(av)) {
-            dedupMap.set(id, av);
-          }
-        }
-      });
-    });
-
-    const finalResultsList = Array.from(dedupMap.values());
-
-    // Post-filter for compatibility
-    const actualRequiredPlats = avtrdbCurrentPlatform ? avtrdbCurrentPlatform.split("+") : [];
-    const filteredList = actualRequiredPlats.length > 0
-      ? finalResultsList.filter(av => {
-          const realRatings = getAvatarPlatforms(av);
-          return actualRequiredPlats.every(p => realRatings.has(p));
-        })
-      : finalResultsList;
-
-    if (!append) grid.innerHTML = "";
-
-    avtrdbTotalLoaded += filteredList.length;
-
-    if (filteredList.length === 0) {
-      if (!append) {
-        stats.textContent = "未找到符合条件的模型 / No matching avatars found";
-        grid.innerHTML = `<div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:rgba(255,255,255,0.4);gap:12px;">
-        <div style="font-size:3em;">🔍</div>
-        <div>未找到相关模型 / No avatars found</div>
-      </div>`;
+    // Aggregation Logic: Merge data if already seen
+    if (dedupMap.has(id)) {
+      const existing = dedupMap.get(id);
+      
+      // Prioritize rich metadata (unityPackages / performance)
+      const hasRich = o => (o.unityPackages && o.unityPackages.length > 0) || (o.performance && Object.keys(o.performance).length > 2);
+      if (!hasRich(existing) && hasRich(av)) {
+        Object.assign(existing, av); // Overwrite with richer data
       } else {
-        // Append mode but no results passed client filter on this page — hide load more
-        loadMoreBtn.style.display = "none";
+        // Just merge basic fields if not overwritting whole object
+        if (av.description && !existing.description) existing.description = av.description;
+        if (av.tags && Array.isArray(av.tags)) {
+          existing.tags = [...new Set([...(existing.tags || []), ...av.tags])];
+        }
+      }
+      
+      // Update existing UI if needed (badges)
+      const liveCard = renderMap.get(id);
+      if (liveCard) {
+        const badgeWrap = liveCard.querySelector('.card-plat-badges');
+        if (badgeWrap) {
+          const liveRatings = getAvatarPlatforms(existing);
+          badgeWrap.innerHTML = Array.from(liveRatings.keys()).map(p =>
+            `<span class="avtrdb-badge">${{ pc: "PC", android: "Quest", ios: "Apple" }[p] || p}</span>`
+          ).join("");
+        }
       }
       return;
     }
 
-    const platLabelMap = { pc:"PC", android:"Quest", ios:"Apple", "pc+android":"PC + Quest", "pc+android+ios":"PC + Quest + Apple" };
-    const platLabel = avtrdbCurrentPlatform ? (platLabelMap[avtrdbCurrentPlatform] || avtrdbCurrentPlatform) : "全平台";
-    stats.textContent = `已显示 ${avtrdbTotalLoaded} 个结果（${platLabel}）${hasMoreGlobal ? " · 还有更多" : " · 全部加载完毕"}`;
+    dedupMap.set(id, av);
 
-    filteredList.forEach(av => {
-      const card = document.createElement("div");
-      card.className = "avatar-card";
-      card.style.cursor = "pointer";
-      card.title = "点击查看详情";
-      card.setAttribute('data-avid', av.vrc_id);
-      card.addEventListener("click", () => openAvtrdbDetail(av));
+    // Client-side platform filter (only if user selected a platform filter)
+    if (requiredPlats.length > 0) {
+      const realRatings = getAvatarPlatforms(av);
+      if (!requiredPlats.every(p => realRatings.has(p))) return;
+    }
 
-      const ratings = getAvatarPlatforms(av);
-      const platBadges = Array.from(ratings.keys()).map(p => {
-        const label = { pc: "PC", android: "Quest", ios: "Apple" }[p] || p;
-        const rating = ratings.get(p);
-        const ratingText = rating && rating !== 'Unknown' ? ` · ${rating}` : '';
-        return `<span class="avtrdb-badge">${label}${ratingText}</span>`;
-      }).join("");
+    // Clear the "Searching..." placeholder on first card
+    if (totalRendered === 0 && !append) grid.innerHTML = "";
+    totalRendered++;
 
-      card.innerHTML = `
-        <div class="avatar-thumb-wrapper">
-          <img class="avatar-thumb" src="${escHtml(av.image_url || "")}"
-               alt="${escHtml(av.name || "")}"
-               onerror="this.style.opacity='0.3'">
-          <div class="avatar-name-overlay">${escHtml(av.name || "未知模型")}</div>
-        </div>
-        <div style="padding:8px 6px 4px;font-size:0.7em;color:rgba(255,255,255,0.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-          by ${escHtml(av.author?.name || "Unknown")}
-        </div>
-        <div class="card-plat-badges" style="padding:0 6px 10px;display:flex;gap:4px;flex-wrap:wrap;">${platBadges}</div>
-      `;
-      grid.appendChild(card);
+    const card = document.createElement("div");
+    card.className = "avatar-card";
+    card.style.cursor = "pointer";
+    card.title = "点击查看详情";
+    card.setAttribute('data-avid', id);
+    card.addEventListener("click", () => openAvtrdbDetail(av));
+    renderMap.set(id, card);
 
-      // BACKGROUND REFRESH: Queue official API verification for accurate platform data
-      avatarMetadataQueue.add(av.vrc_id, (data) => {
-        // Update the av object in memory so clicking the card shows updated data
-        Object.assign(av, { 
+    // Card badges: clean labels only (PC / Quest / Apple)
+    const ratings = getAvatarPlatforms(av);
+    const platBadges = Array.from(ratings.keys()).map(p =>
+      `<span class="avtrdb-badge">${{ pc: "PC", android: "Quest", ios: "Apple" }[p] || p}</span>`
+    ).join("");
+
+    card.innerHTML = `
+      <div class="avatar-thumb-wrapper">
+        <img class="avatar-thumb" src="${escHtml(av.image_url || "")}"
+             alt="${escHtml(av.name || "")}"
+             onerror="this.style.opacity='0.3'">
+        <div class="avatar-name-overlay">${escHtml(av.name || "未知模型")}</div>
+      </div>
+      <div style="padding:8px 6px 4px;font-size:0.7em;color:rgba(255,255,255,0.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        by ${escHtml(av.author?.name || av.authorName || "Unknown")}
+      </div>
+      <div class="card-plat-badges" style="padding:0 6px 10px;display:flex;gap:4px;flex-wrap:wrap;">${platBadges}</div>
+    `;
+    grid.appendChild(card);
+
+    // Background official API verification — only if we don't already have rich metadata
+    const hasRich = (av.unityPackages && av.unityPackages.length > 0);
+    if (!hasRich) {
+      avatarMetadataQueue.add(id, (data) => {
+        Object.assign(av, {
           unityPackages: data.unityPackages || av.unityPackages,
-          performance: (data.performance && Object.keys(data.performance).length) ? data.performance : av.performance
+          performance: (data.performance && Object.keys(data.performance).length) ? data.performance : av.performance,
+          created_at: av.created_at || data.created_at || data.createdAt,
+          updated_at: av.updated_at || data.updated_at || data.updatedAt,
+          description: av.description || data.description || ""
         });
-        // Update badges on the card
-        const liveCard = grid.querySelector(`[data-avid="${av.vrc_id}"]`);
-        if (!liveCard) return;
-        const badgeWrap = liveCard.querySelector('.card-plat-badges');
+        const badgeWrap = card.querySelector('.card-plat-badges');
         if (!badgeWrap) return;
         const liveRatings = getAvatarPlatforms(av);
-        badgeWrap.innerHTML = Array.from(liveRatings.keys()).map(p => {
-          const label = { pc: "PC", android: "Quest", ios: "Apple" }[p] || p;
-          const r = liveRatings.get(p);
-          const ratingText = r && r !== 'Unknown' ? ` · ${r}` : '';
-          return `<span class="avtrdb-badge">${label}${ratingText}</span>`;
-        }).join("");
+        badgeWrap.innerHTML = Array.from(liveRatings.keys()).map(p =>
+          `<span class="avtrdb-badge">${{ pc: "PC", android: "Quest", ios: "Apple" }[p] || p}</span>`
+        ).join("");
       });
-    });
+    }
+  };
 
-    loadMoreBtn.style.display = hasMoreGlobal ? "inline-block" : "none";
+  // ── Update stats bar ──────────────────────────────────────────────────────
+  const updateStats = () => {
+    const platLabelMap = { pc:"PC", android:"Quest", ios:"Apple", "pc+android":"PC + Quest", "pc+android+ios":"PC + Quest + Apple" };
+    const platLabel = avtrdbCurrentPlatform ? (platLabelMap[avtrdbCurrentPlatform] || avtrdbCurrentPlatform) : "全平台";
+    avtrdbTotalLoaded = totalRendered;
+    stats.textContent = `已显示 ${totalRendered} 个结果（${platLabel}）${hasMoreGlobal ? " · 还有更多" : ""}`;
+  };
 
+  try {
+    // ── Source 1: AvtrDB (primary, full metadata) ─────────────────────────
+    let avtrdbUrl = `https://api.avtrdb.com/v2/avatar/search?query=${encodeURIComponent(avtrdbCurrentQuery)}&page_size=50&page=${avtrdbPage}`;
+    if (requiredPlats.length > 0) avtrdbUrl += `&compatibility=${requiredPlats[0]}`;
+
+    const avtrdbPromise = fetch(avtrdbUrl)
+      .then(r => r.json())
+      .then(data => {
+        hasMoreGlobal = data.has_more || false;
+        (data.avatars || []).forEach(av => renderCard({
+          ...av,
+          vrc_id: av.vrc_id,
+          image_url: av.image_url,
+          compatibility: av.compatibility || [],
+          performance: av.performance || {}
+        }));
+        updateStats();
+        loadMoreBtn.style.display = hasMoreGlobal ? "inline-block" : "none";
+      })
+      .catch(() => {});
+
+    // ── Sources 2-5: Community DBs (first page only) ──────────
+    if (avtrdbPage === 0) {
+      const dbSources = [
+        { name: 'vrcdb', url: `/api/proxy?url=${encodeURIComponent(`https://vrcx.vrcdb.com/avatars/Avatar/VRCX?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` },
+        { name: 'avatarrecovery', url: `/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` },
+        { name: 'cute.bet', url: `/api/proxy?url=${encodeURIComponent(`https://avtr.cute.bet/search?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` },
+        { name: 'nekosunevr', url: `/api/proxy?url=${encodeURIComponent(`https://avtr.nekosunevr.co.uk/vrcx_search?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` }
+      ];
+
+      dbSources.forEach(db => {
+        fetch(db.url)
+          .then(r => r.json())
+          .then(data => {
+            (data || []).forEach(av => {
+              // Priority source normalization: cute.bet has deep metadata
+              if (db.name === 'cute.bet') {
+                 renderCard({
+                    ...av,
+                    vrc_id: av.id,
+                    image_url: av.imageUrl || av.thumbnailImageUrl || "",
+                    author: { name: av.authorName || "Unknown", id: av.authorId },
+                    unityPackages: av.unityPackages || []
+                 });
+              } else {
+                 renderCard({
+                    vrc_id: av.id,
+                    name: av.name || av.avatarName || "未知模型",
+                    author: { name: av.authorName || "Unknown", id: av.authorId },
+                    image_url: av.imageUrl || av.thumbnailImageUrl || "",
+                    performance: av.performance || {},
+                    compatibility: av.compatibility || (av.imageUrl ? ["pc"] : []),
+                    description: av.description || ""
+                 });
+              }
+            });
+            updateStats();
+          })
+          .catch(() => {});
+      });
+    }
+
+    // Wait for AvtrDB (primary source) to finish before possibly showing empty state
+    await avtrdbPromise;
+
+    if (totalRendered === 0 && !append) {
+      stats.textContent = "未找到符合条件的模型 / No matching avatars found";
+      grid.innerHTML = `<div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:rgba(255,255,255,0.4);gap:12px;">
+        <div style="font-size:3em;">🔍</div>
+        <div>未找到相关模型 / No avatars found</div>
+      </div>`;
+    }
 
   } catch (e) {
     if (!append) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#ef4444;">搜索失败: ${escHtml(e.message)}</div>`;
   }
 }
+
 
 function displayAvatarDetail(av) {
   const modal = document.getElementById("avtrdbDetailModal");
