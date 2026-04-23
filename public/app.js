@@ -12,7 +12,11 @@ let uploadFiles = [];
 let currentLang = localStorage.getItem("vrc_lang") || "zh";
 let saveDirHandle = null; // File System Access API directory handle
 let visibleAvatars = [];
+let currentTab = "download"; // Track active tab
 let currentUserId = ""; // Current logged-in user's VRChat ID
+let currentGlobalFetchSeq = 0; // Sequence to abort stale background tasks globally
+let isPriorityTaskRunning = false; // "Foveated" loading lock
+let backgroundLoadQueue = []; // Queue for deferred non-visible tasks
 let myModerations = []; // Player moderations (mute/block)
 let favoriteGroups = []; // Avatar favorite groups
 let worldFavGroups  = []; // World favorite groups
@@ -37,6 +41,11 @@ const avatarLookupQueue = {
   },
   async next() {
     if (this.paused || this.active >= this.max || !this.pending.length) return;
+    // FOVEATED: Suspend avatar metadata lookup if a high-priority UI fetch is active
+    if (isPriorityTaskRunning) {
+        setTimeout(() => this.next(), 1000);
+        return;
+    }
     this.active++;
     const { id, onFound } = this.pending.shift();
     try {
@@ -199,7 +208,7 @@ const idb = {
     if (this.db) return;
     if (this._initPromise) return this._initPromise;
     this._initPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open("vrcw_DB", 3); // Upgrade to v3
+      const request = indexedDB.open("vrcw_DB", 4); // Upgrade to v4 for image cache
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         this.db = request.result;
@@ -213,6 +222,8 @@ const idb = {
           db.createObjectStore("mod_logs", { keyPath: "id", autoIncrement: true });
         if (!db.objectStoreNames.contains("local_avatars"))
           db.createObjectStore("local_avatars", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("images"))
+          db.createObjectStore("images"); // Persistent Blob Cache
       };
     });
     return this._initPromise;
@@ -228,6 +239,24 @@ const idb = {
       const req = tx.objectStore("cache").get(key);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
+    });
+  },
+  async getImage(url) {
+    await this.init();
+    return new Promise((resolve) => {
+      const tx = this.db.transaction("images", "readonly");
+      const req = tx.objectStore("images").get(url);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+  },
+  async setImage(url, blob) {
+    await this.init();
+    return new Promise((resolve) => {
+      const tx = this.db.transaction("images", "readwrite");
+      const req = tx.objectStore("images").put(blob, url);
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
     });
   },
   async set(key, value) {
@@ -619,37 +648,66 @@ function processImageQueue() {
     const { img, src } = imageQueue.shift();
     const wrapper = img.parentElement;
 
-    // Mark as actively loading (CSS spinner on wrapper)
-    img.classList.add("loading");
-    if (wrapper) wrapper.classList.add("img-loading");
+    // Use the 'url=' part of proxy as stable cache key
+    const cacheKey = src.includes('url=') ? decodeURIComponent(src.split('url=')[1].split('&')[0]) : src;
 
-    img.onload = () => {
+    const cleanup = () => {
       img.onload = img.onerror = null;
       img.classList.remove("loading");
       if (wrapper) wrapper.classList.remove("img-loading");
-      loadedImageUrls.add(src);
       runningLoads--;
       processImageQueue();
     };
+
+    img.onload = () => {
+      loadedImageUrls.add(src);
+      cleanup();
+    };
+
     img.onerror = () => {
-      img.onload = img.onerror = null;
       const retryCount = parseInt(img.dataset.retry || "0");
       if (retryCount < 2) {
         img.dataset.retry = retryCount + 1;
         imageQueue.push({ img, src });
       } else {
-        img.classList.remove("loading");
         img.classList.add("failed");
-        if (wrapper) {
-          wrapper.classList.remove("img-loading");
-          wrapper.classList.add("img-failed");
-        }
+        if (wrapper) wrapper.classList.add("img-failed");
       }
-      runningLoads--;
-      processImageQueue();
+      cleanup();
     };
 
-    img.src = src;
+    // ── Check Cache First ──
+    idb.getImage(cacheKey).then(blob => {
+      if (blob) {
+        img.src = URL.createObjectURL(blob);
+        cleanup(); // MUST release slot and process next
+      } else {
+        // Not in cache, fetch and store
+        // FOVEATED: Double check priority lock before starting expensive image fetch
+        if (isPriorityTaskRunning) {
+          imageQueue.push({ img, src });
+          runningLoads--;
+          setTimeout(processImageQueue, 1000);
+          return;
+        }
+
+        fetch(src).then(r => r.blob()).then(blob => {
+          if (blob && blob.type.startsWith('image/')) {
+            idb.setImage(cacheKey, blob);
+            img.src = URL.createObjectURL(blob);
+          } else {
+            img.src = src; // Fallback to direct load
+          }
+          cleanup();
+        }).catch(() => {
+          img.src = src; // Fallback
+          cleanup();
+        });
+      }
+    });
+
+    img.classList.add("loading");
+    if (wrapper) wrapper.classList.add("img-loading");
   }
 }
 
@@ -861,17 +919,29 @@ function showMainApp() {
     }
   }).catch(() => {});
 
-  // 2. Force Refresh key sections for immediacy
-  fetchMyProfile(true);
-  fetchCurrentFriendCategory(true);
-  
-  // Delay world/avatar refresh slightly to prioritize profile/friends
-  setTimeout(() => {
-    fetchFavoriteGroups(); // triggers initAvatars/fetchAvatars
-    if (worldsLoaded) fetchWorlds(currentWorldCategory, true);
-    else initWorldsTab(); // will trigger first fetch
-  }, 1000);
+  // 2. Foveated Startup (Priority: Current View > Background Queue)
+  async function startupSequential() {
+    // Stage 1: Immediate High-Priority Load
+    runPriorityTask(async () => {
+       await fetchMyProfile(true);
+       // Only load friends if we are still on a relevant tab
+       if (currentTab === 'friends' || currentTab === 'download') {
+           await fetchCurrentFriendCategory(true);
+       }
+    });
 
+    // Stage 2: Queue Peripheral Data (Worlds/Avatars)
+    queueBackgroundTask(async () => {
+        if (worldsLoaded) await fetchWorlds(currentWorldCategory, true);
+        else await initWorldsTab();
+    });
+    
+    queueBackgroundTask(async () => {
+        await fetchFavoriteGroups(); // triggers fetchAvatars
+    });
+  }
+
+  startupSequential();
   syncAllFavoriteIds(); 
 }
 
@@ -1028,56 +1098,64 @@ function renderFavoriteGroupButtons() {
     });
 }
 
+// ── Foveated Loading Orchestrator ──
+async function runPriorityTask(taskFn) {
+  currentGlobalFetchSeq++; 
+  isPriorityTaskRunning = true;
+  imageQueue.length = 0; // Clear image queue to favor current JSON
+  
+  try {
+    await taskFn();
+  } finally {
+    isPriorityTaskRunning = false;
+    processBackgroundQueue();
+  }
+}
+
+function queueBackgroundTask(taskFn) {
+  backgroundLoadQueue.push(taskFn);
+  if (!isPriorityTaskRunning) processBackgroundQueue();
+}
+
+async function processBackgroundQueue() {
+  if (isPriorityTaskRunning || !backgroundLoadQueue.length) return;
+  const task = backgroundLoadQueue.shift();
+  if (task) {
+    try { await task(); } catch(e){}
+    setTimeout(processBackgroundQueue, 500);
+  }
+}
+
 // ── Tabs ──
 function switchTab(tab) {
+  currentTab = tab;
   if (window.innerWidth <= 768) toggleSidebar(false);
   
-  if (currentTabAbortController) currentTabAbortController.abort();
-  currentTabAbortController = new AbortController();
-  
-  // Legacy tab-btn support
-  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-  document.querySelector(`.tab-btn[onclick*="'${tab}'"]`)?.classList.add("active");
-  
-  // New global nav items - foolproof selection via onclick attribute
-  document.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
-  document.querySelectorAll(".nav-item-icon").forEach((b) => b.classList.remove("active"));
-  
-  document.querySelector(`.nav-item[onclick*="'${tab}'"]`)?.classList.add("active");
-  document.querySelector(`.nav-item-icon[onclick*="'${tab}'"]`)?.classList.add("active");
+  runPriorityTask(async () => {
+    if (currentTabAbortController) currentTabAbortController.abort();
+    currentTabAbortController = new AbortController();
+    
+    // UI Updates
+    document.querySelectorAll(".nav-item, .nav-item-icon, .tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(`[onclick*="'${tab}'"]`).forEach(b => b.classList.add("active"));
 
-  const tabTitles = { download:"头像模型", upload:"上传", search:"全站搜索", friends:"社交与好友", worlds:"虚拟世界", groups:"群组", assets:"虚拟资产", history:"变动日志" };
-  const topTitle = document.querySelector('.mobile-top-title');
-  if (topTitle && tabTitles[tab]) topTitle.textContent = "VRCW - " + tabTitles[tab];
+    const panels = { download:'downloadPanel', upload:'uploadPanel', search:'searchPanel', friends:'friendsPanel', worlds:'worldsPanel', groups:'groupsPanel', assets:'assetsPanel' };
+    Object.entries(panels).forEach(([key, id]) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('active', tab === key);
+    });
 
-  document
-    .getElementById("downloadPanel")
-    .classList.toggle("active", tab === "download");
-  document
-    .getElementById("uploadPanel")
-    .classList.toggle("active", tab === "upload");
-  const searchPanel = document.getElementById("searchPanel");
-  if (searchPanel) searchPanel.classList.toggle("active", tab === "search");
-  const friendsPanel = document.getElementById("friendsPanel");
-  if (friendsPanel) {
-    friendsPanel.classList.toggle("active", tab === "friends");
-    if (tab === "friends" && !friendsLoaded) initFriendsTab();
-  }
-  const worldsPanel = document.getElementById("worldsPanel");
-  if (worldsPanel) {
-    worldsPanel.classList.toggle("active", tab === "worlds");
-    if (tab === "worlds" && !worldsLoaded) initWorldsTab();
-  }
-  const groupsPanel = document.getElementById("groupsPanel");
-  if (groupsPanel) {
-    groupsPanel.classList.toggle("active", tab === "groups");
+    if (tab === "friends") {
+      if (!friendsLoaded) initFriendsTab();
+      else fetchCurrentFriendCategory(true);
+    }
+    if (tab === "worlds") {
+      if (!worldsLoaded) initWorldsTab();
+      else fetchWorlds(currentWorldCategory, true);
+    }
     if (tab === "groups") loadGroupsPage('mine');
-  }
-  const assetsPanel = document.getElementById("assetsPanel");
-  if (assetsPanel) {
-    assetsPanel.classList.toggle("active", tab === "assets");
-    if (tab === "assets") initAssetsTab();
-  }
+    if (tab === "download") fetchAvatars(true);
+  });
 }
 
 // ── Categories ──
@@ -1107,7 +1185,7 @@ function switchCategory(cat) {
   document.getElementById("appSidebar")?.classList.remove("open");
   document.getElementById("sidebarOverlay")?.classList.remove("active");
 
-  fetchAvatars();
+  runPriorityTask(() => fetchAvatars());
 }
 
 // ── Selected Count Helper ──
@@ -1119,7 +1197,8 @@ function updateSelectedCount() {
 // ── Avatars ──
 let fetchSeq = 0; // Track latest fetch to avoid stale renders
 async function fetchAvatars(forceRefresh = false) {
-  const seq = ++fetchSeq;
+  const seq = ++currentGlobalFetchSeq;
+  fetchSeq = seq; 
   const grid = document.getElementById("avatarGrid");
 
   // ── Step 1: Load basics from cache immediately ──────────────────────────
@@ -1148,10 +1227,11 @@ async function fetchAvatars(forceRefresh = false) {
       // VRC+ favorites max is around 256. Fetch sequentially to avoid rate-limiting (429 errors)
       let offset = 0;
       while (true) {
+        if (seq !== currentGlobalFetchSeq) return;
         const resp = await apiCall(`/api/vrc/avatars/favorites?n=100&offset=${offset}&tag=${currentCategory}`);
         if (!resp.ok) break;
         const batch = await resp.json();
-        if (!batch || batch.length === 0) break;
+        if (!batch || batch.length === 0 || seq !== currentGlobalFetchSeq) break;
         allFetched = allFetched.concat(batch);
         if (batch.length < 100) break;
         offset += 100;
@@ -1223,7 +1303,32 @@ async function fetchAvatars(forceRefresh = false) {
       });
     }
 
-    // Also populate upload avatar select (custom glass select)
+    // Stage 3: Streaming Refresh (metadata check)
+    if (currentCategory !== 'mine' && currentCategory !== 'local') {
+      const avIds = allFetched.map(a => a.id);
+      const CONCURRENCY = 30;
+      for (let i = 0; i < avIds.length; i += CONCURRENCY) {
+        if (seq !== fetchSeq || currentCategory === 'mine') return;
+        const chunk = avIds.slice(i, i + CONCURRENCY);
+        const results = await Promise.allSettled(chunk.map(id => fetchOfficialAvatarData(id)));
+        if (seq !== fetchSeq) return;
+        
+        const freshBatch = results.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
+        freshBatch.forEach(a => {
+           const idx = avatars.findIndex(ex => ex.id === a.id);
+           if (idx !== -1) avatars[idx] = Object.assign(avatars[idx], a);
+        });
+        applyFilters();
+        // Save basics with fresh data
+        const freshBasics = avatars.map(a => ({
+          id: a.id, name: a.name, thumbnailImageUrl: a.thumbnailImageUrl, imageUrl: a.imageUrl,
+          releaseStatus: a.releaseStatus, authorId: a.authorId, tags: a.tags
+        }));
+        idb.set("avatar_basics_" + currentCategory, freshBasics).catch(()=>{});
+      }
+    }
+
+    // Also populate upload avatar select
     const selOptions = document.getElementById("avatarSelectOptions");
     if (selOptions) {
       selOptions.innerHTML = '<div class="glass-option" onclick="selectGlassOption(event, this, \'\')">-- Select --</div>';
@@ -3959,7 +4064,8 @@ function makeCatBtn(text, onclick, id) {
 
 function switchFriendCategory(cat) {
   currentFriendCategory = cat;
-  document.querySelectorAll('#friendsPanel .cat-btn, #friendsPanel .category-btn').forEach(b => {
+  runPriorityTask(() => {
+    document.querySelectorAll('#friendsPanel .cat-btn, #friendsPanel .category-btn').forEach(b => {
     b.classList.remove('active','btn-primary');
     b.classList.add('btn-secondary');
   });
@@ -3987,10 +4093,11 @@ function switchFriendCategory(cat) {
   } else if (cat === 'notifications') {
     if (notifyView) notifyView.style.display = 'flex';
     fetchNotifications();
-  } else {
-    if (listView) listView.style.display = 'flex';
-    fetchCurrentFriendCategory();
-  }
+    } else {
+      if (listView) listView.style.display = 'flex';
+      fetchCurrentFriendCategory();
+    }
+  });
 }
 
 async function fetchMyProfile(forceRefresh = false) {
@@ -4154,6 +4261,7 @@ function renderMyProfile(u) {
 // Bug#2 fix: favorites endpoint returns {favoriteId: "usr_xxx", ...} NOT user objects
 // Need to batch-fetch actual user profiles
 async function fetchCurrentFriendCategory(forceRefresh = false) {
+  const seq = ++currentGlobalFetchSeq;
   const cat = currentFriendCategory;
   const listEl = document.getElementById('friendList');
   const statsEl = document.getElementById('friendStats');
@@ -4184,7 +4292,7 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
   // We don't want to wait for everything to finish. We'll fire off background tasks.
   
   const updateFriendBatch = (batch) => {
-    if (cat !== currentFriendCategory) return;
+    if (seq !== currentGlobalFetchSeq || cat !== currentFriendCategory) return;
     batch.forEach(f => {
       friendMap.set(f.id, f);
       // Also update the global allFriends array
@@ -4214,10 +4322,11 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
     // 1. Fetch Online Friends (High Priority, Fast)
     let onlineOffset = 0;
     while (true) {
+      if (seq !== currentGlobalFetchSeq) return;
       const r = await apiCall(`/api/vrc/auth/user/friends?n=100&offset=${onlineOffset}&offline=false`);
       if (!r.ok) break;
       const batch = await r.json();
-      if (!batch || !batch.length) break;
+      if (!batch || !batch.length || seq !== currentGlobalFetchSeq) break;
       updateFriendBatch(batch);
       if (batch.length < 100) break;
       onlineOffset += 100;
@@ -4234,10 +4343,11 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
     await Promise.all(favoriteGroups.map(async group => {
       let offset = 0;
       while (true) {
+        if (seq !== currentGlobalFetchSeq) return;
         const r = await apiCall(`/api/vrc/favorites?type=friend&tag=${group}&n=100&offset=${offset}`);
         if (!r.ok) break;
         const batch = await r.json();
-        if (!batch || !batch.length) break;
+        if (!batch || !batch.length || seq !== currentGlobalFetchSeq) break;
         batch.forEach(fav => {
           favoriteIds.add(fav.favoriteId);
           // Track which groups this user belongs to
@@ -4257,11 +4367,12 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
     const fIds = [...favoriteIds];
     const CONCURRENCY = 50; 
     for (let i = 0; i < fIds.length; i += CONCURRENCY) {
-      if (cat !== currentFriendCategory) return;
+      if (seq !== currentGlobalFetchSeq || cat !== currentFriendCategory) return;
       const chunk = fIds.slice(i, i + CONCURRENCY);
       const results = await Promise.allSettled(chunk.map(uid => 
         apiCall(`/api/vrc/users/${uid}`).then(r => r.ok ? r.json() : null)
       ));
+      if (seq !== currentGlobalFetchSeq) return;
       const freshBatch = results.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
       updateFriendBatch(freshBatch);
       if (statsEl) statsEl.textContent = `刷新中... (${friendMap.size} 位就绪)`;
@@ -5281,7 +5392,8 @@ async function loadWorldFavGroups() {
 
 function switchWorldCategory(cat) {
   currentWorldCategory = cat;
-  document.querySelectorAll('#worldsPanel .cat-btn, #worldsPanel .category-btn').forEach(b => {
+  runPriorityTask(() => {
+    document.querySelectorAll('#worldsPanel .cat-btn, #worldsPanel .category-btn').forEach(b => {
     b.classList.remove('active','btn-primary');
     b.classList.add('btn-secondary');
   });
@@ -5292,9 +5404,11 @@ function switchWorldCategory(cat) {
   if (btn) { btn.classList.remove('btn-secondary'); btn.classList.add('active','btn-primary'); }
 
   fetchWorlds(cat);
+  });
 }
 
 async function fetchWorlds(category, forceRefresh = false) {
+  const seq = ++currentGlobalFetchSeq;
   currentWorldCategory = category;
   const gridEl  = document.getElementById('worldGrid');
   const statsEl = document.getElementById('worldStats');
@@ -5316,7 +5430,7 @@ async function fetchWorlds(category, forceRefresh = false) {
   try {
     let worlds = [];
     const updateWorldBatch = (batch) => {
-      if (category !== currentWorldCategory) return;
+      if (seq !== currentGlobalFetchSeq || category !== currentWorldCategory) return;
       batch.forEach(w => {
         const idx = allWorlds.findIndex(ex => ex.id === w.id);
         if (idx !== -1) allWorlds[idx] = Object.assign(allWorlds[idx], w);
@@ -5333,10 +5447,11 @@ async function fetchWorlds(category, forceRefresh = false) {
       
       let offset = 0;
       while (true) {
+        if (seq !== currentGlobalFetchSeq) return;
         const r = await apiCall(`/api/vrc/favorites?type=${favType}&tag=${groupName}&n=100&offset=${offset}`);
         if (!r.ok) break;
         const favs = await r.json();
-        if (!favs || !favs.length) break;
+        if (!favs || !favs.length || seq !== currentGlobalFetchSeq) break;
         
         const worldIds = favs.map(f => {
             if (f.favoriteId) worldFavoriteIdMap.set(f.favoriteId, f.id);
@@ -5346,7 +5461,7 @@ async function fetchWorlds(category, forceRefresh = false) {
         // High concurrency world metadata refresh
         const CONCURRENCY = 30;
         for (let i = 0; i < worldIds.length; i += CONCURRENCY) {
-            if (category !== currentWorldCategory) return;
+            if (seq !== currentGlobalFetchSeq || category !== currentWorldCategory) return;
             const chunk = worldIds.slice(i, i + CONCURRENCY);
             const results = await Promise.allSettled(chunk.map(wid => 
                 apiCall(`/api/vrc/worlds/${wid}`).then(async res => {
@@ -5473,12 +5588,18 @@ function renderWorldGrid(list) {
     card.style.cursor = 'pointer';
     if (w.isInvalid) card.style.border = '1px solid rgba(239, 68, 68, 0.4)';
     
+    // VRCX Style: How many friends are here?
+    const friendsHere = allFriends.filter(f => f.location && f.location.startsWith(w.id)).length;
+
     card.onclick = () => openWorldDetail(w.id, w);
     const isCached = loadedImageUrls.has(thumb);
     card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached?'':'img-loading'}">
       ${isCached ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="">` : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`}
       <div class="avatar-name-overlay">${escHtml(w.name||'未知世界')}</div>
-      ${pc>0 ? `<div class="world-player-badge">👥 ${pc}</div>` : ''}
+      <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:4px;z-index:5;">
+        ${friendsHere>0 ? `<div style="background:var(--accent);color:white;font-size:0.7em;padding:2px 6px;border-radius:4px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">🤝 ${friendsHere}</div>` : ''}
+        ${pc>0 ? `<div class="world-player-badge" style="position:static;margin:0;">👥 ${pc}</div>` : ''}
+      </div>
       ${w.isInvalid ? `<div style="position:absolute;top:8px;right:8px;background:var(--error);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;">已失效</div>` : ''}
     </div>`;
     gridEl.appendChild(card);
