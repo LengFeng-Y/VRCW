@@ -4297,9 +4297,9 @@ function renderMyProfile(u) {
     } else {
       // Fallback: check all groups if showcased/represented fields are missing
       apiCall('/api/vrc/users/' + u.id + '/groups').then(r => r.ok ? r.json() : []).then(groups => {
-        const filtered = groups.filter(g => g.isRepresenting || g.memberVisibility === 'visible');
+        const filtered = groups.filter(g => g.isRepresenting);
         if (!filtered.length) { 
-          el.innerHTML = '<div style="font-size:0.9em;color:var(--text-muted);opacity:0.6;">暂无展示群组 (No showcased groups)</div>';
+          el.innerHTML = '<div style="font-size:0.9em;color:var(--text-muted);opacity:0.6;">暂无佩戴群组 (No represented group)</div>';
           return; 
         }
         filtered.sort((a, b) => (b.isRepresenting ? 1 : 0) - (a.isRepresenting ? 1 : 0));
@@ -5055,13 +5055,8 @@ async function _loadFriendProfileGroups(userId, isFriend) {
     if (!r.ok) throw new Error('Failed to fetch groups');
     const groups = await r.json();
 
-    // Filter showcased groups: representing OR visible to current user
-    const filtered = groups.filter(g => {
-      if (g.isRepresenting) return true;
-      if (g.memberVisibility === 'visible') return true;
-      if (isFriend && g.memberVisibility === 'friends') return true;
-      return false;
-    });
+    // Filter: ONLY Representing group
+    const filtered = groups.filter(g => g.isRepresenting);
 
     // Deduplicate by groupId just in case
     const seen = new Set();
