@@ -4270,40 +4270,50 @@ function renderMyProfile(u) {
   const el = document.getElementById('myProfileGroups');
   if (el) {
     const displayed = [];
-    // 1. Add represented group (the one shown on nameplate)
     if (u.representedGroup) {
-      displayed.push({...u.representedGroup, isRepresented: true});
+      displayed.push({...u.representedGroup, isRepresenting: true});
     }
-    // 2. Add showcased groups (featured on profile)
     if (u.showcasedGroups && u.showcasedGroups.length) {
       u.showcasedGroups.forEach(sg => {
-        if (!displayed.some(d => d.id === sg.id || d.groupId === sg.id)) {
+        if (!displayed.some(d => d.groupId === sg.id || d.id === sg.id)) {
           displayed.push(sg);
         }
       });
     }
 
     if (displayed.length > 0) {
-      el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-        ${displayed.map(g => `<div class="group-pill" onclick="openGroupDetail('${g.groupId || g.id}')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.9em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
-          <img src="${proxyImg(g.thumbnailUrl || g.iconUrl || g.bannerUrl || '')}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
-          <span>${escHtml(g.name)}</span>
-          ${g.isRepresented ? '<span style="font-size:0.7em;opacity:0.6;">(展示)</span>' : ''}
-        </div>`).join('')}
+      el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+        ${displayed.map(g => `
+          <div class="group-pill" onclick="openGroupDetail('${escHtml(g.groupId || g.id)}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.85em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+            <img src="${proxyImg(g.iconUrl || g.bannerUrl || '')}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;">
+            <div style="display:flex;flex-direction:column;line-height:1.1;max-width:120px;">
+              <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(g.name)}</span>
+              <span style="font-size:0.7em;opacity:0.5;">${escHtml(g.shortCode)}</span>
+            </div>
+            ${g.isRepresenting ? '<span style="font-size:0.65em;background:rgba(52,211,153,0.2);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:1px 6px;border-radius:4px;font-weight:bold;">佩戴</span>' : ''}
+          </div>
+        `).join('')}
       </div>`;
     } else {
-      // Fallback: check all groups if showcased/represented fields are missing (though they shouldn't be for current user)
+      // Fallback: check all groups if showcased/represented fields are missing
       apiCall('/api/vrc/users/' + u.id + '/groups').then(r => r.ok ? r.json() : []).then(groups => {
-        const displayedGroups = groups.filter(g => g.isRepresented);
-        if (!displayedGroups.length) { 
+        const filtered = groups.filter(g => g.isRepresenting || g.memberVisibility === 'visible');
+        if (!filtered.length) { 
           el.innerHTML = '<div style="font-size:0.9em;color:var(--text-muted);opacity:0.6;">暂无展示群组 (No showcased groups)</div>';
           return; 
         }
-        el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-          ${displayedGroups.map(g => `<div class="group-pill" onclick="openGroupDetail('${g.groupId}')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.9em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
-            <img src="${proxyImg(g.thumbnailUrl || g.iconUrl || '')}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
-            <span>${escHtml(g.name)}</span>
-          </div>`).join('')}
+        filtered.sort((a, b) => (b.isRepresenting ? 1 : 0) - (a.isRepresenting ? 1 : 0));
+        el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+          ${filtered.map(g => `
+            <div class="group-pill" onclick="openGroupDetail('${escHtml(g.groupId)}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.85em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+              <img src="${proxyImg(g.iconUrl || g.bannerUrl || '')}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;">
+              <div style="display:flex;flex-direction:column;line-height:1.1;max-width:120px;">
+                <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(g.name)}</span>
+                <span style="font-size:0.7em;opacity:0.5;">${escHtml(g.shortCode)}</span>
+              </div>
+              ${g.isRepresenting ? '<span style="font-size:0.65em;background:rgba(52,211,153,0.2);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:1px 6px;border-radius:4px;font-weight:bold;">佩戴</span>' : ''}
+            </div>
+          `).join('')}
         </div>`;
       }).catch(() => {
         el.textContent = '加载群组失败';
@@ -4873,6 +4883,12 @@ function openFriendProfile(el) {
 
 
 function _renderFriendProfileUI(f, modal) {
+  if (!f) return;
+  const id = f.id || '';
+  const name = f.displayName || '';
+  const isSelf = id === (window._myUser && window._myUser.id);
+  const isFriend = f.isFriend || (window.allFriends && window.allFriends.some(af => af.id === id));
+
   // Show modal
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
@@ -4984,10 +5000,6 @@ function _renderFriendProfileUI(f, modal) {
     `<span style="font-family:monospace;font-size:0.9em;">${escHtml(f.id||'')}</span>
     <button onclick="navigator.clipboard.writeText('${escHtml(f.id||'')}').then(()=>this.textContent='✓')" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.9em;">复制</button>`;
 
-  const isSelf = f.id === (window._myUser && window._myUser.id);
-  const isFriend = f.isFriend || (allFriends && allFriends.some(af => af.id === f.id));
-  const id = f.id || '';
-  const name = f.displayName || '';
   const isFriendFaved = friendFavoriteIdMap.has(id);
   const isOnline = f.state === 'online';
   
