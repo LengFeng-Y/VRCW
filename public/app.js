@@ -6769,13 +6769,22 @@ async function fetchMutualFriends(userId, containerId) {
       const safeJson = JSON.stringify(u).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
       const t = getTrustInfo(u.tags || []);
       const thumb = proxyImg(u.profilePicOverrideThumbnail || u.userIcon || u.currentAvatarThumbnailImageUrl || '');
-      return '<div onclick="openFriendProfile(this);" data-friend="' + safeJson + '" style="display:flex;align-items:center;gap:8px;width:155px;padding:6px 8px;border-radius:8px;background:var(--bg-glass);border:1px solid var(--border);cursor:pointer;">' +
-        '<img src="' + escHtml(thumb) + '" style="width:28px;height:28px;border-radius:50%;flex-shrink:0;object-fit:cover;" onerror="this.style.display=\'none\'">' +
-        '<div style="flex:1;min-width:0;"><div style="font-size:0.78em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + t.color + ';">' + escHtml(u.displayName || '') + '</div></div></div>';
+      return `
+        <div class="group-member-card" onclick="openFriendProfile(this);" data-friend="${safeJson}" style="cursor:pointer;width:100%;max-width:none;">
+          <img src="${escHtml(thumb)}" class="member-avatar" onerror="this.src='https://vrchat.com/assets/images/default_avatar.png'">
+          <div class="member-info">
+            <div class="member-name" style="color:${t.color};" title="${escHtml(u.displayName || '')}">${escHtml(u.displayName || 'Unknown')}</div>
+            <div class="member-role">${t.text || 'User'}</div>
+          </div>
+        </div>`;
     };
-    el.innerHTML = '<div style="font-size:0.72em;font-weight:700;color:var(--text-muted);margin-bottom:8px;">共同好友 (' + list.length + ')</div><div style="display:flex;flex-wrap:wrap;gap:6px;">' + list.map(renderUser).join('') + '</div>';
+    el.innerHTML = `
+      <div style="font-size:0.72em;font-weight:700;color:var(--text-muted);margin:0 0 10px 4px;text-transform:uppercase;letter-spacing:0.05em;">共同好友 (${list.length})</div>
+      <div class="group-member-list">
+        ${list.map(renderUser).join('')}
+      </div>`;
   } catch(e) {
-    el.innerHTML = '<span style="color:var(--text-muted);font-size:0.8em;">加载失败: ' + e.message + '</span>';
+    el.innerHTML = '<span style="color:var(--text-muted);font-size:0.8em;">加载失败: ' + escHtml(e.message) + '</span>';
   }
 }
 
@@ -6800,16 +6809,27 @@ async function fetchMutualFriendsFallback(userId, el) {
   const targetUser = detailR.ok ? await detailR.json() : {};
   const targetLoc = targetUser.location || '';
   const colocated = targetLoc && targetLoc.startsWith('wrld_') ? myFriends.filter(f => f.location === targetLoc) : [];
+  
   const renderUser = u => {
     const safeJson = JSON.stringify(u).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
     const t = getTrustInfo(u.tags || []);
     const thumb = proxyImg(u.profilePicOverrideThumbnail || u.userIcon || u.currentAvatarThumbnailImageUrl || '');
-    return '<div onclick="openFriendProfile(this);" data-friend="' + safeJson + '" style="display:flex;align-items:center;gap:8px;width:155px;padding:6px 8px;border-radius:8px;background:var(--bg-glass);border:1px solid var(--border);cursor:pointer;">' +
-      '<img src="' + escHtml(thumb) + '" style="width:28px;height:28px;border-radius:50%;flex-shrink:0;object-fit:cover;" onerror="this.style.display=\'none\'">' +
-      '<div style="flex:1;min-width:0;"><div style="font-size:0.78em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + t.color + ';">' + escHtml(u.displayName || '') + '</div></div></div>';
+    return `
+      <div class="group-member-card" onclick="openFriendProfile(this);" data-friend="${safeJson}" style="cursor:pointer;width:100%;max-width:none;">
+        <img src="${escHtml(thumb)}" class="member-avatar" onerror="this.src='https://vrchat.com/assets/images/default_avatar.png'">
+        <div class="member-info">
+          <div class="member-name" style="color:${t.color};" title="${escHtml(u.displayName || '')}">${escHtml(u.displayName || 'Unknown')}</div>
+          <div class="member-role">${t.text || 'User'}</div>
+        </div>
+      </div>`;
   };
+
   if (colocated.length) {
-    el.innerHTML = '<div style="font-size:0.72em;font-weight:700;color:var(--text-muted);margin-bottom:8px;">同在此实例的好友 (' + colocated.length + ')</div><div style="display:flex;flex-wrap:wrap;gap:6px;">' + colocated.map(renderUser).join('') + '</div>';
+    el.innerHTML = `
+      <div style="font-size:0.72em;font-weight:700;color:var(--text-muted);margin:0 0 10px 4px;text-transform:uppercase;letter-spacing:0.05em;">同在此实例的好友 (${colocated.length})</div>
+      <div class="group-member-list">
+        ${colocated.map(renderUser).join('')}
+      </div>`;
   } else {
     el.innerHTML = '<div style="color:var(--text-muted);font-size:0.8em;line-height:1.6;padding:8px 0;">ℹ️ VRChat 正在逐步向所有用户开放共同好友功能（/users/{id}/mutuals 端点），你的账号可能暂未激活此功能<br>' +
       (targetLoc && targetLoc.startsWith('wrld_') ? '此用户当前不在你任何好友所在的实例。' : '此用户不在线或位置不可见。') + '</div>';
