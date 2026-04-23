@@ -4266,13 +4266,21 @@ function renderMyProfile(u) {
     }).catch(() => {});
   }
 
-  // Fix My Profile Groups
+  // Fix My Profile Groups - Only show represented groups to avoid clutter
   apiCall('/api/vrc/users/' + u.id + '/groups').then(r => r.ok ? r.json() : []).then(groups => {
     const el = document.getElementById('myProfileGroups');
     if (!el) return;
-    if (!groups || !groups.length) { el.textContent = '暂无群组'; return; }
+    
+    // Filter for represented groups only as per user request
+    const displayedGroups = groups.filter(g => g.isRepresented);
+    
+    if (!displayedGroups.length) { 
+      el.innerHTML = '<div style="font-size:0.9em;color:var(--text-muted);opacity:0.6;">暂无展示群组 (No represented groups)</div>';
+      return; 
+    }
+    
     el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-      ${groups.map(g => `<div class="group-pill" onclick="openGroupDetail('${g.groupId}')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.9em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+      ${displayedGroups.map(g => `<div class="group-pill" onclick="openGroupDetail('${g.groupId}')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.9em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
         <img src="${proxyImg(g.thumbnailUrl || g.iconUrl || '')}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
         <span>${escHtml(g.name)}</span>
       </div>`).join('')}
