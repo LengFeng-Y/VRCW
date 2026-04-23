@@ -4266,29 +4266,50 @@ function renderMyProfile(u) {
     }).catch(() => {});
   }
 
-  // Fix My Profile Groups - Only show represented groups to avoid clutter
-  apiCall('/api/vrc/users/' + u.id + '/groups').then(r => r.ok ? r.json() : []).then(groups => {
-    const el = document.getElementById('myProfileGroups');
-    if (!el) return;
-    
-    // Filter for represented groups only as per user request
-    const displayedGroups = groups.filter(g => g.isRepresented);
-    
-    if (!displayedGroups.length) { 
-      el.innerHTML = '<div style="font-size:0.9em;color:var(--text-muted);opacity:0.6;">暂无展示群组 (No represented groups)</div>';
-      return; 
+  // Fix My Profile Groups - Use showcasedGroups and representedGroup from the user object
+  const el = document.getElementById('myProfileGroups');
+  if (el) {
+    const displayed = [];
+    // 1. Add represented group (the one shown on nameplate)
+    if (u.representedGroup) {
+      displayed.push({...u.representedGroup, isRepresented: true});
     }
-    
-    el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-      ${displayedGroups.map(g => `<div class="group-pill" onclick="openGroupDetail('${g.groupId}')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.9em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
-        <img src="${proxyImg(g.thumbnailUrl || g.iconUrl || '')}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
-        <span>${escHtml(g.name)}</span>
-      </div>`).join('')}
-    </div>`;
-  }).catch(() => {
-    const el = document.getElementById('myProfileGroups');
-    if (el) el.textContent = '加载群组失败';
-  });
+    // 2. Add showcased groups (featured on profile)
+    if (u.showcasedGroups && u.showcasedGroups.length) {
+      u.showcasedGroups.forEach(sg => {
+        if (!displayed.some(d => d.id === sg.id || d.groupId === sg.id)) {
+          displayed.push(sg);
+        }
+      });
+    }
+
+    if (displayed.length > 0) {
+      el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        ${displayed.map(g => `<div class="group-pill" onclick="openGroupDetail('${g.groupId || g.id}')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.9em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+          <img src="${proxyImg(g.thumbnailUrl || g.iconUrl || g.bannerUrl || '')}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
+          <span>${escHtml(g.name)}</span>
+          ${g.isRepresented ? '<span style="font-size:0.7em;opacity:0.6;">(展示)</span>' : ''}
+        </div>`).join('')}
+      </div>`;
+    } else {
+      // Fallback: check all groups if showcased/represented fields are missing (though they shouldn't be for current user)
+      apiCall('/api/vrc/users/' + u.id + '/groups').then(r => r.ok ? r.json() : []).then(groups => {
+        const displayedGroups = groups.filter(g => g.isRepresented);
+        if (!displayedGroups.length) { 
+          el.innerHTML = '<div style="font-size:0.9em;color:var(--text-muted);opacity:0.6;">暂无展示群组 (No showcased groups)</div>';
+          return; 
+        }
+        el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+          ${displayedGroups.map(g => `<div class="group-pill" onclick="openGroupDetail('${g.groupId}')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.9em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+            <img src="${proxyImg(g.thumbnailUrl || g.iconUrl || '')}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
+            <span>${escHtml(g.name)}</span>
+          </div>`).join('')}
+        </div>`;
+      }).catch(() => {
+        el.textContent = '加载群组失败';
+      });
+    }
+  }
 }
 
 // Bug#2 fix: favorites endpoint returns {favoriteId: "usr_xxx", ...} NOT user objects
@@ -4938,6 +4959,32 @@ function _renderFriendProfileUI(f, modal) {
   const bioSection = document.getElementById('fpBioSection');
   if (f.bio) { bioSection.style.display=''; document.getElementById('fpBio').textContent=(f.bio||'').replace(/\\n/g, String.fromCharCode(10)); }
   else bioSection.style.display='none';
+
+  // Render Friend Profile Groups (Represented & Showcased)
+  const gSummarySection = document.getElementById('fpGroupsSummarySection');
+  const gSummaryList = document.getElementById('fpGroupsSummaryList');
+  if (gSummarySection && gSummaryList) {
+    const displayed = [];
+    if (f.representedGroup) displayed.push({...f.representedGroup, isRepresented: true});
+    if (f.showcasedGroups && f.showcasedGroups.length) {
+      f.showcasedGroups.forEach(sg => {
+        if (!displayed.some(d => d.id === sg.id || d.groupId === sg.id)) displayed.push(sg);
+      });
+    }
+
+    if (displayed.length > 0) {
+      gSummarySection.style.display = '';
+      gSummaryList.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        ${displayed.map(g => `<div class="group-pill" onclick="openGroupDetail('${g.groupId || g.id}')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.85em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+          <img src="${proxyImg(g.thumbnailUrl || g.iconUrl || g.bannerUrl || '')}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
+          <span>${escHtml(g.name)}</span>
+          ${g.isRepresented ? '<span style="font-size:0.75em;opacity:0.6;">(展示)</span>' : ''}
+        </div>`).join('')}
+      </div>`;
+    } else {
+      gSummarySection.style.display = 'none';
+    }
+  }
 
   const statField = (label, val, placeholder = '–') =>
     `<div class="fp-stat-item"><div class="fp-stat-label">${label}</div><div class="fp-stat-value">${escHtml(val||'')||placeholder}</div></div>`;
