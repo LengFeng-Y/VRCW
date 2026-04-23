@@ -4960,31 +4960,8 @@ function _renderFriendProfileUI(f, modal) {
   if (f.bio) { bioSection.style.display=''; document.getElementById('fpBio').textContent=(f.bio||'').replace(/\\n/g, String.fromCharCode(10)); }
   else bioSection.style.display='none';
 
-  // Render Friend Profile Groups (Represented & Showcased)
-  const gSummarySection = document.getElementById('fpGroupsSummarySection');
-  const gSummaryList = document.getElementById('fpGroupsSummaryList');
-  if (gSummarySection && gSummaryList) {
-    const displayed = [];
-    if (f.representedGroup) displayed.push({...f.representedGroup, isRepresented: true});
-    if (f.showcasedGroups && f.showcasedGroups.length) {
-      f.showcasedGroups.forEach(sg => {
-        if (!displayed.some(d => d.id === sg.id || d.groupId === sg.id)) displayed.push(sg);
-      });
-    }
-
-    if (displayed.length > 0) {
-      gSummarySection.style.display = '';
-      gSummaryList.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-        ${displayed.map(g => `<div class="group-pill" onclick="openGroupDetail('${g.groupId || g.id}')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.85em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
-          <img src="${proxyImg(g.thumbnailUrl || g.iconUrl || g.bannerUrl || '')}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
-          <span>${escHtml(g.name)}</span>
-          ${g.isRepresented ? '<span style="font-size:0.75em;opacity:0.6;">(展示)</span>' : ''}
-        </div>`).join('')}
-      </div>`;
-    } else {
-      gSummarySection.style.display = 'none';
-    }
-  }
+  // Load Groups Summary (Represented & Showcased)
+  _loadFriendProfileGroups(f.id, isFriend);
 
   const statField = (label, val, placeholder = '–') =>
     `<div class="fp-stat-item"><div class="fp-stat-label">${label}</div><div class="fp-stat-value">${escHtml(val||'')||placeholder}</div></div>`;
@@ -5050,6 +5027,64 @@ function _renderFriendProfileUI(f, modal) {
 function closeFriendProfile() {
   document.getElementById('friendProfileModal')?.classList.add('hidden');
   currentFriendProfile = null;
+}
+
+async function _loadFriendProfileGroups(userId, isFriend) {
+  const gSummaryList = document.getElementById('fpGroupsSummaryList');
+  const gSummarySection = document.getElementById('fpGroupsSummarySection');
+  if (!gSummaryList || !gSummarySection) return;
+
+  // Show loading state
+  gSummaryList.innerHTML = '<div style="font-size:0.75em;opacity:0.5;padding:4px 0;">加载群组中...</div>';
+  gSummarySection.style.display = '';
+
+  try {
+    const r = await apiCall('/api/vrc/users/' + userId + '/groups');
+    if (!r.ok) throw new Error('Failed to fetch groups');
+    const groups = await r.json();
+
+    // Filter showcased groups: representing OR visible to current user
+    const filtered = groups.filter(g => {
+      if (g.isRepresenting) return true;
+      if (g.memberVisibility === 'visible') return true;
+      if (isFriend && g.memberVisibility === 'friends') return true;
+      return false;
+    });
+
+    // Deduplicate by groupId just in case
+    const seen = new Set();
+    const finalGroups = [];
+    for (const g of filtered) {
+      if (!seen.has(g.groupId)) {
+        seen.add(g.groupId);
+        finalGroups.push(g);
+      }
+    }
+
+    // Sort: Representing first
+    finalGroups.sort((a, b) => (b.isRepresenting ? 1 : 0) - (a.isRepresenting ? 1 : 0));
+
+    if (finalGroups.length === 0) {
+      gSummarySection.style.display = 'none';
+      return;
+    }
+
+    gSummaryList.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+      ${finalGroups.map(g => `
+        <div class="group-pill" onclick="openGroupDetail('${escHtml(g.groupId)}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.82em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+          <img src="${proxyImg(g.iconUrl || g.bannerUrl || '')}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;background:rgba(0,0,0,0.2);">
+          <div style="display:flex;flex-direction:column;line-height:1.1;max-width:120px;">
+            <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(g.name)}</span>
+            <span style="font-size:0.7em;opacity:0.5;">${escHtml(g.shortCode)}</span>
+          </div>
+          ${g.isRepresenting ? '<span style="font-size:0.65em;background:rgba(52,211,153,0.2);color:#34d399;border:1px solid rgba(52,211,153,0.3);padding:1px 6px;border-radius:4px;font-weight:bold;">佩戴</span>' : ''}
+        </div>
+      `).join('')}
+    </div>`;
+  } catch (e) {
+    console.error('Group load failed:', e);
+    gSummarySection.style.display = 'none';
+  }
 }
 
 function switchFriendProfileTab(tab) {
