@@ -6603,13 +6603,14 @@ async function fetchGroupMembers(groupId) {
     el.innerHTML = members.map(m => {
       const u = m.user || {};
       const fJson = JSON.stringify(u).replace(/\\/g,'\\\\').replace(/"/g,'&quot;');
-      return `<div class="group-member-card" onclick="openFriendProfile(this)" data-friend="${fJson}" style="cursor:pointer;">
-        <img src="${escHtml(proxyImg(u.userIcon||u.profilePicOverrideThumbnail||u.currentAvatarThumbnailImageUrl||''))}" class="member-avatar" onerror="this.src='https://vrchat.com/assets/images/default_avatar.png'">
-        <div style="flex:1;">
-          <div class="member-name">${escHtml(u.displayName || 'Unknown')}</div>
-          <div style="font-size:0.65em;color:var(--text-muted);">${escHtml(m.roleNames?.[0] || 'Member')}</div>
-        </div>
-      </div>`;
+      return `
+        <div class="group-member-card" onclick="openFriendProfile(this)" data-friend="${fJson}" style="cursor:pointer;">
+          <img src="${escHtml(proxyImg(u.userIcon || u.profilePicOverrideThumbnail || u.currentAvatarThumbnailImageUrl || ''))}" class="member-avatar" onerror="this.src='https://vrchat.com/assets/images/default_avatar.png'">
+          <div class="member-info">
+            <div class="member-name" title="${escHtml(u.displayName || '')}">${escHtml(u.displayName || 'Unknown')}</div>
+            <div class="member-role">${escHtml(m.roleNames?.[0] || 'Member')}</div>
+          </div>
+        </div>`;
     }).join('');
   } catch(e) {
     el.innerHTML = '<div style="padding:10px;color:var(--error);font-size:0.8rem;">无法加载成员: ' + escHtml(e.message) + '</div>';

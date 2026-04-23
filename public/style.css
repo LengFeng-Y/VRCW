@@ -2306,3 +2306,103 @@ select.input-field {
 }
 
 /* ── My Profile Layout Tweaks ── */
+/* ── Group Detail Modal UI ── */
+.group-member-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  padding: 12px 4px;
+}
+
+.group-member-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.group-member-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(99, 102, 241, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.member-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.member-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.member-role {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+/* Group Instance List */
+.group-instance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 4px;
+}
+
+.group-instance-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.group-instance-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.inst-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inst-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.inst-meta {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.inst-occupants {
+  font-size: 0.75rem;
+  color: var(--accent-light);
+  font-weight: 600;
+  background: rgba(99, 102, 241, 0.1);
+  padding: 2px 8px;
+  border-radius: 99px;
+}
