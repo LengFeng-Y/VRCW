@@ -852,18 +852,27 @@ function doLogout() {
 function showMainApp() {
   document.getElementById("loginPage").classList.add("hidden");
   document.getElementById("mainApp").classList.remove("hidden");
-  // Fetch current user + favorite groups in parallel
-  apiCall("/api/vrc/auth/user")
-    .then(async (r) => {
-      if (r.ok) {
-        const user = await r.json();
-        currentUserId = user.id || "";
-      }
-    })
-    .catch(() => {});
-  fetchFavoriteGroups();
-  fetchAvatars();
-  syncAllFavoriteIds(); // Fetch all favorite statuses globally
+  
+  // 1. Initial User Fetch
+  apiCall("/api/vrc/auth/user").then(async (r) => {
+    if (r.ok) {
+      const user = await r.json();
+      currentUserId = user.id || "";
+    }
+  }).catch(() => {});
+
+  // 2. Force Refresh key sections for immediacy
+  fetchMyProfile(true);
+  fetchCurrentFriendCategory(true);
+  
+  // Delay world/avatar refresh slightly to prioritize profile/friends
+  setTimeout(() => {
+    fetchFavoriteGroups(); // triggers initAvatars/fetchAvatars
+    if (worldsLoaded) fetchWorlds(currentWorldCategory, true);
+    else initWorldsTab(); // will trigger first fetch
+  }, 1000);
+
+  syncAllFavoriteIds(); 
 }
 
 // ── Sync All Favorites Globally ──
@@ -1111,36 +1120,21 @@ function updateSelectedCount() {
 let fetchSeq = 0; // Track latest fetch to avoid stale renders
 async function fetchAvatars(forceRefresh = false) {
   const seq = ++fetchSeq;
-  logMsg(`Fetching avatars for ${currentCategory}...`, "info");
+  const grid = document.getElementById("avatarGrid");
 
-  // Immediately clear previous state to prevent UI from showing stale data (the "list jumping" bug)
-  avatars = [];
-  selectedIds.clear();
-  updateSelectedCount();
-  applyFilters(); // Renders empty grid until cache/API returns
-
-  // Quick render from cache ONLY if not force-refreshing
+  // ── Step 1: Load basics from cache immediately ──────────────────────────
   try {
-    const cacheKey = "avatars_" + currentCategory;
-    if (forceRefresh) {
-      // Clear cache so we always get fresh data; show loading state
-      await idb.set(cacheKey, null);
-      const grid = document.getElementById("avatarGrid");
-      if (grid) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.4);">刷新中... / Refreshing...</div>`;
-      logMsg(`Refreshing ${currentCategory} from server...`, "info");
+    const cachedBasics = await idb.get('avatar_basics_' + currentCategory) || [];
+    if (cachedBasics.length > 0 && !forceRefresh) {
+      avatars = cachedBasics;
+      applyFilters();
+      logMsg(`Loaded ${avatars.length} cached avatars...`, "info");
     } else {
-      const cached = await idb.get(cacheKey);
-      if (cached && cached.length > 0 && seq === fetchSeq) {
-        avatars = cached;
-        applyFilters();
-        logMsg(`Loaded ${avatars.length} from cache. Click Refresh to update.`, "success");
-        return;
-      }
+      if (grid) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.4);">加载中...</div>`;
     }
-  } catch (e) {
-    console.warn("Cache load failed", e);
-  }
+  } catch(e) {}
 
+  // ── Step 2: Full Refresh ──────────────────────────────────────────────
   try {
     let allFetched = [];
 
@@ -1175,10 +1169,21 @@ async function fetchAvatars(forceRefresh = false) {
 
     // If views changed while we waited, abandon stale render
     if (seq !== fetchSeq) return;
-
     avatars = allFetched;
     applyFilters();
-    logMsg(`Found ${avatars.length} avatars`, "success");
+    
+    // Save basics only
+    const basics = allFetched.map(a => ({
+      id: a.id,
+      name: a.name,
+      thumbnailImageUrl: a.thumbnailImageUrl,
+      imageUrl: a.imageUrl,
+      releaseStatus: a.releaseStatus,
+      authorId: a.authorId,  // needed for private-non-own cleanup filter
+      tags: a.tags
+    }));
+    idb.set("avatar_basics_" + currentCategory, basics).catch(()=>{});
+    logMsg(`✅ Sync complete: ${avatars.length} avatars`, "success");
 
     // Fire background batch prefetch — Worker downloads all thumbnails concurrently
     // from VRC servers at edge speed and caches them, so browser image loads are instant
@@ -1424,11 +1429,16 @@ function renderGrid(list) {
         ? `<img class="avatar-thumb clickable-thumb" src="${escHtml(thumb)}" alt="${escHtml(av.name)}" onclick="event.stopPropagation(); openLocalDetail('${safeId}')" title="点击查看详情">`
         : `<img class="avatar-thumb loading clickable-thumb" src="${BLANK}" data-src="${escHtml(thumb)}" alt="" onclick="event.stopPropagation(); openLocalDetail('${safeId}')" title="点击查看详情">`;
 
+    const releaseBadge = av.releaseStatus === 'public' 
+      ? '<div style="position:absolute;top:8px;left:8px;background:var(--success);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">Public</div>'
+      : '<div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.5);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">Private</div>';
+
     card.innerHTML = `
             ${actionBtns ? `<div class="avatar-actions">${actionBtns}</div>` : ""}
             ${isFaved ? `<div class="fav-badge" title="已收藏">⭐</div>` : ""}
             <div class="avatar-checkbox" onclick="event.stopPropagation(); toggleSelect('${safeId}')" title="选中/取消选中">✓</div>
             <div class="avatar-thumb-wrapper ${isCached ? '' : 'img-loading'}">
+                ${releaseBadge}
                 ${imgHtml}
                 <div class="avatar-name-overlay">${escHtml(av.name || "失效模型 (Invalid / Deleted)")}</div>
             </div>
@@ -1549,53 +1559,126 @@ async function unfavoriteSelected() {
   logMsg(`✓ 批量移除完成: 成功 ${successCount}, 失败 ${failCount}`, successCount > 0 ? "success" : "error");
 }
 
+// ── Shared Cleanup Modal ─────────────────────────────────────────────────────
+// Used by both avatar and world cleanup functions.
+// opts: { title, invalidItems[], privateNonOwnItems[], invalidLabel(item), onConfirm(items[]) }
+function _showCleanupModal(opts) {
+  document.getElementById('cleanupModal')?.remove();
+
+  const { title, invalidItems, privateNonOwnItems, invalidLabel, onConfirm } = opts;
+  const hasPrivate = privateNonOwnItems.length > 0;
+
+  const modal = document.createElement('div');
+  modal.id = 'cleanupModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+  modal.innerHTML = `
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:500px;width:100%;max-height:82vh;overflow-y:auto;display:flex;flex-direction:column;gap:16px;box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h2 style="margin:0;font-size:1.2em;">${title}</h2>
+        <button id="cuClose" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.5em;line-height:1;">\u00d7</button>
+      </div>
+
+      ${invalidItems.length > 0 ? `
+        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:10px;padding:14px;">
+          <div style="font-weight:700;color:#f87171;margin-bottom:8px;">\ud83d\udeab \u5931\u6548/\u9690\u85cf\u5185\u5bb9 <span style="font-weight:400;font-size:0.85em;opacity:0.8;">(\u5c06\u59cb\u7ec8\u79fb\u9664)</span></div>
+          <div style="font-size:0.82em;color:var(--text-secondary);max-height:100px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+            ${invalidItems.slice(0,20).map(item=>`<span>\u2022 ${escHtml(invalidLabel(item))}</span>`).join('')}
+            ${invalidItems.length>20?`<span style="opacity:0.6;">\u2026 \u8fd8\u6709 ${invalidItems.length-20} \u4e2a</span>`:''}
+          </div>
+        </div>
+      ` : ''}
+
+      ${hasPrivate ? `
+        <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.28);border-radius:10px;padding:14px;">
+          <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;">
+            <input type="checkbox" id="cuIncPrivate" style="width:18px;height:18px;margin-top:2px;accent-color:var(--accent);flex-shrink:0;">
+            <div>
+              <div style="font-weight:700;color:#fbbf24;">\ud83d\udd12 \u4ed6\u4eba\u4e0a\u4f20\u7684\u79c1\u4eba\u5185\u5bb9
+                <span style="font-size:0.8em;background:rgba(245,158,11,0.2);padding:1px 7px;border-radius:4px;margin-left:4px;">${privateNonOwnItems.length} \u4e2a</span>
+              </div>
+              <div style="font-size:0.8em;color:var(--text-muted);margin-top:4px;">\u8fd9\u4e9b\u5185\u5bb9\u72b6\u6001\u4e3a Private \u4e14\u4e0a\u4f20\u8005\u4e0d\u662f\u4f60\u7684\u8d26\u53f7\u3002\u52fe\u9009\u540e\u5c06\u4e00\u5e76\u4ece\u6536\u85cf\u5939\u79fb\u9664\u3002</div>
+              <div style="font-size:0.78em;color:var(--text-secondary);max-height:80px;overflow-y:auto;margin-top:8px;display:flex;flex-direction:column;gap:3px;">
+                ${privateNonOwnItems.slice(0,15).map(item=>`<span>\u2022 ${escHtml(invalidLabel(item))}</span>`).join('')}
+                ${privateNonOwnItems.length>15?`<span style="opacity:0.6;">\u2026 \u8fd8\u6709 ${privateNonOwnItems.length-15} \u4e2a</span>`:''}
+              </div>
+            </div>
+          </label>
+        </div>
+      ` : ''}
+
+      <div style="font-size:0.8em;color:var(--text-muted);padding:10px 12px;background:rgba(255,255,255,0.03);border-radius:8px;border-left:3px solid var(--border);">
+        \u26a0\ufe0f \u6b64\u64cd\u4f5c\u5c06\u8c03\u7528 API \u5f7b\u5e95\u53d6\u6d88\u6536\u85cf\uff0c\u65e0\u6cd5\u64a4\u9500\u3002
+      </div>
+
+      <div id="cuProgress" style="display:none;font-size:0.85em;color:var(--accent-light);text-align:center;padding:10px;background:rgba(167,139,250,0.08);border-radius:8px;border:1px solid rgba(167,139,250,0.2);">\u5904\u7406\u4e2d...</div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">
+        <button id="cuCancel" class="btn btn-secondary" style="padding:8px 22px;">\u53d6\u6d88</button>
+        <button id="cuConfirm" class="btn btn-primary" style="padding:8px 22px;background:linear-gradient(135deg,#ef4444,#dc2626);border-color:transparent;">\ud83d\uddd1\ufe0f \u786e\u8ba4\u6e05\u7406</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const closeModal = () => modal.remove();
+  document.getElementById('cuClose').onclick = closeModal;
+  document.getElementById('cuCancel').onclick = closeModal;
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+  document.getElementById('cuConfirm').onclick = async () => {
+    const includePrivate = hasPrivate && document.getElementById('cuIncPrivate')?.checked;
+    const toDelete = [...invalidItems, ...(includePrivate ? privateNonOwnItems : [])];
+    if (!toDelete.length) { closeModal(); return; }
+
+    document.getElementById('cuConfirm').disabled = true;
+    document.getElementById('cuCancel').disabled = true;
+    const prog = document.getElementById('cuProgress');
+    prog.style.display = '';
+    prog.textContent = `\u5904\u7406\u4e2d 0 / ${toDelete.length}...`;
+
+    await onConfirm(toDelete);
+    closeModal();
+  };
+}
+
 async function cleanInvalidFavorites() {
-  if (currentCategory === "mine") return;
-  // Only flag avatars with empty/missing name or explicitly unavailable/hidden status
-  // Do NOT flag avatars just because imageUrl is empty - it may still be loading
-  const invalidIds = avatars
-    .filter(
-      (av) =>
-        !av.name ||
-        av.releaseStatus === "hidden" ||
-        av.releaseStatus === "unavailable",
-    )
-    .map((av) => av.id);
-  if (invalidIds.length === 0) {
-    logMsg("未发现失效收藏。 (No invalid models found)", "success");
-    return;
-  }
-  if (
-    !confirm(
-      `共发现 ${invalidIds.length} 个失效模型。确定要全部移除收藏吗？\nFound ${invalidIds.length} invalid models. Remove them all?`,
-    )
-  )
-    return;
+  if (currentCategory === 'mine') return;
 
-  logMsg(`准备清理 ${invalidIds.length} 个失效模型...`, "info");
-  let failCount = 0;
-
-  for (const id of invalidIds) {
-    const fid = favoriteIdMap.get(id);
-    if (!fid) {
-      failCount++;
-      continue;
-    }
-    try {
-      await apiCall(`/api/vrc/favorites/${fid}`, { method: "DELETE" });
-    } catch (e) {
-      failCount++;
-    }
-    await new Promise(r => setTimeout(r, 200)); // Avoid rate limiting
-  }
-
-  logMsg(
-    `清理完毕。成功: ${invalidIds.length - failCount}, 失败: ${failCount}`,
-    "success",
+  // Categorize avatars
+  const invalid = avatars.filter(av =>
+    !av.name || av.releaseStatus === 'hidden' || av.releaseStatus === 'unavailable'
   );
-  // Clear IDB cache so the list reloads fresh from server
-  try { await idb.set("avatars_" + currentCategory, []); } catch (_) {}
-  fetchAvatars(true); // Force refresh from server
+  const privateNonOwn = avatars.filter(av =>
+    av.releaseStatus === 'private' && av.authorId && currentUserId && av.authorId !== currentUserId
+  );
+
+  if (!invalid.length && !privateNonOwn.length) {
+    logMsg('✅ 当前收藏夹没有需要清理的内容', 'success');
+    return;
+  }
+
+  // Show rich cleanup modal
+  _showCleanupModal({
+    title: '🧹 清理收藏模型',
+    invalidItems: invalid,
+    privateNonOwnItems: privateNonOwn,
+    invalidLabel: item => item.name || '失效/无名模型',
+    onConfirm: async (toDelete) => {
+      let success = 0, fail = 0;
+      for (const av of toDelete) {
+        const fid = favoriteIdMap.get(av.id);
+        if (!fid) { fail++; continue; }
+        try {
+          await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
+          success++;
+        } catch(e) { fail++; }
+        await new Promise(r => setTimeout(r, 200));
+      }
+      logMsg(`✅ 清理完毕：成功移除 ${success} 个，失败 ${fail} 个`, success > 0 ? 'success' : 'error');
+      try { await idb.set('avatar_basics_' + currentCategory, []); } catch(_) {}
+      fetchAvatars(true);
+    }
+  });
 }
 
 // ── Open Local Avatar Detail Modal ──
@@ -4047,112 +4130,165 @@ function renderMyProfile(u) {
   if (u.location && u.location !== 'offline' && u.location !== 'private') {
     getLocationDisplay(u.location).then(txt => {
       const el = document.getElementById('myProfileLocText');
-      if (el) el.innerHTML = `<a href="#" onclick="openWorldDetail('${u.location.split(':')[0]}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a>`;
+      if (el) el.innerHTML = `<a href="#" onclick="openInstanceDetail('${escHtml(u.location)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a>`;
     }).catch(() => {});
   }
+
+  // Fix My Profile Groups
+  apiCall('/api/vrc/users/' + u.id + '/groups').then(r => r.ok ? r.json() : []).then(groups => {
+    const el = document.getElementById('myProfileGroups');
+    if (!el) return;
+    if (!groups || !groups.length) { el.textContent = '暂无群组'; return; }
+    el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+      ${groups.map(g => `<div class="group-pill" onclick="openGroupDetail('${g.groupId}')" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.9em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+        <img src="${proxyImg(g.thumbnailUrl || g.iconUrl || '')}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
+        <span>${escHtml(g.name)}</span>
+      </div>`).join('')}
+    </div>`;
+  }).catch(() => {
+    const el = document.getElementById('myProfileGroups');
+    if (el) el.textContent = '加载群组失败';
+  });
 }
 
 // Bug#2 fix: favorites endpoint returns {favoriteId: "usr_xxx", ...} NOT user objects
 // Need to batch-fetch actual user profiles
 async function fetchCurrentFriendCategory(forceRefresh = false) {
-  const cat    = currentFriendCategory;
+  const cat = currentFriendCategory;
   const listEl = document.getElementById('friendList');
   const statsEl = document.getElementById('friendStats');
   if (!listEl) return;
-  listEl.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">加载中...</div>';
-  if (statsEl) statsEl.textContent = '加载中...';
+
+  // Use a temporary map to build the fresh list while preserving existing rendering
+  const friendMap = new Map();
+
+  // ── Step 1: Load basics from cache immediately ──────────────────────────
+  try {
+    const cachedBasics = await idb.get('friend_basics') || [];
+    if (cachedBasics.length > 0) {
+      // Initialize allFriends with cached basics (set to offline initially)
+      allFriends = cachedBasics.map(b => ({
+        ...b,
+        status: 'offline',
+        location: 'offline',
+        state: 'offline'
+      }));
+      filterFriends();
+      if (statsEl) statsEl.textContent = `加载中... (${allFriends.length} 名缓存)`;
+    } else {
+      listEl.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">正在连接 VRChat...</div>';
+    }
+  } catch (e) { console.error('IDB error:', e); }
+
+  // ── Step 2: Start streaming refresh ─────────────────────────────────────
+  // We don't want to wait for everything to finish. We'll fire off background tasks.
+  
+  const updateFriendBatch = (batch) => {
+    if (cat !== currentFriendCategory) return;
+    batch.forEach(f => {
+      friendMap.set(f.id, f);
+      // Also update the global allFriends array
+      const idx = allFriends.findIndex(ex => ex.id === f.id);
+      if (idx !== -1) allFriends[idx] = Object.assign(allFriends[idx], f);
+      else allFriends.push(f);
+    });
+    filterFriends();
+    // Update basics cache (persist only non-volatile fields)
+    saveFriendBasics();
+  };
+
+  const saveFriendBasics = () => {
+    const basics = allFriends.map(f => ({
+      id: f.id,
+      displayName: f.displayName,
+      currentAvatarThumbnailImageUrl: f.currentAvatarThumbnailImageUrl,
+      userIcon: f.userIcon,
+      profilePicOverrideThumbnail: f.profilePicOverrideThumbnail,
+      tags: f.tags,
+      last_platform: f.last_platform
+    }));
+    idb.set('friend_basics', basics).catch(()=>{});
+  };
 
   try {
-    let friendsList = [];
-    let cacheKey = '';
-    const onlineOnly = (cat === 'online');
+    // 1. Fetch Online Friends (High Priority, Fast)
+    let onlineOffset = 0;
+    while (true) {
+      const r = await apiCall(`/api/vrc/auth/user/friends?n=100&offset=${onlineOffset}&offline=false`);
+      if (!r.ok) break;
+      const batch = await r.json();
+      if (!batch || !batch.length) break;
+      updateFriendBatch(batch);
+      if (batch.length < 100) break;
+      onlineOffset += 100;
+    }
 
-    if (cat.startsWith('fav_')) {
-      const groupName = cat.slice(4);
-      cacheKey = 'friends_fav_' + groupName;
-      if (!forceRefresh) {
-        const cached = await idb.get(cacheKey);
-        if (cached && cached.length > 0) {
-          allFriends = cached; filterFriends();
-          if (statsEl) statsEl.textContent = `${cached.length} 位好友 (缓存)`;
-          return;
-        }
-      }
-      // Step 1: get favorite records (just IDs)
-      let favRecords = [];
+    // 2. Fetch Favorite IDs & Refresh them in Parallel (Priority to Favorites)
+    const favoriteGroups = ['group_0', 'group_1', 'group_2', 'group_3'];
+    const favoriteIds = new Set();
+    
+    // Clear and rebuild friendFavoriteIdMap for fresh categories
+    friendFavoriteIdMap.clear();
+
+    // Get all favorite IDs across groups
+    await Promise.all(favoriteGroups.map(async group => {
       let offset = 0;
       while (true) {
-        const r = await apiCall(`/api/vrc/favorites?type=friend&tag=${encodeURIComponent(groupName)}&n=100&offset=${offset}`);
+        const r = await apiCall(`/api/vrc/favorites?type=friend&tag=${group}&n=100&offset=${offset}`);
         if (!r.ok) break;
         const batch = await r.json();
         if (!batch || !batch.length) break;
-        favRecords = favRecords.concat(batch);
+        batch.forEach(fav => {
+          favoriteIds.add(fav.favoriteId);
+          // Track which groups this user belongs to
+          if (!friendFavoriteIdMap.has(fav.favoriteId)) {
+            friendFavoriteIdMap.set(fav.favoriteId, { favoriteId: fav.id, tags: [group] });
+          } else {
+            const entry = friendFavoriteIdMap.get(fav.favoriteId);
+            if (!entry.tags.includes(group)) entry.tags.push(group);
+          }
+        });
         if (batch.length < 100) break;
         offset += 100;
-        await new Promise(r => setTimeout(r, 300));
       }
-      // Step 2: fetch actual user profiles from favoriteId
-      const userIds = favRecords.map(f => f.favoriteId).filter(Boolean);
-      const users   = [];
-      for (let i = 0; i < userIds.length; i += 10) {
-        const chunk = userIds.slice(i, i+10);
-        const results = await Promise.allSettled(
-          chunk.map(uid => apiCall(`/api/vrc/users/${uid}`).then(r => r.ok ? r.json() : null))
-        );
-        results.forEach(res => { if (res.status==='fulfilled' && res.value) users.push(res.value); });
-        if (i + 10 < userIds.length) await new Promise(r => setTimeout(r, 400));
-      }
-      friendsList = users;
-    } else {
-      cacheKey = 'friends_' + cat;
-      if (!forceRefresh) {
-        const cached = await idb.get(cacheKey);
-        if (cached && cached.length > 0) {
-          allFriends = cached; filterFriends();
-          if (statsEl) statsEl.textContent = `${cached.length} 位好友 (缓存)`;
-          return;
-        }
-      }
-      let offset  = 0;
-      // Always fetch online friends first
-      while (true) {
-        const r = await apiCall(`/api/vrc/auth/user/friends?n=100&offset=${offset}&offline=false`);
+    }));
+
+    // High-concurrency refresh for all Favorites (parallel fetch /users/{id})
+    const fIds = [...favoriteIds];
+    const CONCURRENCY = 50; 
+    for (let i = 0; i < fIds.length; i += CONCURRENCY) {
+      if (cat !== currentFriendCategory) return;
+      const chunk = fIds.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(chunk.map(uid => 
+        apiCall(`/api/vrc/users/${uid}`).then(r => r.ok ? r.json() : null)
+      ));
+      const freshBatch = results.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
+      updateFriendBatch(freshBatch);
+      if (statsEl) statsEl.textContent = `刷新中... (${friendMap.size} 位就绪)`;
+    }
+
+
+    // 3. Fetch Offline Friends (Background, Low Priority)
+    if (cat === 'all' || cat === 'offline') {
+      let offlineOffset = 0;
+      while (offlineOffset < 3000) {
+        if (cat !== currentFriendCategory) return;
+        const r = await apiCall(`/api/vrc/auth/user/friends?n=100&offset=${offlineOffset}&offline=true`);
         if (!r.ok) break;
         const batch = await r.json();
-        if (!batch || !batch.length || batch.error) break;
-        friendsList = friendsList.concat(batch);
+        if (!batch || !batch.length) break;
+        updateFriendBatch(batch);
         if (batch.length < 100) break;
-        offset += 100;
-        await new Promise(r => setTimeout(r, 300));
-      }
-      // If "all", also fetch offline
-      if (!onlineOnly) {
-        offset = 0;
-        while (offset < 3000) {
-          const r = await apiCall(`/api/vrc/auth/user/friends?n=100&offset=${offset}&offline=true`);
-          if (!r.ok) break;
-          const batch = await r.json();
-          if (!batch || !batch.length || batch.error) break;
-          friendsList = friendsList.concat(batch);
-          if (batch.length < 100) break;
-          offset += 100;
-          await new Promise(r => setTimeout(r, 300));
-        }
+        offlineOffset += 100;
+        await new Promise(r => setTimeout(r, 200)); // Be nice to API
       }
     }
-    if (cat !== currentFriendCategory) return; // Cancel if changed
-    allFriends = friendsList;
-    if (cacheKey) await idb.set(cacheKey, friendsList);
-    
-    
-    filterFriends();
+
     if (statsEl) statsEl.textContent = `共 ${allFriends.length} 位好友`;
-    friendLogMsg(`✅ 加载了 ${allFriends.length} 位好友`, 'success');
-  } catch(e) {
-    if (cat !== currentFriendCategory) return;
-    listEl.innerHTML = `<div style="text-align:center;padding:40px;color:var(--error);">加载失败: ${escHtml(e.message)}</div>`;
-    if (statsEl) statsEl.textContent = '加载失败';
-    friendLogMsg('❌ ' + e.message, 'error');
+    friendLogMsg(`✅ 好友状态已全部同步`, 'success');
+  } catch (e) {
+    console.error('Fetch error:', e);
+    friendLogMsg(`❌ 好友同步异常`, 'error');
   }
 }
 
@@ -4293,7 +4429,22 @@ function friendLogMsg(msg, type) {
 function filterFriends() {
   const q      = (document.getElementById('friendSearch')?.value||'').toLowerCase().trim();
   const sortBy = document.getElementById('friendSortBy')?.value || 'status';
+  const cat    = currentFriendCategory;
   let list     = [...allFriends];
+
+  // Apply Category Filter
+  if (cat === 'online') {
+    list = list.filter(f => f.state !== 'offline' && f.status !== 'offline');
+  } else if (cat === 'offline') {
+    list = list.filter(f => f.state === 'offline' || f.status === 'offline');
+  } else if (cat.startsWith('fav_')) {
+    const groupName = cat.slice(4);
+    // Use the friendFavoriteIdMap to check membership
+    list = list.filter(f => {
+      const favInfo = friendFavoriteIdMap.get(f.id);
+      return favInfo && favInfo.tags && favInfo.tags.includes(groupName);
+    });
+  }
 
   if (q) list = list.filter(f =>
     (f.displayName||'').toLowerCase().includes(q) ||
@@ -4454,7 +4605,7 @@ function renderFriendList(list) {
 
   el.innerHTML = html;
 
-  // Async: resolve world names for group headers
+  // Async: resolve world names in group headers
   document.querySelectorAll('.loc-group-header[data-loc]').forEach(async div => {
     const loc = div.dataset.loc;
     const nameEl = div.querySelector('[id^="lgn_"]');
@@ -4504,7 +4655,7 @@ function friendCardHtml(f) {
           <span style="font-weight:600;color:var(--text-primary);">${getStatusLabel(f)}</span>
           <span style="opacity:0.6;">|</span>
           ${(f.location && f.location !== 'offline' && f.location !== 'private' && f.location.startsWith('wrld_')) 
-              ? `<a href="#" id="${locSpanId}" onclick="openWorldDetail('${f.location.split(':')[0]}'); event.stopPropagation(); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;" title="查看世界">${escHtml(locationText)}</a>` 
+              ? `<a href="#" id="${locSpanId}" onclick="openInstanceDetail('${escHtml(f.location)}'); event.stopPropagation(); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;" title="查看实例详情">${escHtml(locationText)}</a>` 
               : `<span>${escHtml((f.state==='online' && f.statusDescription) ? f.statusDescription : locationText)}</span>`}
         </div>
       </div>
@@ -4633,7 +4784,7 @@ function _renderFriendProfileUI(f, modal) {
       const btns = isJoinable ? `
         <button onclick="inviteSelf('${escHtml(f.location)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;margin-left:8px;" title="发送邀请给自己">📩 邀请自己</button>
       ` : '';
-      fpWorldInfo.innerHTML = escHtml(txt) + btns; 
+      fpWorldInfo.innerHTML = `<a href="#" onclick="openInstanceDetail('${escHtml(f.location)}'); event.preventDefault();" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--accent-light);">${escHtml(txt)}</a>` + btns; 
     }).catch(()=>{ fpWorldInfo.textContent = f.location||''; });
   } else {
     locSection.style.display = 'none';
@@ -5148,85 +5299,145 @@ async function fetchWorlds(category, forceRefresh = false) {
   const gridEl  = document.getElementById('worldGrid');
   const statsEl = document.getElementById('worldStats');
   if (!gridEl) return;
-  allWorlds = []; // Clear previous results immediately
-  gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.3);">加载中...</div>';
-  if (statsEl) {
-      statsEl.textContent = '加载中...';
-      statsEl.style.color = 'var(--accent)'; // Make it stand out during load
-  }
 
-  if (!forceRefresh) {
-    try {
-      const cached = await idb.get('worlds_' + category);
-      if (cached && cached.length > 0) {
-        allWorlds = cached; filterWorlds();
-        if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界 (缓存)`;
-        return;
-      }
-    } catch(_) {}
-  }
+  // ── Step 1: Load basics from cache immediately ──────────────────────────
+  try {
+    const cachedBasics = await idb.get('world_basics_' + category) || [];
+    if (cachedBasics.length > 0 && !forceRefresh) {
+      allWorlds = cachedBasics; 
+      filterWorlds();
+      if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界 (缓存)`;
+    } else {
+      gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.3);">加载中...</div>';
+    }
+  } catch(_) {}
 
+  // ── Step 2: Streaming Refresh ───────────────────────────────────────────
   try {
     let worlds = [];
+    const updateWorldBatch = (batch) => {
+      if (category !== currentWorldCategory) return;
+      batch.forEach(w => {
+        const idx = allWorlds.findIndex(ex => ex.id === w.id);
+        if (idx !== -1) allWorlds[idx] = Object.assign(allWorlds[idx], w);
+        else allWorlds.push(w);
+      });
+      filterWorlds();
+      saveWorldBasics(category);
+    };
+
     if (category.startsWith('fav_')) {
       const groupName = category.slice(4);
-      // VRC+ exclusive groups have names starting with "vrcPlusWorlds"
       const isVrcPlusGroup = groupName.startsWith('vrcPlusWorlds');
       const favType = isVrcPlusGroup ? 'vrcPlusWorld' : 'world';
-      worldFavoriteIdMap.clear();
+      
       let offset = 0;
       while (true) {
-        const r = await apiCall(`/api/vrc/favorites?type=${favType}&tag=${encodeURIComponent(groupName)}&n=100&offset=${offset}`);
+        const r = await apiCall(`/api/vrc/favorites?type=${favType}&tag=${groupName}&n=100&offset=${offset}`);
         if (!r.ok) break;
-        const batch = await r.json();
-        if (!batch || !batch.length) break;
-        // favoriteId is the actual world ID
-        const worldIds = batch.map(b => b.favoriteId).filter(Boolean);
-        batch.forEach(b => { if (b.id && b.favoriteId) worldFavoriteIdMap.set(b.favoriteId, b.id); });
-        // fetch world details in parallel chunks
-        for (let i = 0; i < worldIds.length; i += 10) {
-          const chunk = worldIds.slice(i, i+10);
-          const results = await Promise.allSettled(
-            chunk.map(wid => apiCall(`/api/vrc/worlds/${wid}`).then(r => r.ok ? r.json() : null))
-          );
-          results.forEach(res => { if (res.status==='fulfilled' && res.value) worlds.push(res.value); });
-          if (i+10 < worldIds.length) await new Promise(r => setTimeout(r, 300));
+        const favs = await r.json();
+        if (!favs || !favs.length) break;
+        
+        const worldIds = favs.map(f => {
+            if (f.favoriteId) worldFavoriteIdMap.set(f.favoriteId, f.id);
+            return f.favoriteId;
+        }).filter(Boolean);
+
+        // High concurrency world metadata refresh
+        const CONCURRENCY = 30;
+        for (let i = 0; i < worldIds.length; i += CONCURRENCY) {
+            if (category !== currentWorldCategory) return;
+            const chunk = worldIds.slice(i, i + CONCURRENCY);
+            const results = await Promise.allSettled(chunk.map(wid => 
+                apiCall(`/api/vrc/worlds/${wid}`).then(async res => {
+                    if (res.status === 404 || res.status === 403) return { id: wid, name: '失效世界 (Invalid World)', isInvalid: true };
+                    return res.ok ? res.json() : { id: wid, name: '加载失败', isInvalid: true };
+                })
+            ));
+            const freshBatch = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+            updateWorldBatch(freshBatch);
         }
-        if (batch.length < 100) break;
+        if (favs.length < 100) break;
         offset += 100;
       }
-    } else if (category === 'mine') {
-      // Bug#3: fetch user's own worlds
-      const resp = await apiCall('/api/vrc/auth/user');
-      if (resp.ok) {
-        const user = await resp.json();
-        const r = await apiCall(`/api/vrc/worlds?userId=${user.id}&releaseStatus=all&n=100&sort=updated`);
-        if (r.ok) worlds = await r.json() || [];
+    } else {
+      // Recent, Active, Mine
+      let url = '';
+      if (category === 'recent') url = '/api/vrc/worlds/recent?n=100';
+      else if (category === 'active') url = '/api/vrc/worlds/active?n=100&sort=popularity&order=descending&releaseStatus=public';
+      else if (category === 'mine') {
+          const uResp = await apiCall('/api/vrc/auth/user');
+          if (uResp.ok) {
+              const u = await uResp.json();
+              url = `/api/vrc/worlds?userId=${u.id}&releaseStatus=all&n=100&sort=updated`;
+          }
       }
-    } else if (category === 'recent') {
-      const r = await apiCall('/api/vrc/worlds/recent?n=100');
-      if (r.ok) worlds = await r.json() || [];
-    } else if (category === 'active') {
-      const r = await apiCall('/api/vrc/worlds/active?n=100&sort=popularity&order=descending&releaseStatus=public');
-      if (r.ok) worlds = await r.json() || [];
+      if (url) {
+          const r = await apiCall(url);
+          if (r.ok) updateWorldBatch(await r.json() || []);
+      }
     }
 
-    if (category !== currentWorldCategory) return;
-    allWorlds = Array.isArray(worlds) ? worlds : [];
-    await idb.set('worlds_' + category, allWorlds);
-    filterWorlds();
     if (statsEl) {
-        statsEl.textContent = `${allWorlds.length} 个世界`;
-        statsEl.style.color = ''; 
+        const invalidCount = allWorlds.filter(w => w.isInvalid).length;
+        statsEl.textContent = `${allWorlds.length} 个世界${invalidCount ? ` (${invalidCount} 个失效)` : ''}`;
     }
-    worldLogMsg(`✅ 加载了 ${allWorlds.length} 个世界`, 'success');
   } catch(e) {
-    if (category !== currentWorldCategory) return;
-    gridEl.innerHTML = `<div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--error);">${escHtml(e.message)}</div>`;
-    if (statsEl) statsEl.textContent = '加载失败';
-    worldLogMsg('❌ ' + e.message, 'error');
+    console.error('World fetch error', e);
   }
 }
+
+function saveWorldBasics(cat) {
+    const basics = allWorlds.map(w => ({
+        id: w.id,
+        name: w.name,
+        thumbnailImageUrl: w.thumbnailImageUrl,
+        imageUrl: w.imageUrl,
+        authorName: w.authorName,
+        authorId: w.authorId,
+        occupants: w.occupants,
+        releaseStatus: w.releaseStatus,  // needed for private-non-own cleanup filter
+        isInvalid: w.isInvalid
+    }));
+    idb.set('world_basics_' + cat, basics).catch(()=>{});
+}
+
+async function cleanupInvalidWorlds() {
+    const invalid = allWorlds.filter(w => w.isInvalid);
+    const privateNonOwn = allWorlds.filter(w =>
+        !w.isInvalid &&
+        w.releaseStatus === 'private' &&
+        w.authorId && currentUserId &&
+        w.authorId !== currentUserId
+    );
+
+    if (!invalid.length && !privateNonOwn.length) {
+        alert('✅ 当前列表中没有发现需要清理的失效或私人世界');
+        return;
+    }
+
+    _showCleanupModal({
+        title: '🧹 清理收藏世界',
+        invalidItems: invalid,
+        privateNonOwnItems: privateNonOwn,
+        invalidLabel: item => item.name || '失效世界',
+        onConfirm: async (toDelete) => {
+            let count = 0, fail = 0;
+            for (const w of toDelete) {
+                const favId = worldFavoriteIdMap.get(w.id);
+                if (favId) {
+                    const r = await apiCall(`/api/vrc/favorites/${favId}`, { method: 'DELETE' });
+                    if (r.ok) { worldFavoriteIdMap.delete(w.id); count++; }
+                    else fail++;
+                } else fail++;
+                await new Promise(r => setTimeout(r, 200));
+            }
+            alert(`✅ 清理完毕：成功移除 ${count} 个，失败 ${fail} 个`);
+            fetchWorlds(currentWorldCategory, true);
+        }
+    });
+}
+
 
 function filterWorlds() {
   const q = (document.getElementById('worldSearch')?.value||'').toLowerCase().trim();
@@ -5258,13 +5469,17 @@ function renderWorldGrid(list) {
     const thumb = proxyImg(w.thumbnailImageUrl||w.imageUrl||'');
     const pc  = w.occupants || 0;
     const card = document.createElement('div');
-    card.className = 'avatar-card'; card.style.cursor = 'pointer';
+    card.className = `avatar-card ${w.isInvalid ? 'invalid-world' : ''}`; 
+    card.style.cursor = 'pointer';
+    if (w.isInvalid) card.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+    
     card.onclick = () => openWorldDetail(w.id, w);
     const isCached = loadedImageUrls.has(thumb);
     card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached?'':'img-loading'}">
       ${isCached ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="">` : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`}
       <div class="avatar-name-overlay">${escHtml(w.name||'未知世界')}</div>
       ${pc>0 ? `<div class="world-player-badge">👥 ${pc}</div>` : ''}
+      ${w.isInvalid ? `<div style="position:absolute;top:8px;right:8px;background:var(--error);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;">已失效</div>` : ''}
     </div>`;
     gridEl.appendChild(card);
     if (!isCached && thumb) {
@@ -5293,7 +5508,7 @@ async function openWorldDetail(worldId, worldObj = null) {
 
     document.getElementById('worldDetailImg').src    = proxyImg(w.thumbnailImageUrl||w.imageUrl||'');
     document.getElementById('worldDetailName').textContent   = w.name||'';
-    document.getElementById('worldDetailAuthor').textContent = `by ${w.authorName||'Unknown'}`;
+    document.getElementById('worldDetailAuthor').innerHTML = `by <a href="#" onclick="openFriendProfileById('${w.authorId}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${escHtml(w.authorName||'Unknown')}</a>`;
 
     // Bug#1 fix: instances = [[instanceStr, count], ...]
     const instances    = Array.isArray(w.instances) ? w.instances : [];
@@ -5333,6 +5548,7 @@ async function openWorldDetail(worldId, worldObj = null) {
           <span style="font-size:0.68em;padding:2px 7px;border-radius:99px;background:${typeColor}22;color:${typeColor};border:1px solid ${typeColor}44;">${typeLabel}</span>
           <span class="inst-players" style="font-size:0.75em;opacity:0.7;">👥 ${count}/${w.capacity||'∞'}</span>
           <div style="display:flex;gap:4px;">
+            <button class="btn btn-xs" onclick="event.stopPropagation();openInstanceDetail('${escHtml(w.id)}:${escHtml(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(167,139,250,0.15);color:var(--accent-light);border:1px solid var(--accent);cursor:pointer;" title="查看谁在此实例">👥</button>
             <button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(w.id)}:${escHtml(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请">&nbsp;📩&nbsp;</button>
           </div>
         </div>`;
@@ -6154,6 +6370,108 @@ async function fetchGroupMembers(groupId) {
     }).join('');
   } catch(e) {
     el.innerHTML = '<div style="padding:10px;color:var(--error);font-size:0.8rem;">无法加载成员: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+
+async function openInstanceDetail(loc) {
+  if (!loc || loc === 'private' || loc === 'offline') return;
+  const worldId = loc.split(':')[0];
+  
+  // Ensure modal exists
+  if (!document.getElementById('instanceDetailModal')) {
+    const html = `<div id="instanceDetailModal" class="modal hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+      <div class="modal-content" style="max-width:560px;padding:0;overflow:hidden;">
+        <div id="insBanner" style="height:160px;background-size:cover;background-position:center;position:relative;">
+          <div style="position:absolute;inset:0;background:linear-gradient(to top, var(--bg-card), transparent);"></div>
+          <button onclick="document.getElementById('instanceDetailModal').classList.add('hidden')" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.5);border:none;color:#fff;border-radius:50%;width:30px;height:30px;cursor:pointer;z-index:10;">×</button>
+        </div>
+        <div style="padding:20px;position:relative;margin-top:-40px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
+            <div style="flex:1;">
+              <h2 id="insWorldName" style="margin:0;font-size:1.4em;color:var(--text-primary);">加载中...</h2>
+              <div id="insAuthorLine" style="font-size:0.85em;color:var(--text-secondary);margin-top:2px;"></div>
+            </div>
+            <div id="insStats" style="text-align:right;"></div>
+          </div>
+
+          <div id="insDesc" style="font-size:0.82em;color:var(--text-muted);line-height:1.5;max-height:80px;overflow-y:auto;margin-bottom:15px;white-space:pre-line;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"></div>
+          
+          <div id="insTags" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:15px;"></div>
+
+          <div id="insLoc" style="font-size:0.75em;color:var(--accent-light);margin-bottom:15px;font-family:monospace;word-break:break-all;background:rgba(167,139,250,0.1);padding:6px 10px;border-radius:6px;border-left:3px solid var(--accent);"></div>
+          
+          <div style="display:flex;gap:10px;margin-bottom:20px;">
+             <button id="insBtnWorld" class="btn btn-primary" style="flex:1;">🌍 世界详情</button>
+             <button id="insBtnInvite" class="btn btn-success" style="flex:1;">📩 邀请自己</button>
+          </div>
+
+          <div style="font-size:0.85em;font-weight:700;margin-bottom:10px;color:var(--text-primary);display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);padding-bottom:8px;">
+            <span style="font-size:1.2em;">👥</span> 在此实例的好友
+          </div>
+          <div id="insFriendList" style="display:flex;flex-direction:column;gap:8px;max-height:240px;overflow-y:auto;padding-right:4px;"></div>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  const modal = document.getElementById('instanceDetailModal');
+  modal.classList.remove('hidden');
+  // Always update the action buttons for the CURRENT loc/worldId (fixes stale-closure bug)
+  document.getElementById('insBtnWorld').onclick = () => openWorldDetail(worldId);
+  document.getElementById('insBtnInvite').onclick = () => inviteSelf(loc);
+  document.getElementById('insWorldName').textContent = '加载中...';
+  document.getElementById('insAuthorLine').innerHTML = '';
+  document.getElementById('insDesc').textContent = '';
+  document.getElementById('insStats').innerHTML = '';
+  document.getElementById('insTags').innerHTML = '';
+  document.getElementById('insLoc').textContent = loc;
+  document.getElementById('insFriendList').innerHTML = '<div style="text-align:center;padding:20px;opacity:0.5;">同步中...</div>';
+
+  try {
+    const wResp = await apiCall('/api/vrc/worlds/' + worldId);
+    if (wResp.ok) {
+      const w = await wResp.json();
+      document.getElementById('insWorldName').textContent = w.name;
+      document.getElementById('insBanner').style.backgroundImage = `url(${proxyImg(w.imageUrl)})`;
+      document.getElementById('insAuthorLine').innerHTML = `by <a href="#" onclick="openFriendProfileById('${w.authorId}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${escHtml(w.authorName)}</a>`;
+      document.getElementById('insDesc').textContent = w.description || '暂无世界简介';
+      
+      const region = loc.includes('~region(') ? loc.match(/~region\((.*?)\)/)[1].toUpperCase() : 'US';
+      const regionIcon = {US:'🇺🇸',EU:'🇪🇺',JP:'🇯🇵'}[region] || '🌐';
+      
+      document.getElementById('insStats').innerHTML = `
+        <div style="font-size:0.9em;font-weight:700;">${regionIcon} ${region}</div>
+        <div style="font-size:0.75em;color:var(--text-muted);">${w.releaseStatus === 'labs' ? '🧪 Labs' : '✅ Public'}</div>
+      `;
+
+      // Tags
+      const interestingTags = (w.tags || []).filter(t => !t.startsWith('author_tag_') && !t.startsWith('system_')).slice(0, 5);
+      document.getElementById('insTags').innerHTML = interestingTags.map(t => `<span style="font-size:0.7em;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text-muted);">${escHtml(t)}</span>`).join('');
+    }
+    
+    // Find all friends in this instance
+    const friendsInIns = allFriends.filter(f => f.location === loc);
+    const listEl = document.getElementById('insFriendList');
+    if (!friendsInIns.length) {
+      listEl.innerHTML = '<div style="text-align:center;padding:20px;opacity:0.5;font-size:0.85em;">当前没有其他在线好友在此实例</div>';
+    } else {
+      listEl.innerHTML = friendsInIns.map(f => {
+        const trust = getTrustInfo(f.tags||[]);
+        return `<div class="friend-card" style="padding:10px;margin:0;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'" onclick="document.getElementById('instanceDetailModal').classList.add('hidden'); openFriendProfileById('${f.id}')">
+          <img src="${proxyImg(f.currentAvatarThumbnailImageUrl||f.userIcon||'')}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${trust.color}44;">
+          <div style="flex:1;">
+            <div style="font-size:0.95em;font-weight:600;color:${trust.color};">${escHtml(f.displayName)}</div>
+            <div style="font-size:0.75em;opacity:0.7;color:var(--text-muted);">${getStatusLabel(f)}</div>
+          </div>
+          <div style="font-size:0.7em;color:var(--text-muted);">${getPlatformEmoji(f.last_platform)}</div>
+        </div>`;
+      }).join('');
+    }
+  } catch(e) {
+    console.error('Instance detail error', e);
+    document.getElementById('insWorldName').textContent = '加载失败';
   }
 }
 
