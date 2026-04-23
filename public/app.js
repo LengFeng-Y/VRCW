@@ -344,6 +344,17 @@ async function saveToLocalFavorite(av) {
   localAvatarIdMap.set(av.id, true);
   await idb.saveLocalAvatar(av);
   syncLocalFavorites();
+  // INSTANT UI: Add star badge to card
+  const card = document.getElementById("card-" + av.id);
+  if (card && !card.querySelector('.fav-badge')) {
+    const badge = document.createElement('div');
+    badge.className = 'fav-badge';
+    badge.title = '已收藏';
+    badge.textContent = '⭐';
+    card.appendChild(badge);
+    // Hide the 'Favorite' button if it was there
+    card.querySelector('.btn-action.favorite')?.classList.add('hidden');
+  }
   logMsg(`✅ 已保存到本地收藏: ${av.name}`, "info");
 }
 
@@ -943,6 +954,8 @@ function showMainApp() {
 
   startupSequential();
   syncAllFavoriteIds(); 
+  // Explicitly trigger current tab load to ensure it shows up immediately
+  switchTab(currentTab);
 }
 
 // ── Sync All Favorites Globally ──
@@ -1075,27 +1088,26 @@ async function preloadAllFavorites(groups) {
 function renderFavoriteGroupButtons() {
   const container = document.getElementById("favGroupBtns");
   if (!container) return;
-  // avatars1 is already the static button in HTML; dynamic ones start from index 1
-  // Actually render ALL detected groups to keep it consistent
-  // First, update the static avatars1 button display name if group has a custom displayName
-  const g1 = favoriteGroups.find((g) => g.name === "avatars1");
-  const btn1 = document.getElementById("cat-avatars1");
-  if (btn1 && g1) {
-    btn1.textContent = g1.displayName || "Favorites 1";
-  }
-  // Render avatars2+ dynamically
+  
   container.innerHTML = "";
-  favoriteGroups
-    .filter((g) => g.name !== "avatars1")
-    .forEach((g) => {
-      const btn = document.createElement("button");
-      btn.className = "btn btn-secondary btn-block cat-btn";
-      btn.id = "cat-" + g.name;
-      btn.textContent =
-        g.displayName || g.name.replace("avatars", "Favorites ");
-      btn.onclick = () => switchCategory(g.name);
-      container.appendChild(btn);
-    });
+  
+  // 1. Render all dynamic groups
+  favoriteGroups.forEach((g) => {
+    const btn = document.createElement("button");
+    btn.className = "btn btn-secondary btn-block cat-btn";
+    btn.id = "cat-" + g.name;
+    btn.textContent = g.displayName || g.name.replace("avatars", "Favorites ");
+    btn.onclick = () => switchCategory(g.name);
+    container.appendChild(btn);
+  });
+    
+  // 2. Append Local Favorites to the absolute bottom
+  const btnLocal = document.createElement("button");
+  btnLocal.className = "btn btn-secondary btn-block cat-btn";
+  btnLocal.id = "cat-local";
+  btnLocal.textContent = "⭐ 本地收藏";
+  btnLocal.onclick = () => switchCategory("local");
+  container.appendChild(btnLocal);
 }
 
 // ── Foveated Loading Orchestrator ──
@@ -1535,8 +1547,8 @@ function renderGrid(list) {
         : `<img class="avatar-thumb loading clickable-thumb" src="${BLANK}" data-src="${escHtml(thumb)}" alt="" onclick="event.stopPropagation(); openLocalDetail('${safeId}')" title="点击查看详情">`;
 
     const releaseBadge = av.releaseStatus === 'public' 
-      ? '<div style="position:absolute;top:8px;left:8px;background:var(--success);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">Public</div>'
-      : '<div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.5);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">Private</div>';
+      ? '<div style="position:absolute;top:32px;left:8px;background:var(--success);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">Public</div>'
+      : '<div style="position:absolute;top:32px;left:8px;background:rgba(0,0,0,0.5);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">Private</div>';
 
     card.innerHTML = `
             ${actionBtns ? `<div class="avatar-actions">${actionBtns}</div>` : ""}
@@ -3870,6 +3882,19 @@ async function addToFavorite(avtrId, groupName, btn) {
       statusEl.textContent = `✓ 已收藏到 ${groupName}`;
       // Invalidate IDB cache for that group so next load fetches fresh
       try { await idb.set("avatars_" + groupName, null); } catch (_) {}
+      // INSTANT UI: Add star badge to card
+      const card = document.getElementById("card-" + avtrId);
+      if (card) {
+        if (!card.querySelector('.fav-badge')) {
+          const badge = document.createElement('div');
+          badge.className = 'fav-badge';
+          badge.title = '已收藏';
+          badge.textContent = '⭐';
+          card.appendChild(badge);
+        }
+        // Hide the 'Favorite' button if it was there
+        card.querySelector('.btn-action.favorite')?.classList.add('hidden');
+      }
     } else {
       const err = await resp.json().catch(() => ({}));
       statusEl.style.color = "var(--error)";
