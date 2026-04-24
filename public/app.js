@@ -5818,12 +5818,10 @@ renderWorldGrid(list);
 }
 
 function _updateWorldActionBtns() {
-  const hasSel    = selectedWorldIds.size > 0;
-  const isFav     = currentWorldCategory && currentWorldCategory.startsWith('fav_');
-  const hasInvalid = allWorlds.some(w => w.isInvalid);
-  // Mirror the same hidden-toggle pattern used by the avatar panel
-  document.getElementById('btnWorldCleanInvalid')?.classList.toggle('hidden', !(isFav && hasInvalid));
-  document.getElementById('btnWorldUnfavoriteSelected')?.classList.toggle('hidden', !(hasSel && isFav));
+  const isFav = currentWorldCategory && currentWorldCategory.startsWith('fav_');
+  // Match avatar panel behavior exactly: show both buttons whenever in a favorites category
+  document.getElementById('btnWorldCleanInvalid')?.classList.toggle('hidden', !isFav);
+  document.getElementById('btnWorldUnfavoriteSelected')?.classList.toggle('hidden', !isFav);
 }
 
 function renderWorldGrid(list) {
