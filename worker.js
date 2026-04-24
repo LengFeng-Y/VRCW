@@ -111,56 +111,60 @@ export default {
 
         // POST /api/login
         if (path === "/api/login" && request.method === "POST") {
-            const body = await request.json();
-            const basicAuth = btoa(`${body.username}:${body.password}`);
+            try {
+                const body = await request.json();
+                const basicAuth = btoa(`${body.username}:${body.password}`);
 
-            const { resp, setCookies } = await vrcFetch("/auth/user", {
-                method: "GET",
-                headers: { Authorization: `Basic ${basicAuth}` },
-            });
+                const { resp, setCookies } = await vrcFetch("/auth/user", {
+                    method: "GET",
+                    headers: { Authorization: `Basic ${basicAuth}` },
+                });
 
-            const data = await resp.json();
-            const cookies = mergeCookies("", setCookies);
+                const data = await resp.json();
+                const cookies = mergeCookies("", setCookies);
 
-            if (resp.status === 200) {
-                const needs2FA =
-                    data.requiresTwoFactorAuth && data.requiresTwoFactorAuth.length > 0;
-                return jsonResp(
-                    { ok: true, needs2FA, user: data },
-                    200,
-                    { "X-VRC-Auth": btoa(cookies) }
-                );
+                if (resp.status === 200) {
+                    const needs2FA =
+                        data.requiresTwoFactorAuth && data.requiresTwoFactorAuth.length > 0;
+                    return jsonResp(
+                        { ok: true, needs2FA, user: data },
+                        200,
+                        { "X-VRC-Auth": btoa(cookies) }
+                    );
+                }
+                return jsonResp({ ok: false, message: data.error?.message || "Login failed" }, resp.status);
+            } catch (e) {
+                return jsonResp({ ok: false, message: "登录失败：服务器异常，请稍后重试 (" + e.message + ")" }, 500);
             }
-            return jsonResp({ ok: false, message: data.error?.message || "Login failed" }, resp.status);
         }
 
         // POST /api/2fa
         if (path === "/api/2fa" && request.method === "POST") {
-            const body = await request.json();
-            const code = body.code || "";
-            const type = body.type || "totp"; // 'totp' or 'emailotp'
-            
-            const vrcPath = type === "emailotp"
-                ? "/auth/twofactorauth/emailotp/verify"
-                : "/auth/twofactorauth/totp/verify";
+            try {
+                const body = await request.json();
+                const code = body.code || "";
+                const type = body.type || "totp";
+                
+                const vrcPath = type === "emailotp"
+                    ? "/auth/twofactorauth/emailotp/verify"
+                    : "/auth/twofactorauth/totp/verify";
 
-            const { resp, setCookies } = await vrcFetch(
-                vrcPath,
-                {
-                    method: "POST",
-                    json: { code },
-                    headers: {},
-                },
-                auth
-            );
+                const { resp, setCookies } = await vrcFetch(
+                    vrcPath,
+                    { method: "POST", json: { code }, headers: {} },
+                    auth
+                );
 
-            const data = await resp.json();
-            const cookies = mergeCookies(auth, setCookies);
+                const data = await resp.json();
+                const cookies = mergeCookies(auth, setCookies);
 
-            if (resp.status === 200 && data.verified) {
-                return jsonResp({ ok: true }, 200, { "X-VRC-Auth": btoa(cookies) });
+                if (resp.status === 200 && data.verified) {
+                    return jsonResp({ ok: true }, 200, { "X-VRC-Auth": btoa(cookies) });
+                }
+                return jsonResp({ ok: false, message: "Invalid code" }, 400);
+            } catch (e) {
+                return jsonResp({ ok: false, message: "驂证失败：服务器异常 (" + e.message + ")" }, 500);
             }
-            return jsonResp({ ok: false, message: "Invalid code" }, 400);
         }
 
         // GET /api/avatars

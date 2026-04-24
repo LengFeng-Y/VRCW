@@ -3406,13 +3406,23 @@ let avtrdbTotalLoaded = 0;
 function onSearchCategoryChange() {
   const cat = document.getElementById("searchCategory")?.value;
   const platWrap = document.querySelector(".search-platform-select");
+  const searchInput = document.getElementById("avtrdbSearch");
 
-  if (cat === "avatars") {
-    if (platWrap) platWrap.style.display = "block";
-  } else {
-    if (platWrap) platWrap.style.display = "none";
-  }
-  doAvtrdbSearch();
+  // Show platform filter for avatars and worlds; hide for users/groups
+  const showPlatform = cat === "avatars" || cat === "worlds";
+  if (platWrap) platWrap.style.visibility = showPlatform ? "visible" : "hidden";
+
+  // Update placeholder text based on category
+  const placeholders = {
+    avatars: "搜索模型 / Search avatars...",
+    users:   "搜索玩家 / Search users...",
+    worlds:  "搜索世界 / Search worlds...",
+    groups:  "搜索群组 / Search groups...",
+  };
+  if (searchInput) searchInput.placeholder = placeholders[cat] || "搜索 / Search...";
+
+  // Only trigger search if there's a query
+  if (searchInput?.value.trim()) doAvtrdbSearch();
 }
 
 function onAvtrdbInput() {
