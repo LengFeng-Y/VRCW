@@ -4246,9 +4246,9 @@ function renderMyProfile(u) {
     ${u.statusDescription?`<div style="font-size:0.8em;color:var(--text-secondary);margin-bottom:10px;padding:8px 12px;background:var(--bg-glass);border-radius:8px;border-left:3px solid ${statusColor};">${escHtml(u.statusDescription.replace(/\\n/g, String.fromCharCode(10)))}</div>`:''}
 
     <!-- Current location -->
-    <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;" id="myProfileLocRow">
+    <div style="margin-bottom:12px;" id="myProfileLocRow">
       <div class="stat-section-label">当前位置</div>
-      <div id="myProfileLocText" style="font-size:0.8em;color:var(--text-secondary);cursor:pointer;border-bottom:1px dashed var(--accent-light);">加载中...</div>
+      <div id="myProfileLocText" style="font-size:0.8em;color:var(--text-secondary);">加载中...</div>
     </div>
 
     <!-- Current avatar name -->
@@ -6791,9 +6791,8 @@ async function openInstanceDetail(loc) {
     const friendsInIns = allFriends.filter(f => f.location === loc);
 
     // Check if the local user is also in this instance
-    if (window.myProfileData && window.myProfileData.location === loc) {
-      // Add ourselves to the top of the list
-      const selfProfile = { ...window.myProfileData };
+    if (myProfileData && myProfileData.location === loc) {
+      const selfProfile = { ...myProfileData };
       selfProfile.isSelf = true;
       friendsInIns.unshift(selfProfile);
     }
