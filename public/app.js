@@ -5865,11 +5865,65 @@ async function openWorldDetail(worldId, worldObj = null) {
     if (descRow) descRow.style.display = w.description ? '' : 'none';
 
     const instContainer = document.getElementById('worldDetailInstances');
+    
+    // ── Friends in this world (from allFriends data) ─────────────────────
+    const friendsInWorld = (allFriends || []).filter(f => 
+      f.location && f.location.startsWith(worldId + ':')
+    );
+    // Also check if I'm in this world
+    if (myProfileData && myProfileData.location && myProfileData.location.startsWith(worldId + ':')) {
+      if (!friendsInWorld.some(f => f.id === myProfileData.id)) {
+        friendsInWorld.unshift({ ...myProfileData });
+      }
+    }
+
+    let friendsHtml = '';
+    if (friendsInWorld.length) {
+      // Group by instance
+      const friendInstMap = new Map();
+      for (const f of friendsInWorld) {
+        const instStr = f.location.slice(worldId.length + 1); // strip "wrld_xxx:"
+        if (!friendInstMap.has(instStr)) friendInstMap.set(instStr, []);
+        friendInstMap.get(instStr).push(f);
+      }
+      friendsHtml = `<div style="font-size:0.82em;font-weight:700;color:var(--text-primary);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);">👥 好友在此世界</div>`;
+      for (const [instStr, friends] of friendInstMap) {
+        let typeLabel = '公开', typeColor = '#64748b';
+        if (instStr.includes('~private'))      { typeLabel='🔒 私人'; typeColor='#f59e0b'; }
+        else if (instStr.includes('~hidden'))  { typeLabel='👥 好友+'; typeColor='#22c55e'; }
+        else if (instStr.includes('canRequestInvite')) { typeLabel='👥 好友+'; typeColor='#22c55e'; }
+        else if (instStr.includes('~friends')) { typeLabel='👥 好友'; typeColor='#22c55e'; }
+        else if (instStr.includes('group('))   { typeLabel='🏠 群组'; typeColor='#3b82f6'; }
+        const fullLoc = worldId + ':' + instStr;
+        const isPrivateInst = instStr.includes('~private');
+        friendsHtml += `<div style="background:rgba(134,239,172,0.05);border:1px solid rgba(134,239,172,0.2);border-radius:8px;padding:8px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="font-size:0.7em;padding:2px 7px;border-radius:99px;background:${typeColor}22;color:${typeColor};border:1px solid ${typeColor}44;">${typeLabel}</span>
+            <span style="flex:1;font-size:0.72em;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(instStr.split('~')[0])}</span>
+            ${!isPrivateInst ? `<button class="btn btn-xs" onclick="inviteSelf('${escHtml(fullLoc)}')" style="padding:2px 8px;font-size:0.75em;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);border-radius:4px;cursor:pointer;">📩 邀请自己</button>` : ''}
+            <button class="btn btn-xs" onclick="openInstanceDetail('${escHtml(fullLoc)}')" style="padding:2px 8px;font-size:0.75em;background:rgba(167,139,250,0.1);color:#c4b5fd;border:1px solid rgba(167,139,250,0.2);border-radius:4px;cursor:pointer;">👥 详情</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${friends.map(f => {
+              const trust = getTrustInfo(f.tags||[]);
+              return `<div onclick="openFriendProfileById('${f.id}')" style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(255,255,255,0.04);border-radius:6px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">
+                <img src="${proxyImg(f.currentAvatarThumbnailImageUrl||f.userIcon||'')}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:2px solid ${trust.color}44;">
+                <span style="font-size:0.78em;font-weight:600;color:${trust.color};">${escHtml(f.displayName)}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+      }
+      friendsHtml += `<div style="font-size:0.82em;font-weight:700;color:var(--text-primary);margin:10px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border);">🌐 公开实例</div>`;
+    }
+
     // Bug#1: instance entry format is [instanceString, occupantCount]
     // e.g. ["12345~region(jp)", 3] or ["12345~friends(usr_xxx)~canRequestInvite~region(jp)~strict", 5]
     const activeInst = instances.filter(([,c])=>c>0).sort(([,a],[,b])=>b-a);
-    if (!activeInst.length) {
+    if (!activeInst.length && !friendsHtml) {
       instContainer.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.8em;padding:8px;">暂无玩家在线</div>';
+    } else if (!activeInst.length) {
+      instContainer.innerHTML = friendsHtml;
     } else {
       instContainer.innerHTML = activeInst.slice(0,10).map(([instStr, count]) => {
         let typeLabel = '公开', typeColor = '#64748b';
@@ -5895,6 +5949,7 @@ async function openWorldDetail(worldId, worldObj = null) {
           </div>
         </div>`;
       }).join('');
+      instContainer.innerHTML = friendsHtml + instContainer.innerHTML;
     }
 
     const favBtn  = document.getElementById('worldDetailFavBtn');
