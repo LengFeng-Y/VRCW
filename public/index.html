@@ -695,33 +695,102 @@
 
     <!-- ── World Detail Modal ── -->
     <div id="worldDetailModal" class="modal hidden" onclick="if(event.target===this)closeWorldDetail()">
-        <div class="modal-content" style="max-width:600px;width:100%;padding:0;overflow:hidden;">
-            <div style="position:relative;height:160px;overflow:hidden;background:var(--bg-secondary);">
-                <img id="worldDetailImg" style="width:100%;height:100%;object-fit:cover;display:block;" src="" alt="">
-                <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(10,14,23,0.95) 0%,transparent 55%);"></div>
-                <button onclick="closeWorldDetail()" style="position:absolute;top:12px;right:14px;background:rgba(0,0,0,0.5);border:none;color:#fff;font-size:1.1em;cursor:pointer;border-radius:6px;padding:4px 10px;line-height:1;">✕</button>
-                <div style="position:absolute;bottom:14px;left:18px;right:80px;">
-                    <div id="worldDetailName" style="font-size:1.15em;font-weight:700;color:#fff;line-height:1.3;"></div>
-                    <div id="worldDetailAuthor" style="font-size:0.78em;color:rgba(255,255,255,0.55);margin-top:3px;"></div>
+        <div class="modal-content" style="max-width:900px;width:100%;padding:0;overflow:hidden;background:var(--bg-primary);border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,0.7);display:flex;flex-direction:column;max-height:92vh;">
+            <!-- Premium Header with Breadcrumbs -->
+            <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;">
+                <button onclick="closeWorldDetail()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.2em;display:flex;align-items:center;">←</button>
+                <div style="display:flex;align-items:center;gap:8px;font-size:0.85em;color:var(--text-muted);">
+                    <span id="worldDetailBreadcrumbAuthor">Loading...</span>
+                    <span style="opacity:0.4;">›</span>
+                    <span id="worldDetailBreadcrumbName" style="color:var(--text-primary);font-weight:600;">World Details</span>
                 </div>
-                <div id="worldDetailPlayerBadge" style="position:absolute;bottom:14px;right:14px;background:rgba(99,102,241,0.9);color:#fff;font-size:0.72em;font-weight:600;padding:4px 12px;border-radius:99px;"></div>
+                <div style="margin-left:auto;display:flex;gap:8px;">
+                    <button id="worldDetailDeleteBtn" class="btn btn-icon" style="display:none;" title="删除世界">🗑️</button>
+                    <button id="worldDetailMainFavBtn" onclick="toggleWorldFavMenu(event)" class="btn btn-icon" title="收藏世界">⭐</button>
+                    <button id="worldDetailJoinBtn" onclick="joinWorldInstance()" class="btn btn-icon" title="加入世界">⚡</button>
+                    <button onclick="closeWorldDetail()" class="btn btn-icon" title="关闭">✕</button>
+                </div>
             </div>
-            <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;">
-                <div style="display:flex;gap:6px;flex-wrap:wrap;" id="worldDetailTags"></div>
-                <div id="worldDetailDescRow">
-                    <div style="font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px;">描述 / Description</div>
-                    <div id="worldDetailDesc" style="font-size:0.8em;color:var(--text-secondary);line-height:1.5;max-height:80px;overflow-y:auto;"></div>
+
+            <div style="display:flex;flex:1;overflow:hidden;">
+                <!-- Left: Thumbnail area -->
+                <div style="width:300px;padding:24px;flex-shrink:0;background:rgba(0,0,0,0.15);border-right:1px solid var(--border);">
+                    <div style="width:100%;aspect-ratio:4/3;border-radius:12px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.4);border:1px solid var(--border);">
+                        <img id="worldDetailImg" style="width:100%;height:100%;object-fit:cover;display:block;" src="" alt="">
+                    </div>
                 </div>
-                <div>
-                    <div style="font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:8px;">实例 / Instances</div>
-                    <div id="worldDetailInstances" style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;"></div>
+
+                <!-- Right: Content area -->
+                <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+                    <div style="padding:24px 32px 0;">
+                        <h1 id="worldDetailName" style="margin:0;font-size:1.8em;font-weight:700;color:var(--text-primary);">加载中...</h1>
+                        <div id="worldDetailAuthorRow" style="margin-top:4px;font-size:0.95em;color:var(--text-muted);"></div>
+                        
+                        <!-- Badges Row -->
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;" id="worldDetailBadges">
+                            <span id="worldDetailStatusBadge" class="avtrdb-badge">Public</span>
+                            <span id="worldDetailCapacityBadge" class="avtrdb-badge">👥 0</span>
+                            <span id="worldDetailPlatformBadge" class="avtrdb-badge">PC</span>
+                            <span id="worldDetailVersionBadge" class="avtrdb-badge">v1.0.0</span>
+                        </div>
+
+                        <!-- Tab Nav -->
+                        <div class="tab-nav" style="margin-top:24px;border-bottom:1px solid var(--border);">
+                            <button class="tab-btn active" id="wdTabInfo" onclick="switchWorldDetailTab('info')">信息</button>
+                            <button class="tab-btn" id="wdTabInstances" onclick="switchWorldDetailTab('instances')">实例</button>
+                            <button class="tab-btn" id="wdTabRaw" onclick="switchWorldDetailTab('raw')">原始 JSON 信息</button>
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Content -->
+                    <div style="flex:1;overflow-y:auto;padding:24px 32px;">
+                        <!-- Info Tab -->
+                        <div id="wdPageInfo">
+                            <div style="margin-bottom:24px;">
+                                <div style="font-size:0.65em;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:8px;font-weight:700;">描述 / Description</div>
+                                <div id="worldDetailDesc" style="font-size:0.9em;color:var(--text-secondary);line-height:1.6;white-space:pre-wrap;"></div>
+                            </div>
+
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+                                <div>
+                                    <div style="font-size:0.65em;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px;font-weight:700;">世界 ID / World ID</div>
+                                    <div id="worldDetailId" style="font-size:0.8em;color:var(--text-secondary);font-family:monospace;background:rgba(0,0,0,0.2);padding:4px 8px;border-radius:4px;word-break:break-all;cursor:pointer;" title="点击复制" onclick="copyToClipboard(this.textContent)"></div>
+                                </div>
+                                <div>
+                                    <div style="font-size:0.65em;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px;font-weight:700;">支持的平台 / Platforms</div>
+                                    <div id="worldDetailPlatformsList" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+                                </div>
+                            </div>
+
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;">
+                                <div>
+                                    <div style="font-size:0.65em;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:4px;font-weight:700;">创建时间</div>
+                                    <div id="worldDetailCreated" style="font-size:0.85em;color:var(--text-secondary);"></div>
+                                </div>
+                                <div>
+                                    <div style="font-size:0.65em;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:4px;font-weight:700;">最后更新</div>
+                                    <div id="worldDetailUpdated" style="font-size:0.85em;color:var(--text-secondary);"></div>
+                                </div>
+                                <div>
+                                    <div style="font-size:0.65em;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:4px;font-weight:700;">标签 / Tags</div>
+                                    <div id="worldDetailTags" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Instances Tab -->
+                        <div id="wdPageInstances" style="display:none;">
+                            <div id="worldDetailInstances" style="display:flex;flex-direction:column;gap:10px;"></div>
+                        </div>
+
+                        <!-- Raw JSON Tab -->
+                        <div id="wdPageRaw" style="display:none;">
+                            <pre id="worldDetailRawJson" style="font-size:0.75em;background:rgba(0,0,0,0.3);padding:16px;border-radius:8px;overflow:auto;margin:0;max-height:400px;color:var(--accent-light);"></pre>
+                        </div>
+                    </div>
                 </div>
-                <div style="display:flex;gap:10px;margin-top:4px;">
-                    <button id="worldDetailFavBtn" class="btn btn-secondary" style="flex:1;" onclick="toggleWorldFavMenu(event)">⭐ 收藏</button>
-                    <button id="worldDetailJoinBtn" class="btn btn-primary" style="flex:1;" onclick="joinWorldInstance()">⚡ 加入世界</button>
-                </div>
-                <div id="worldDetailFavStatus" style="font-size:0.75em;text-align:center;min-height:18px;color:var(--success);"></div>
             </div>
+            <div id="worldDetailFavStatus" style="padding:10px 24px;font-size:0.8em;background:rgba(0,0,0,0.1);border-top:1px solid var(--border);text-align:center;min-height:38px;color:var(--success);"></div>
         </div>
     </div>
 

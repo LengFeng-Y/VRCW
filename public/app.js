@@ -5814,24 +5814,14 @@ function filterWorlds() {
     });
   }
 
-  renderWorldGrid(list);
-}
-
-function toggleSelectWorld(id, e) {
-  e.stopPropagation();
-  if (selectedWorldIds.has(id)) selectedWorldIds.delete(id);
-  else selectedWorldIds.add(id);
-  const card = document.getElementById('world-card-' + id);
-  if (card) card.classList.toggle('selected', selectedWorldIds.has(id));
-  _updateWorldActionBtns();
+renderWorldGrid(list);
 }
 
 function _updateWorldActionBtns() {
   const hasSel    = selectedWorldIds.size > 0;
   const isFav     = currentWorldCategory && currentWorldCategory.startsWith('fav_');
   const hasInvalid = allWorlds.some(w => w.isInvalid);
-
-  // Mirror the same hidden-toggle pattern used by the avatar panel (switchCategory)
+  // Mirror the same hidden-toggle pattern used by the avatar panel
   document.getElementById('btnWorldCleanInvalid')?.classList.toggle('hidden', !(isFav && hasInvalid));
   document.getElementById('btnWorldUnfavoriteSelected')?.classList.toggle('hidden', !(hasSel && isFav));
 }
@@ -5856,7 +5846,7 @@ function renderWorldGrid(list) {
     card.setAttribute('data-worldid', w.id);
     
     // VRCX Style: How many friends are here?
-    const friendsHere = allFriends.filter(f => f.location && f.location.startsWith(w.id)).length;
+    const friendsHere = (allFriends || []).filter(f => f.location && f.location.startsWith(w.id)).length;
 
     card.onclick = () => openWorldDetail(w.id, w);
     const isCached = loadedImageUrls.has(thumb);
@@ -5881,14 +5871,13 @@ function renderWorldGrid(list) {
 }
 
 function selectAllWorlds() {
-  const list = allWorlds; // use current allWorlds (filtered view could differ, keep it simple)
+  const list = allWorlds;
   const allSelected = selectedWorldIds.size > 0 && selectedWorldIds.size === list.length;
   selectedWorldIds.clear();
   if (!allSelected) list.forEach(w => selectedWorldIds.add(w.id));
   list.forEach(w => {
     const card = document.getElementById('world-card-' + w.id);
     if (card) card.classList.toggle('selected', selectedWorldIds.has(w.id));
-    // Update checkbox overlay
     const chk = card?.querySelector('[title="选择"]');
     if (chk) {
       chk.style.background = selectedWorldIds.has(w.id) ? 'var(--accent)' : 'rgba(0,0,0,0.4)';
@@ -5927,7 +5916,6 @@ async function unfavoriteSelectedWorlds() {
   }
   try { await idb.set('world_basics_' + currentWorldCategory, allWorlds); } catch(_) {}
   _updateWorldActionBtns();
-  console.log(`世界取消收藏：成功 ${success}, 失败 ${fail}`);
 }
 
 async function cleanInvalidWorlds() {
@@ -5959,14 +5947,29 @@ async function cleanInvalidWorlds() {
   });
 }
 
+function toggleSelectWorld(id, e) {
+  e.stopPropagation();
+  if (selectedWorldIds.has(id)) selectedWorldIds.delete(id);
+  else selectedWorldIds.add(id);
+  const card = document.getElementById('world-card-' + id);
+  if (card) card.classList.toggle('selected', selectedWorldIds.has(id));
+  _updateWorldActionBtns();
+}
+
 async function openWorldDetail(worldId, worldObj = null) {
   const modal = document.getElementById('worldDetailModal');
   if (!modal) return;
-  document.getElementById('worldDetailName').textContent  = '加载中...';
-  document.getElementById('worldDetailAuthor').textContent = '';
-  document.getElementById('worldDetailInstances').innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:0.8em;padding:8px;">加载实例中...</div>';
-  document.getElementById('worldDetailPlayerBadge').textContent = '';
-  document.getElementById('worldDetailFavStatus').textContent  = '';
+  
+  // Reset UI to loading state
+  document.getElementById('worldDetailName').textContent = '加载中...';
+  document.getElementById('worldDetailBreadcrumbName').textContent = '加载中...';
+  document.getElementById('worldDetailBreadcrumbAuthor').textContent = '...';
+  document.getElementById('worldDetailInstances').innerHTML = '<div style="color:var(--text-muted);font-size:0.8em;padding:8px;text-align:center;">加载实例中...</div>';
+  document.getElementById('worldDetailFavStatus').textContent = '';
+  document.getElementById('worldDetailBadges').innerHTML = '';
+  document.getElementById('worldDetailRawJson').textContent = '';
+  
+  switchWorldDetailTab('info');
   if (worldObj) document.getElementById('worldDetailImg').src = proxyImg(worldObj.thumbnailImageUrl||worldObj.imageUrl||'');
   modal.classList.remove('hidden');
 
@@ -5976,36 +5979,92 @@ async function openWorldDetail(worldId, worldObj = null) {
     const w = await r.json();
     currentWorldDetail = w;
 
-    document.getElementById('worldDetailImg').src    = proxyImg(w.thumbnailImageUrl||w.imageUrl||'');
-    document.getElementById('worldDetailName').textContent   = w.name||'';
-    document.getElementById('worldDetailAuthor').innerHTML = `by <a href="#" onclick="openFriendProfileById('${w.authorId}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${escHtml(w.authorName||'Unknown')}</a>`;
+    // Fill Basic Info
+    document.getElementById('worldDetailImg').src = proxyImg(w.thumbnailImageUrl||w.imageUrl||'');
+    document.getElementById('worldDetailName').textContent = w.name || 'Unknown World';
+    document.getElementById('worldDetailBreadcrumbName').textContent = w.name || 'World';
+    document.getElementById('worldDetailBreadcrumbAuthor').textContent = w.authorName || 'Unknown';
+    document.getElementById('worldDetailAuthorRow').innerHTML = `by <a href="#" onclick="openFriendProfileById('${w.authorId}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;font-weight:600;">${escHtml(w.authorName||'Unknown')}</a>`;
+    document.getElementById('worldDetailId').textContent = w.id;
+    document.getElementById('worldDetailDesc').textContent = w.description || '无描述。';
+    document.getElementById('worldDetailCreated').textContent = formatDate(w.created_at);
+    document.getElementById('worldDetailUpdated').textContent = formatDate(w.updated_at);
+    document.getElementById('worldDetailRawJson').textContent = JSON.stringify(w, null, 2);
 
-    // Bug#1 fix: instances = [[instanceStr, count], ...]
-    const instances    = Array.isArray(w.instances) ? w.instances : [];
-    const totalPlayers = w.occupants || instances.reduce((s,[,c])=>s+(c||0),0);
-    document.getElementById('worldDetailPlayerBadge').textContent = totalPlayers>0 ? `👥 ${totalPlayers} 在线` : '';
+    // Badges
+    const badgesEl = document.getElementById('worldDetailBadges');
+    badgesEl.innerHTML = `
+      <span class="avtrdb-badge" style="background:rgba(134,239,172,0.1);color:#4ade80;border-color:rgba(134,239,172,0.2);">${escHtml(w.releaseStatus||'public').toUpperCase()}</span>
+      <span class="avtrdb-badge">👥 ${w.capacity || 0}</span>
+      <span class="avtrdb-badge">v${w.version || 1}</span>
+    `;
+    
+    // Platforms
+    const platforms = [];
+    if (w.unityPackages?.some(p => p.platform === 'standalonewindows')) platforms.push('PC');
+    if (w.unityPackages?.some(p => p.platform === 'android')) platforms.push('Android');
+    platforms.forEach(p => {
+      badgesEl.innerHTML += `<span class="avtrdb-badge" style="background:rgba(99,102,241,0.1);color:#a5b4fc;border-color:rgba(99,102,241,0.2);">${p}</span>`;
+    });
+    document.getElementById('worldDetailPlatformsList').innerHTML = platforms.map(p => `<span class="avtrdb-badge">${p}</span>`).join('');
 
+    // Tags
     const tags = (w.tags||[]).filter(t=>!t.startsWith('author_tag')&&!t.startsWith('system_'));
-    document.getElementById('worldDetailTags').innerHTML = tags.slice(0,6).map(t=>`<span class="avtrdb-badge">${escHtml(t)}</span>`).join('');
+    document.getElementById('worldDetailTags').innerHTML = tags.slice(0,12).map(t=>`<span class="avtrdb-badge" style="font-size:0.7em;padding:2px 6px;">${escHtml(t)}</span>`).join('');
 
+    // Delete Button (only if I'm the author)
+    const delBtn = document.getElementById('worldDetailDeleteBtn');
+    if (delBtn) delBtn.style.display = (w.authorId === currentUserId) ? 'flex' : 'none';
+
+    // ── Instances & Friends ──
+    const instContainer = document.getElementById('worldDetailInstances');
+    const friendsInWorld = (allFriends || []).filter(f => f.location && f.location.startsWith(worldId + ':'));
+    if (myProfileData?.location?.startsWith(worldId + ':')) {
+      if (!friendsInWorld.some(f => f.id === myProfileData.id)) friendsInWorld.unshift({ ...myProfileData });
+    }
+
+    let html = '';
+    if (friendsInWorld.length) {
+      const friendInstMap = new Map();
+      for (const f of friendsInWorld) {
+        const instStr = f.location.slice(worldId.length + 1);
+        if (!friendInstMap.has(instStr)) friendInstMap.set(instStr, []);
+        friendInstMap.get(instStr).push(f);
+      }
+      html += `<div style="font-size:0.8em;font-weight:700;color:var(--text-primary);margin-bottom:8px;">👥 好友在此世界</div>`;
+      for (const [instStr, friends] of friendInstMap) {
+        let typeLabel = '公开', typeColor = '#64748b';
+        if (instStr.includes('~private'))      { typeLabel='🔒 私人'; typeColor='#f59e0b'; }
+        else if (instStr.includes('~hidden'))  { typeLabel='👥 好友+'; typeColor='#22c55e'; }
+        else if (instStr.includes('canRequestInvite')) { typeLabel='👥 好友+'; typeColor='#22c55e'; }
+        else if (instStr.includes('~friends')) { typeLabel='👥 好友'; typeColor='#22c55e'; }
+        else if (instStr.includes('group('))   { typeLabel='🏠 群组'; typeColor='#3b82f6'; }
+        const fullLoc = worldId + ':' + instStr;
+        html += `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <span style="font-size:0.65em;padding:2px 8px;border-radius:6px;background:${typeColor}22;color:${typeColor};border:1px solid ${typeColor}44;font-weight:700;">${typeLabel}</span>
+            <span style="flex:1;font-size:0.75em;opacity:0.6;font-family:monospace;overflow:hidden;text-overflow:ellipsis;">#${escHtml(instStr.split('~')[0])}</span>
+            ${!instStr.includes('~private') ? `<button class="btn btn-xs" onclick="inviteSelf('${escHtml(fullLoc)}')" style="padding:4px 10px;font-size:0.75em;background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2);">📩 邀请自己</button>` : ''}
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${friends.map(f => {
+              const trust = getTrustInfo(f.tags||[]);
+              return `<div onclick="openFriendProfileById('${f.id}')" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,0.05);border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.08)';this.style.borderColor='var(--border)'" onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='transparent'">
+                <img src="${proxyImg(f.currentAvatarThumbnailImageUrl||f.userIcon||'')}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid ${trust.color}66;">
+                <span style="font-size:0.85em;font-weight:600;color:${trust.color};">${escHtml(f.displayName)}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+      }
+      html += `<div style="font-size:0.8em;font-weight:700;color:var(--text-primary);margin:8px 0 8px;">🌐 公开实例</div>`;
+    }
+
+    const instances = Array.isArray(w.instances) ? w.instances : [];
     const descRow = document.getElementById('worldDetailDescRow');
     const descEl  = document.getElementById('worldDetailDesc');
     if (descEl) descEl.textContent = w.description||'';
     if (descRow) descRow.style.display = w.description ? '' : 'none';
-
-    const instContainer = document.getElementById('worldDetailInstances');
-    
-    // ── Friends in this world (from allFriends data) ─────────────────────
-    const friendsInWorld = (allFriends || []).filter(f => 
-      f.location && f.location.startsWith(worldId + ':')
-    );
-    // Also check if I'm in this world
-    if (myProfileData && myProfileData.location && myProfileData.location.startsWith(worldId + ':')) {
-      if (!friendsInWorld.some(f => f.id === myProfileData.id)) {
-        friendsInWorld.unshift({ ...myProfileData });
-      }
-    }
-
     let friendsHtml = '';
     if (friendsInWorld.length) {
       // Group by instance
