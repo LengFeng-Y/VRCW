@@ -4714,7 +4714,7 @@ function renderFriendList(list) {
   // Sort instances: groups with multiple friends first (desc by count),
   // then private/restricted last within in-game
   const isRestricted = (loc, friends) =>
-    loc.includes(':private') || loc.includes(':invite)') ||
+    loc === 'private' || loc.includes(':private') || loc.includes('~private') ||
     friends.every(f => f.status === 'busy' || f.status === 'ask me');
 
   const instances = [...instanceMap.entries()];
@@ -4730,50 +4730,57 @@ function renderFriendList(list) {
     `<div style="padding:${top?'6':'12'}px 4px 4px;font-size:0.7em;font-weight:700;color:${color};letter-spacing:.07em;text-transform:uppercase;opacity:0.85;">${icon} ${label}</div>`;
 
   let html = '';
-  let shownGroupHeader = false;
-  let shownSoloHeader  = false;
-  let shownRestHeader  = false;
+  const joinableGroups = instances.filter(([loc, fs]) => fs.length > 1 && !isRestricted(loc, fs));
+  const joinableSolo   = instances.filter(([loc, fs]) => fs.length === 1 && !isRestricted(loc, fs));
+  const privateInsts   = instances.filter(([loc, fs]) => isRestricted(loc, fs));
 
-  for (const [loc, friends] of instances) {
-    const restricted = isRestricted(loc, friends);
-    const isMine     = myLoc && loc === myLoc;
-    const multi      = friends.length > 1;
-
-    if (!restricted) {
-      if (multi && !shownGroupHeader) {
-        html += sectionDiv('👥', '好友聚集的实例', '#86efac', true);
-        shownGroupHeader = true;
-      } else if (!multi && !shownSoloHeader && !multi && shownGroupHeader) {
-        html += sectionDiv('🎮', '游戏中 · 可加入', '#60a5fa', false);
-        shownSoloHeader = true;
-      } else if (!multi && !shownGroupHeader && !shownSoloHeader) {
-        html += sectionDiv('🎮', '游戏中 · 可加入', '#60a5fa', true);
-        shownSoloHeader = true;
-      }
-      // Instance header for multi-friend instances
-      if (multi) {
-        const isMineTag = isMine ? ' <span style="font-size:0.85em;background:rgba(167,139,250,0.3);color:#c4b5fd;padding:1px 6px;border-radius:4px;">📍 你也在这里</span>' : '';
-        const groupJoinBtn = `<button class="btn btn-xs" onclick="event.stopPropagation();joinInstance('${escHtml(loc)}')" style="margin-left:auto;padding:2px 8px;font-size:0.8em;border-radius:4px;background:#86efac11;color:#86efac;border:1px solid #86efac33;cursor:pointer;">拉通协议</button>`;
-        const groupInviteBtn = `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(loc)}')" style="padding:2px 8px;font-size:0.8em;border-radius:4px;background:#86efac22;color:#86efac;border:1px solid #86efac44;cursor:pointer;">邀请自己</button>`;
-        
-        html += `<div class="loc-group-header" id="loc_${loc.split(':')[0]}" data-loc="${escHtml(loc)}" style="display:flex;align-items:center;gap:6px;padding:6px 10px;margin:4px 0 2px;background:rgba(134,239,172,0.06);border-left:2px solid #86efac;border-radius:0 6px 6px 0;font-size:0.75em;color:#86efac;">` +
-          `<span>👥 ${friends.length} 位好友在此</span>` +
-          `<span style="opacity:0.6;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="lgn_${loc.split(':')[0]}">加载中...</span>` +
-          isMineTag + groupInviteBtn + groupJoinBtn + '</div>';
-      }
-    } else {
-      if (!shownRestHeader) {
-        html += sectionDiv('🔒', '游戏中 · 私人/限制', '#fbbf24', !shownGroupHeader && !shownSoloHeader);
-        shownRestHeader = true;
-      }
+  // 1. Joinable Groups
+  if (joinableGroups.length) {
+    html += sectionDiv('👥', '好友聚集的实例', '#86efac', true);
+    for (const [loc, friends] of joinableGroups) {
+      const isMine = myLoc && loc === myLoc;
+      const isMineTag = isMine ? ' <span style="font-size:0.85em;background:rgba(167,139,250,0.3);color:#c4b5fd;padding:1px 6px;border-radius:4px;">📍 你也在这里</span>' : '';
+      const groupJoinBtn = `<button class="btn btn-xs" onclick="event.stopPropagation();joinInstance('${escHtml(loc)}')" style="margin-left:auto;padding:2px 8px;font-size:0.8em;border-radius:4px;background:#86efac11;color:#86efac;border:1px solid #86efac33;cursor:pointer;">拉通协议</button>`;
+      const groupInviteBtn = `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(loc)}')" style="padding:2px 8px;font-size:0.8em;border-radius:4px;background:#86efac22;color:#86efac;border:1px solid #86efac44;cursor:pointer;">邀请自己</button>`;
+      
+      html += `<div class="loc-group-header" id="loc_${loc.split(':')[0]}" data-loc="${escHtml(loc)}" style="display:flex;align-items:center;gap:6px;padding:6px 10px;margin:4px 0 2px;background:rgba(134,239,172,0.06);border-left:2px solid #86efac;border-radius:0 6px 6px 0;font-size:0.75em;color:#86efac;">` +
+        `<span>👥 ${friends.length} 位好友在此</span>` +
+        `<span style="opacity:0.6;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="lgn_${loc.split(':')[0]}">加载中...</span>` +
+        isMineTag + groupInviteBtn + groupJoinBtn + '</div>';
+      html += friends.map(f => friendCardHtml(f)).join('');
     }
-    html += friends.map(f => friendCardHtml(f)).join('');
   }
 
+  // 2. Joinable Solo
+  if (joinableSolo.length) {
+    html += sectionDiv('🎮', '游戏中 · 可加入', '#60a5fa', html === '');
+    for (const [loc, friends] of joinableSolo) {
+      html += friends.map(f => friendCardHtml(f)).join('');
+    }
+  }
+
+  // 3. Private Rooms (Grouped)
+  if (privateInsts.length) {
+    html += sectionDiv('🔒', '在私人房间 / 不可加入', '#fbbf24', html === '');
+    for (const [loc, friends] of privateInsts) {
+      if (friends.length > 1) {
+        // No data-loc on private headers — world name resolution is not applicable
+        html += `<div class="loc-group-header" id="loc_${loc.split(':')[0]}" style="display:flex;align-items:center;gap:6px;padding:6px 10px;margin:4px 0 2px;background:rgba(251,191,36,0.06);border-left:2px solid #fbbf24;border-radius:0 6px 6px 0;font-size:0.75em;color:#fbbf24;">` +
+          `<span>👥 ${friends.length} 位好友在此</span>` +
+          `<span style="opacity:0.6;flex:1;">私人房间</span>` +
+          '</div>';
+      }
+      html += friends.map(f => friendCardHtml(f)).join('');
+    }
+  }
+
+  // 4. Web Online
   if (webOnline.length) {
-    html += sectionDiv('🌐', '网页在线', 'var(--text-muted)', !shownGroupHeader && !shownSoloHeader && !shownRestHeader);
+    html += sectionDiv('🌐', '网页在线', 'var(--text-muted)', html === '');
     html += webOnline.map(f => friendCardHtml(f)).join('');
   }
+
+  // 5. Offline
   if (offline.length) {
     html += sectionDiv('💤', '离线', 'var(--text-muted)', false);
     html += offline.map(f => friendCardHtml(f)).join('');
@@ -4814,7 +4821,10 @@ function friendCardHtml(f) {
   const langs = getLanguages(f.tags||[]).join('');
   const fJson  = JSON.stringify(f).replace(/\\/g,'\\\\').replace(/"/g,'&quot;');
 
-    const isJoinable = f.location && f.location !== 'private' && f.location !== 'offline' && f.state === 'online';
+    // ~hidden = Friends+ (joinable). Only ~private is truly unjoinable.
+    const isJoinable = f.location && f.location !== 'private' && f.location !== 'offline'
+      && !f.location.includes('~private')
+      && f.location.startsWith('wrld_');
     const joinBtn = isJoinable ? `
       <div style="display:flex;gap:4px;margin-bottom:2px;">
         <button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(f.location)}')" style="padding:2px 6px;font-size:0.7em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请给自己">📩</button>
@@ -6623,7 +6633,9 @@ async function fetchGroupMembers(groupId) {
 
 
 async function openInstanceDetail(loc) {
-  if (!loc || loc === 'private' || loc === 'offline') return;
+  // private / offline / ~private instances cannot be joined
+  const isPrivateLoc = !loc || loc === 'private' || loc === 'offline' || loc.includes('~private');
+  if (isPrivateLoc) return;
   const worldId = loc.split(':')[0];
   
   // Ensure modal exists
@@ -6668,7 +6680,15 @@ async function openInstanceDetail(loc) {
   modal.classList.remove('hidden');
   // Always update the action buttons for the CURRENT loc/worldId (fixes stale-closure bug)
   document.getElementById('insBtnWorld').onclick = () => openWorldDetail(worldId);
-  document.getElementById('insBtnInvite').onclick = () => inviteSelf(loc);
+  // Show 'Invite Self' only for joinable instances (not ~private)
+  const inviteBtn = document.getElementById('insBtnInvite');
+  const isJoinableLoc = loc && !loc.includes('~private') && loc.startsWith('wrld_');
+  if (isJoinableLoc) {
+    inviteBtn.style.display = '';
+    inviteBtn.onclick = () => inviteSelf(loc);
+  } else {
+    inviteBtn.style.display = 'none';
+  }
   document.getElementById('insWorldName').textContent = '加载中...';
   document.getElementById('insAuthorLine').innerHTML = '';
   document.getElementById('insDesc').textContent = '';
@@ -6928,6 +6948,9 @@ function showFriendContextMenu(e) {
   const id = f.id || '';
   const name = f.displayName || '';
   const hasLocation = f.location && f.location.startsWith('wrld_');
+  const isOnline = f.state === 'online' || (f.location && f.location !== 'offline');
+  const isJoinable = hasLocation && !f.location.includes('~private');
+
   const isBlocked = myModerations.some(m => m.moderated === id && m.type === 'block');
   const isMuted   = myModerations.some(m => m.moderated === id && m.type === 'mute');
   const isShown   = myModerations.some(m => m.moderated === id && m.type === 'showAvatar');
@@ -6956,10 +6979,12 @@ function showFriendContextMenu(e) {
       { icon:'🔗', label:'分享 VRChat 主页', action: () => window.open(`https://vrchat.com/home/user/${id}`, '_blank') },
     ]},
     { label:'位置互动', items: [
-      hasLocation ? { icon:'🚀', label:'申请加入实例', action: () => friendRequestJoin(id, name) } : null,
-      { icon:'📩', label:'请求邀请', action: () => requestInvite(id, name) },
-      { icon:'📨', label:'发送邀请', action: () => sendInvite(id, name) },
-      { icon:'👋', label:'发送戳一戳', action: () => sendPoke(id, name) },
+      isJoinable ? { icon:'🚀', label:'申请加入实例', action: () => friendRequestJoin(id, name) } : null,
+      isOnline ? { icon:'📩', label:'请求邀请', action: () => requestInvite(id, name) } : null,
+      isOnline ? { icon:'📨', label:'发送邀请', action: () => sendInvite(id, name) } : null,
+      { icon:'👋', label:'发送戳一戳...', action: () => {
+          setTimeout(() => showBoopMenu(e, id, name), 10);
+      }},
     ].filter(Boolean)},
     { label:'模型控制', items: [
       { icon:'👁️', label: isShown ? '取消强制显示模型' : '显示该玩家模型', action: () => isShown ? resetAvatarModeration(id, name, 'showAvatar') : showAvatarUser(id, name) },
@@ -7177,13 +7202,14 @@ function friendRequestJoinMsg(userId, name) {
 
 
 
-async function sendPoke(userId, name) {
-  // VRChat has no dedicated poke endpoint. Best equivalent: POST /requestInvite/{userId}
-  // which sends a real-time in-game notification popup asking them to invite you.
+async function sendPoke(userId, name, emojiId = 'default_heart') {
+  // Use VRChat's actual Boop endpoint
   try {
-    const r = await apiCall(`/api/vrc/requestInvite/${userId}`, {
+    const r = await apiCall(`/api/vrc/users/${userId}/boop`, {
       method: 'POST',
-      json: { platform: 'standalonewindows', rsvp: false }
+      json: { 
+        emojiId: emojiId 
+      }
     });
     if (r.ok) logMsg(`✅ 已向 ${name} 发送戳一戳`, 'success');
     else {
@@ -7191,6 +7217,48 @@ async function sendPoke(userId, name) {
       alert(`❌ 失败: ${err.error?.message || r.status}`);
     }
   } catch(e) { alert('失败: ' + e.message); }
+}
+
+function showBoopMenu(e, userId, name) {
+  const photonEmojis = [
+    'Angry', 'Blushing', 'Crying', 'Frown', 'Hand Wave', 'Hang Ten', 'In Love',
+    'Jack O Lantern', 'Kiss', 'Laugh', 'Skull', 'Smile', 'Spooky Ghost', 'Stoic',
+    'Sunglasses', 'Thinking', 'Thumbs Down', 'Thumbs Up', 'Tongue Out', 'Wow',
+    'Arrow Point', "Can't see", 'Hourglass', 'Keyboard', 'No Headphones', 'No Mic',
+    'Portal', 'Shush', 'Bats', 'Cloud', 'Fire', 'Snow Fall', 'Snowball', 'Splash',
+    'Web', 'Beer', 'Candy', 'Candy Cane', 'Candy Corn', 'Champagne', 'Drink',
+    'Gingerbread', 'Ice Cream', 'Pineapple', 'Pizza', 'Tomato', 'Beachball', 'Coal',
+    'Confetti', 'Gift', 'Gifts', 'Life Ring', 'Mistletoe', 'Money', 'Neon Shades',
+    'Sun Lotion', 'Boo', 'Broken Heart', 'Exclamation', 'Go', 'Heart', 'Music Note',
+    'Question', 'Stop', 'Zzz'
+  ];
+
+  const emojiIcons = {
+    'Angry': '😠', 'Blushing': '😊', 'Crying': '😭', 'Frown': '☹️', 'Hand Wave': '👋', 'Hang Ten': '🤙', 'In Love': '😍',
+    'Jack O Lantern': '🎃', 'Kiss': '😘', 'Laugh': '😂', 'Skull': '💀', 'Smile': '🙂', 'Spooky Ghost': '👻', 'Stoic': '😐',
+    'Sunglasses': '😎', 'Thinking': '🤔', 'Thumbs Down': '👎', 'Thumbs Up': '👍', 'Tongue Out': '😛', 'Wow': '😮',
+    'Arrow Point': '👉', "Can't see": '🙈', 'Hourglass': '⏳', 'Keyboard': '⌨️', 'No Headphones': '🔕', 'No Mic': '🔇',
+    'Portal': '🌀', 'Shush': '🤫', 'Bats': '🦇', 'Cloud': '☁️', 'Fire': '🔥', 'Snow Fall': '🌨️', 'Snowball': '⛄', 'Splash': '💦',
+    'Web': '🕸️', 'Beer': '🍺', 'Candy': '🍬', 'Candy Cane': '🦯', 'Candy Corn': '🌽', 'Champagne': '🍾', 'Drink': '🍹',
+    'Gingerbread': '🥮', 'Ice Cream': '🍦', 'Pineapple': '🍍', 'Pizza': '🍕', 'Tomato': '🍅', 'Beachball': '🏖️', 'Coal': '🪨',
+    'Confetti': '🎊', 'Gift': '🎁', 'Gifts': '🛍️', 'Life Ring': '🛟', 'Mistletoe': '🌿', 'Money': '💰', 'Neon Shades': '🥽',
+    'Sun Lotion': '🧴', 'Boo': '👻', 'Broken Heart': '💔', 'Exclamation': '❗', 'Go': '🟢', 'Heart': '💖', 'Music Note': '🎵',
+    'Question': '❓', 'Stop': '🛑', 'Zzz': '💤'
+  };
+
+  const menuItems = photonEmojis.map(emo => ({
+    icon: emojiIcons[emo] || '💬',
+    label: emo,
+    action: () => {
+      const emojiId = `default_${emo.replace(/ /g, '_').toLowerCase()}`;
+      sendPoke(userId, name, emojiId);
+    }
+  }));
+
+  const menu = buildCtxMenu([
+    { label: `戳一戳: ${name}`, items: menuItems }
+  ]);
+  positionCtxMenu(e, menu);
 }
 
 async function requestInvite(userId, name) {

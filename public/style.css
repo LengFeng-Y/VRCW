@@ -1834,10 +1834,12 @@ select.input-field {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 12px;
-  overflow: hidden;
+  overflow-y: auto;
+  max-height: 80vh;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
   z-index: 3000;
   animation: ctxFadeIn 0.12s ease;
+}
 }
 
 @keyframes ctxFadeIn {
