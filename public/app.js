@@ -4700,7 +4700,8 @@ function renderFriendList(list) {
 
   for (const f of list) {
     const loc = f.location || '';
-    const isOffline = f.state === 'offline' || !f.state;
+    // Fix: If they have a location, they ARE online, even if state is missing
+    const isOffline = (f.state === 'offline' || !f.state) && (!loc || loc === 'offline');
     if (isOffline) { offline.push(f); continue; }
     
     // state 'active' usually means web/mobile. 
@@ -4961,7 +4962,8 @@ function _renderFriendProfileUI(f, modal) {
     const fpWorldInfo = document.getElementById('fpWorldInfo');
     fpWorldInfo.textContent = '加载位置...';
     getLocationDisplay(f.location).then(txt => { 
-      const isJoinable = f.location && f.location !== 'private' && f.location !== 'offline' && f.state === 'online';
+      // If they have a valid world location and it's not private, they are joinable
+      const isJoinable = f.location && f.location !== 'private' && f.location !== 'offline';
       const btns = isJoinable ? `
         <button onclick="inviteSelf('${escHtml(f.location)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;margin-left:8px;" title="发送邀请给自己">📩 邀请自己</button>
       ` : '';
@@ -5001,7 +5003,7 @@ function _renderFriendProfileUI(f, modal) {
     <button onclick="navigator.clipboard.writeText('${escHtml(f.id||'')}').then(()=>this.textContent='✓')" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.9em;">复制</button>`;
 
   const isFriendFaved = friendFavoriteIdMap.has(id);
-  const isOnline = f.state === 'online';
+  const isOnline = f.state === 'online' || (f.location && f.location !== 'offline');
   
   let actionButtons = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
@@ -5017,7 +5019,7 @@ function _renderFriendProfileUI(f, modal) {
       actionButtons += `
         <button class="btn btn-primary" style="font-size:0.82em;" onclick="sendPoke('${escHtml(id)}','${escHtml(name)}')">👋 戳一戳</button>
         ${isOnline ? `<button class="btn btn-success" style="font-size:0.82em;" onclick="sendInvite('${escHtml(id)}','${escHtml(name)}')">📩 邀请</button>` : ''}
-        ${isOnline && f.location !== 'private' ? `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="requestInvite('${escHtml(id)}','${escHtml(name)}')">📩 请求邀请</button>` : ''}
+        ${isOnline ? `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="requestInvite('${escHtml(id)}','${escHtml(name)}')">📩 请求邀请</button>` : ''}
         <button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);font-size:0.82em;" onclick="deleteFriend('${escHtml(f.id||'')}','${escHtml(f.displayName||'')}')">🗑️ 删除好友</button>
       `;
     } else {
@@ -5785,14 +5787,14 @@ async function openWorldDetail(worldId, worldObj = null) {
         const region = regionMatch ? regionMatch[1].toUpperCase() : '';
         const regionFlag = {JP:'🇯🇵',US:'🇺🇸',EU:'🇪🇺',USE:'🇺🇸',USW:'🇺🇸'}[region] || (region?`[${region}]`:'');
 
-        const instShortId = instStr.split('~')[0];
+        const isPrivate = instStr.includes('~private');
         return `<div class="world-instance-item" style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,0.02);border-radius:8px;margin-bottom:4px;">
           <span style="flex:1;font-size:0.78em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${regionFlag} ${escHtml(instShortId)}</span>
           <span style="font-size:0.68em;padding:2px 7px;border-radius:99px;background:${typeColor}22;color:${typeColor};border:1px solid ${typeColor}44;">${typeLabel}</span>
           <span class="inst-players" style="font-size:0.75em;opacity:0.7;">👥 ${count}/${w.capacity||'∞'}</span>
           <div style="display:flex;gap:4px;">
             <button class="btn btn-xs" onclick="event.stopPropagation();openInstanceDetail('${escHtml(w.id)}:${escHtml(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(167,139,250,0.15);color:var(--accent-light);border:1px solid var(--accent);cursor:pointer;" title="查看谁在此实例">👥</button>
-            <button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(w.id)}:${escHtml(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请">&nbsp;📩&nbsp;</button>
+            ${!isPrivate ? `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(w.id)}:${escHtml(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请">&nbsp;📩&nbsp;</button>` : ''}
           </div>
         </div>`;
       }).join('');
@@ -6505,7 +6507,9 @@ async function openGroupDetail(groupId) {
       actionHtml += `<button onclick="vrcGroupAction('${groupId}','visibility','${myId}','${oppVis}')" style="background:var(--bg-glass);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:0.75em;color:var(--text-primary);cursor:pointer;" title="点击切换">${visText}</button>`;
       actionHtml += `<button onclick="vrcGroupAction('${groupId}','leave')" style="background:#ef444422;border:1px solid #ef444444;border-radius:6px;padding:4px 10px;font-size:0.75em;color:#ef4444;cursor:pointer;">🚪 退出群组</button>`;
     } else {
-      actionHtml += `<button onclick="vrcGroupAction('${groupId}','join')" style="background:linear-gradient(135deg,var(--accent),var(--accent-light));border:none;border-radius:6px;padding:4px 10px;font-size:0.75em;color:#fff;cursor:pointer;font-weight:600;">➕ 申请加入</button>`;
+      if (g.joinState !== 'closed') {
+        actionHtml += `<button onclick="vrcGroupAction('${groupId}','join')" style="background:linear-gradient(135deg,var(--accent),var(--accent-light));border:none;border-radius:6px;padding:4px 10px;font-size:0.75em;color:#fff;cursor:pointer;font-weight:600;">➕ 申请加入</button>`;
+      }
     }
     document.getElementById('gdActions').innerHTML = actionHtml;
     
