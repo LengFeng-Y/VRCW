@@ -4940,7 +4940,8 @@ function renderFriendList(list) {
     for (const [loc, friends] of joinableGroups) {
       const isMine = myLoc && loc === myLoc;
       const isMineTag = isMine ? ' <span style="font-size:0.85em;background:rgba(167,139,250,0.3);color:#c4b5fd;padding:1px 6px;border-radius:4px;">📍 你也在这里</span>' : '';
-      const groupInviteBtn = `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(loc)}')" style="padding:2px 8px;font-size:0.8em;border-radius:4px;background:#86efac22;color:#86efac;border:1px solid #86efac44;cursor:pointer;">邀请自己</button>`;
+      const isPrivateLoc = loc === 'private' || loc.includes('~private');
+      const groupInviteBtn = isPrivateLoc ? '' : `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(loc)}')" style="padding:2px 8px;font-size:0.8em;border-radius:4px;background:#86efac22;color:#86efac;border:1px solid #86efac44;cursor:pointer;">邀请自己</button>`;
       
       html += `<div class="loc-group-header" id="loc_${loc.split(':')[0]}" data-loc="${escHtml(loc)}" style="display:flex;align-items:center;gap:6px;padding:6px 10px;margin:4px 0 2px;background:rgba(134,239,172,0.06);border-left:2px solid #86efac;border-radius:0 6px 6px 0;font-size:0.75em;color:#86efac;">` +
         `<span>👥 ${friends.length} 位好友在此</span>` +
