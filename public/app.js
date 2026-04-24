@@ -4129,24 +4129,29 @@ async function fetchMyProfile(forceRefresh = false) {
   // Show the inline view (not modal) in the right panel
   const myView = document.getElementById('friendMyProfileView');
   const listView = document.getElementById('friendListView');
-  if (myView)   { myView.style.display = ''; myView.innerHTML = '<div style="text-align:center;padding:60px;color:rgba(255,255,255,0.3);">加载中...</div>'; }
+  if (myView && (!myProfileData || forceRefresh)) { myView.style.display = ''; myView.innerHTML = '<div style="text-align:center;padding:60px;color:rgba(255,255,255,0.3);">加载中...</div>'; }
   if (listView) listView.style.display = 'none';
   // Highlight the nav entry
   document.querySelectorAll('#friendsPanel .cat-btn').forEach(b => b.classList.remove('active','btn-primary'));
   const catBtn = document.getElementById('friendCatMyprofile');
   if (catBtn) { catBtn.classList.add('active','btn-primary'); catBtn.style.display = ''; }
   try {
-    if (!forceRefresh && !myProfileData) {
-      const cached = await idb.get('my_profile');
-      if (cached) myProfileData = cached;
+    // Stale-while-revalidate:
+    // 1. Render cached data immediately (name, avatar, bio — stable fields)
+    const cached = await idb.get('my_profile');
+    if (cached && !forceRefresh) {
+      myProfileData = cached;
+      renderMyProfile(cached);
+      renderSidebarMiniProfile(cached);
     }
-    if (forceRefresh || !myProfileData) {
-      const resp = await apiCall('/api/vrc/auth/user');
-      if (!resp.ok) throw new Error('Failed to fetch profile');
-      myProfileData = await resp.json();
-      await idb.set('my_profile', myProfileData);
-    }
-    const u = myProfileData;
+
+    // 2. Always fetch fresh from API (gets latest location, status etc.)
+    const resp = await apiCall('/api/vrc/auth/user', { cache: 'no-store' });
+    if (!resp.ok) throw new Error('Failed to fetch profile');
+    const fresh = await resp.json();
+    myProfileData = fresh;
+    await idb.put('my_profile', fresh); // update cache
+    const u = fresh;
     // Render profile INLINE into the right panel area
     renderMyProfile(u);
     // Update the sidebar mini-profile card
@@ -4213,10 +4218,10 @@ function renderMyProfile(u) {
     ${u.statusDescription?`<div style="font-size:0.8em;color:var(--text-secondary);margin-bottom:10px;padding:8px 12px;background:var(--bg-glass);border-radius:8px;border-left:3px solid ${statusColor};">${escHtml(u.statusDescription.replace(/\\n/g, String.fromCharCode(10)))}</div>`:''}
 
     <!-- Current location -->
-    ${(u.location&&u.location!=='offline'&&u.location!=='private')?`<div style="margin-bottom:12px;" id="myProfileLocRow">
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;" id="myProfileLocRow">
       <div class="stat-section-label">当前位置</div>
-      <div id="myProfileLocText" style="font-size:0.8em;color:var(--text-secondary);">加载中...</div>
-    </div>`:''}
+      <div id="myProfileLocText" style="font-size:0.8em;color:var(--text-secondary);cursor:pointer;border-bottom:1px dashed var(--accent-light);">加载中...</div>
+    </div>
 
     <!-- Current avatar name -->
     ${u.currentAvatarName?`<div style="margin-bottom:12px;"><div class="stat-section-label">正在使用的模型</div>
@@ -4258,12 +4263,23 @@ function renderMyProfile(u) {
     </div>
   </div>`;
 
-  // Async: load location display
-  if (u.location && u.location !== 'offline' && u.location !== 'private') {
-    getLocationDisplay(u.location).then(txt => {
-      const el = document.getElementById('myProfileLocText');
-      if (el) el.innerHTML = `<a href="#" onclick="openInstanceDetail('${escHtml(u.location)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a>`;
-    }).catch(() => {});
+  // Async: load location display — always show the row, populate after fetch
+  {
+    const locRow = document.getElementById('myProfileLocRow');
+    const locEl = document.getElementById('myProfileLocText');
+    if (locRow && locEl) {
+      if (u.location && u.location !== 'offline' && u.location !== 'private') {
+        locRow.style.display = '';
+        getLocationDisplay(u.location).then(txt => {
+          if (locEl) locEl.innerHTML = `<a href="#" onclick="openInstanceDetail('${escHtml(u.location)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a>`;
+        }).catch(() => { if (locEl) locEl.textContent = u.location; });
+      } else if (u.location === 'private') {
+        locRow.style.display = '';
+        locEl.textContent = '🔒 私人房间';
+      } else {
+        locRow.style.display = 'none';
+      }
+    }
   }
 
   // Fix My Profile Groups - Use showcasedGroups and representedGroup from the user object
@@ -4980,6 +4996,9 @@ function _renderFriendProfileUI(f, modal) {
   } else if (loc.isPrivate || f.location === 'private') {
     locSection.style.display = '';
     fpWorldInfo.innerHTML = `<span style="opacity:0.8;">🔒 私人房间</span>`;
+  } else if (loc.isTraveling || f.location === 'traveling') {
+    locSection.style.display = '';
+    fpWorldInfo.innerHTML = `<span style="opacity:0.8;">✈️ 正在前往世界...</span>`;
   } else {
     locSection.style.display = '';
     fpWorldInfo.innerHTML = '加载位置...' + isMineTag;
@@ -5037,7 +5056,7 @@ function _renderFriendProfileUI(f, modal) {
     actionButtons += `<div style="display:flex;gap:8px;flex-wrap:wrap;">`;
     if (isFriend) {
       actionButtons += `
-        <button class="btn btn-primary" style="font-size:0.82em;" onclick="sendPoke('${escHtml(id)}','${escHtml(name)}')">👋 戳一戳</button>
+        <button class="btn btn-primary" style="font-size:0.82em;" onclick="sendBoop('${escHtml(id)}','${escHtml(name)}')">👋 戳一下 (Boop)</button>
         ${isOnline ? `<button class="btn btn-success" style="font-size:0.82em;" onclick="sendInvite('${escHtml(id)}','${escHtml(name)}')">📩 邀请</button>` : ''}
         ${isOnline ? `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="requestInvite('${escHtml(id)}','${escHtml(name)}')">📩 请求邀请</button>` : ''}
         <button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);font-size:0.82em;" onclick="deleteFriend('${escHtml(f.id||'')}','${escHtml(f.displayName||'')}')">🗑️ 删除好友</button>
@@ -6495,6 +6514,8 @@ async function openGroupDetail(groupId) {
     document.body.insertAdjacentHTML('beforeend', html);
   }
   const modal = document.getElementById('groupDetailModal');
+  window._topZIndex = (window._topZIndex || 1000) + 1;
+  modal.style.zIndex = window._topZIndex;
   modal.classList.remove('hidden');
   document.getElementById('gdName').textContent = '加载中...';
   document.getElementById('gdDesc').textContent = '';
@@ -6733,11 +6754,13 @@ async function openInstanceDetail(loc) {
     
     // Find all friends in this instance
     const friendsInIns = allFriends.filter(f => f.location === loc);
-    
+
     // Check if the local user is also in this instance
     if (window.myProfileData && window.myProfileData.location === loc) {
       // Add ourselves to the top of the list
-      friendsInIns.unshift(window.myProfileData);
+      const selfProfile = { ...window.myProfileData };
+      selfProfile.isSelf = true;
+      friendsInIns.unshift(selfProfile);
     }
 
     const listEl = document.getElementById('insFriendList');
@@ -6746,12 +6769,16 @@ async function openInstanceDetail(loc) {
     } else {
       listEl.innerHTML = friendsInIns.map(f => {
         const trust = getTrustInfo(f.tags||[]);
-        const isMe = f.id === (window._myUser && window._myUser.id);
-        const meTag = isMe ? ' <span style="font-size:0.8em;background:rgba(167,139,250,0.3);color:#c4b5fd;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle;">📍 我自己</span>' : '';
-        return `<div class="friend-card" style="padding:10px;margin:0;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'" onclick="openFriendProfileById('${f.id}')">
-          <img src="${proxyImg(f.currentAvatarThumbnailImageUrl||f.userIcon||'')}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${trust.color}44;">
+        const safeJson = JSON.stringify(f).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        return `<div class="friend-card" style="padding:10px;margin:0;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;transition:all 0.2s;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'" onclick="openFriendProfile(this)" data-friend="${safeJson}">
+          <div style="position:relative;">
+            <img src="${proxyImg(f.currentAvatarThumbnailImageUrl||f.userIcon||'')}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${trust.color}44;">
+          </div>
           <div style="flex:1;">
-            <div style="font-size:0.95em;font-weight:600;color:${trust.color};">${escHtml(f.displayName)}${meTag}</div>
+            <div style="font-size:0.95em;font-weight:600;color:${trust.color};display:flex;align-items:center;gap:6px;">
+              ${escHtml(f.displayName)}
+              ${f.isSelf ? '<span style="font-size:0.7em;background:rgba(167,139,250,0.3);color:#c4b5fd;padding:2px 6px;border-radius:4px;">📍 我自己</span>' : ''}
+            </div>
             <div style="font-size:0.75em;opacity:0.7;color:var(--text-muted);">${getStatusLabel(f)}</div>
           </div>
           <div style="font-size:0.7em;color:var(--text-muted);">${getPlatformEmoji(f.last_platform)}</div>
@@ -7222,6 +7249,42 @@ function friendRequestJoinMsg(userId, name) {
 }
 
 
+
+async function sendBoop(userId, name) {
+  // Use VRChat's actual Boop endpoint
+  // Create a simple modal for emoji selection
+  const modalHtml = `
+  <div id="boopModal" class="modal" onclick="if(event.target===this)this.remove()">
+    <div class="modal-content" style="max-width:320px;text-align:center;">
+      <h3 style="margin-top:0;">戳一下 ${escHtml(name)}</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:20px;max-height:300px;overflow-y:auto;padding:10px;">
+        ${['heart', 'wave', 'thumbsup', 'laugh', 'cry', 'angry', 'surprised', 'confused'].map(e =>
+          `<button onclick="submitBoop('${userId}', 'default_${e}'); document.getElementById('boopModal').remove();" class="btn btn-secondary" style="font-size:1.5em;padding:10px;border-radius:50%;width:50px;height:50px;display:flex;align-items:center;justify-content:center;">${
+            {heart:'❤️',wave:'👋',thumbsup:'👍',laugh:'😂',cry:'😭',angry:'😡',surprised:'😮',confused:'🤔'}[e]
+          }</button>`
+        ).join('')}
+      </div>
+      <button class="btn btn-secondary" style="margin-top:20px;width:100%;" onclick="document.getElementById('boopModal').remove()">取消</button>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+async function submitBoop(userId, emojiId) {
+  try {
+    const r = await apiCall(`/api/vrc/users/${userId}/boop`, {
+      method: 'POST',
+      json: { emojiId: emojiId }
+    });
+    if (r.ok) {
+      logMsg(`✅ 成功戳了一下对方！`, 'success');
+      alert('戳一下发送成功！');
+    } else {
+      const err = await r.json().catch(() => ({}));
+      alert(`❌ 失败: ${err.error?.message || r.status}`);
+    }
+  } catch(e) { alert('失败: ' + e.message); }
+}
 
 async function sendPoke(userId, name, emojiId = 'default_heart') {
   // Use VRChat's actual Boop endpoint
