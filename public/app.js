@@ -4900,7 +4900,9 @@ function _renderFriendProfileUI(f, modal) {
   const isSelf = id === (window._myUser && window._myUser.id);
   const isFriend = f.isFriend || (window.allFriends && window.allFriends.some(af => af.id === id));
 
-  // Show modal
+  // Show modal and ensure it's on top
+  window._topZIndex = (window._topZIndex || 1000) + 1;
+  modal.style.zIndex = window._topZIndex;
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
 
@@ -4967,20 +4969,28 @@ function _renderFriendProfileUI(f, modal) {
   // Bug#1 fix: show formatted location
   const loc = parseLocation(f.location);
   const locSection = document.getElementById('fpLocationSection');
-  if (!loc.isOffline && !loc.isPrivate) {
+  const fpWorldInfo = document.getElementById('fpWorldInfo');
+  
+  const myLoc = (window.myProfileData && window.myProfileData.location) || '';
+  const isMine = f.location && myLoc && f.location === myLoc && f.location !== 'offline' && f.location !== 'private';
+  const isMineTag = isMine ? ' <span style="font-size:0.85em;background:rgba(167,139,250,0.3);color:#c4b5fd;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle;">📍 你也在这里</span>' : '';
+
+  if (loc.isOffline) {
+    locSection.style.display = 'none';
+  } else if (loc.isPrivate || f.location === 'private') {
     locSection.style.display = '';
-    const fpWorldInfo = document.getElementById('fpWorldInfo');
-    fpWorldInfo.textContent = '加载位置...';
+    fpWorldInfo.innerHTML = `<span style="opacity:0.8;">🔒 私人房间</span>`;
+  } else {
+    locSection.style.display = '';
+    fpWorldInfo.innerHTML = '加载位置...' + isMineTag;
     getLocationDisplay(f.location).then(txt => { 
       // If they have a valid world location and it's not private, they are joinable
-      const isJoinable = f.location && f.location !== 'private' && f.location !== 'offline';
+      const isJoinable = !f.location.includes('~private');
       const btns = isJoinable ? `
-        <button onclick="inviteSelf('${escHtml(f.location)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;margin-left:8px;" title="发送邀请给自己">📩 邀请自己</button>
+        <button onclick="inviteSelf('${escHtml(f.location)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;margin-left:8px;vertical-align:middle;" title="发送邀请给自己">📩 邀请自己</button>
       ` : '';
-      fpWorldInfo.innerHTML = `<a href="#" onclick="openInstanceDetail('${escHtml(f.location)}'); event.preventDefault();" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--accent-light);">${escHtml(txt)}</a>` + btns; 
-    }).catch(()=>{ fpWorldInfo.textContent = f.location||''; });
-  } else {
-    locSection.style.display = 'none';
+      fpWorldInfo.innerHTML = `<a href="#" onclick="openInstanceDetail('${escHtml(f.location)}'); event.preventDefault();" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--accent-light);vertical-align:middle;">${escHtml(txt)}</a>` + isMineTag + btns; 
+    }).catch(()=>{ fpWorldInfo.innerHTML = escHtml(f.location||'') + isMineTag; });
   }
 
   document.getElementById('fpStatusDesc').innerHTML = `<span style="font-weight:600;color:var(--text-primary);">${getStatusLabel(f)}</span> <span style="opacity:0.6">|</span> ` + escHtml(f.state==='offline' ? '离线' : (f.statusDescription||f.status||'').replace(/\\n/g, String.fromCharCode(10)));
@@ -6677,6 +6687,8 @@ async function openInstanceDetail(loc) {
   }
 
   const modal = document.getElementById('instanceDetailModal');
+  window._topZIndex = (window._topZIndex || 1000) + 1;
+  modal.style.zIndex = window._topZIndex;
   modal.classList.remove('hidden');
   // Always update the action buttons for the CURRENT loc/worldId (fixes stale-closure bug)
   document.getElementById('insBtnWorld').onclick = () => openWorldDetail(worldId);
@@ -6721,13 +6733,19 @@ async function openInstanceDetail(loc) {
     
     // Find all friends in this instance
     const friendsInIns = allFriends.filter(f => f.location === loc);
+    
+    // Check if the local user is also in this instance
+    if (myProfileData && myProfileData.location === loc) {
+      friendsInIns.unshift(myProfileData);
+    }
+
     const listEl = document.getElementById('insFriendList');
     if (!friendsInIns.length) {
       listEl.innerHTML = '<div style="text-align:center;padding:20px;opacity:0.5;font-size:0.85em;">当前没有其他在线好友在此实例</div>';
     } else {
       listEl.innerHTML = friendsInIns.map(f => {
         const trust = getTrustInfo(f.tags||[]);
-        return `<div class="friend-card" style="padding:10px;margin:0;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'" onclick="document.getElementById('instanceDetailModal').classList.add('hidden'); openFriendProfileById('${f.id}')">
+        return `<div class="friend-card" style="padding:10px;margin:0;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'" onclick="openFriendProfileById('${f.id}')">
           <img src="${proxyImg(f.currentAvatarThumbnailImageUrl||f.userIcon||'')}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${trust.color}44;">
           <div style="flex:1;">
             <div style="font-size:0.95em;font-weight:600;color:${trust.color};">${escHtml(f.displayName)}</div>
@@ -7255,10 +7273,16 @@ function showBoopMenu(e, userId, name) {
     }
   }));
 
+  const fakeEvent = {
+    clientX: e.clientX,
+    clientY: e.clientY,
+    stopPropagation: () => {}
+  };
+
   const menu = buildCtxMenu([
     { label: `戳一戳: ${name}`, items: menuItems }
   ]);
-  positionCtxMenu(e, menu);
+  positionCtxMenu(fakeEvent, menu);
 }
 
 async function requestInvite(userId, name) {
