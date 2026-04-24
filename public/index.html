@@ -550,45 +550,26 @@
                         </div>
                     </div>
                 </div>
-                <div class="grid-area" style="padding:20px 24px;overflow-y:auto;" id="assetsContentArea">
-                    <h2 style="font-size:1.4rem;font-weight:600;margin-bottom:16px;">💰 资产与经济</h2>
-                    <p style="color:var(--text-muted);font-size:0.85rem;">选择左侧菜单查看你的余额、商店、库存和订阅。</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-
             <!-- Settings Panel -->
             <div id="settingsPanel" class="download-panel upload-panel hidden">
                 <div class="sidebar">
                     <div class="sidebar-section">
                         <h3>⚙️ 高级设置</h3>
                         <div class="btn-group">
-                            <button class="btn btn-secondary btn-block cat-btn active" onclick="switchSettingsPage("cache")" id="setCatCache">🗑️ 缓存管理</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchSettingsPage("about")" id="setCatAbout">ℹ️ 关于</button>
+                            <button class="btn btn-secondary btn-block cat-btn active" onclick="switchSettingsPage('cache')" id="setCatCache">🗑️ 缓存管理</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchSettingsPage('about')" id="setCatAbout">ℹ️ 关于</button>
                         </div>
                     </div>
                 </div>
                 <div class="grid-area" style="padding:24px;overflow-y:auto;" id="settingsContentArea">
                     <div id="setPageCache">
                         <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">🗑️ 缓存管理</h2>
-                        <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">管理本地 IndexedDB 缓存。清除后数据将在下次访问时重新从 API 拉取，不影响 VRChat 账号。</p>
-                        <div style="display:flex;flex-direction:column;gap:12px;max-width:480px;">
-                            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;justify-content:space-between;align-items:center;">
-                                <div>
-                                    <div style="font-weight:600;font-size:0.9em;">选择性清除缓存</div>
-                                    <div style="font-size:0.78em;color:var(--text-muted);margin-top:3px;">按分类勾选要清除的缓存内容</div>
-                                </div>
-                                <button onclick="showCacheClearModal()" class="btn btn-primary" style="padding:8px 18px;font-size:0.85em;">打开管理器</button>
-                            </div>
-                            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;justify-content:space-between;align-items:center;">
-                                <div>
-                                    <div style="font-weight:600;font-size:0.9em;">清除全部缓存</div>
-                                    <div style="font-size:0.78em;color:var(--text-muted);margin-top:3px;">一键清除所有 IDB 缓存（含图片 Blob）</div>
-                                </div>
-                                <button onclick="clearAllCacheNow()" class="btn btn-secondary" style="padding:8px 18px;font-size:0.85em;color:#f87171;border-color:rgba(248,113,113,0.35);">全部清除</button>
-                            </div>
+                        <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">管理本地 IndexedDB 缓存。清除某类别后，下次访问时数据将从 API 重新拉取。</p>
+                        <div id="cacheStatsContainer" style="display:flex;flex-direction:column;gap:10px;max-width:540px;">
+                            <div style="color:var(--text-muted);font-size:0.85em;padding:20px;text-align:center;">正在读取缓存信息...</div>
+                        </div>
+                        <div style="margin-top:16px;max-width:540px;">
+                            <button onclick="clearAllCacheNow()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.35);">🗑️ 全部清除（含图片 Blob）</button>
                         </div>
                     </div>
                     <div id="setPageAbout" style="display:none;">
@@ -597,6 +578,14 @@
                     </div>
                 </div>
             </div>
+
+                <div class="grid-area" style="padding:20px 24px;overflow-y:auto;" id="assetsContentArea">
+                    <h2 style="font-size:1.4rem;font-weight:600;margin-bottom:16px;">💰 资产与经济</h2>
+                    <p style="color:var(--text-muted);font-size:0.85rem;">选择左侧菜单查看你的余额、商店、库存和订阅。</p>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div id="friendProfileModal" class="modal hidden" onclick="if(event.target===this)closeFriendProfile()">
         <div class="modal-content" style="max-width:680px;width:100%;padding:0;overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
@@ -903,6 +892,25 @@
                 </div>
                 <!-- Favorite status feedback -->
                 <div id="avtrdbFavStatus" style="font-size:0.75em;text-align:center;min-height:18px;"></div>
+            </div>
+
+                </div>
+                <div class="grid-area" style="padding:24px;overflow-y:auto;" id="settingsContentArea">
+                    <div id="setPageCache">
+                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">🗑️ 缓存管理</h2>
+                        <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">管理本地 IndexedDB 缓存。清除某类别后，下次访问时数据将从 API 重新拉取。</p>
+                        <div id="cacheStatsContainer" style="display:flex;flex-direction:column;gap:10px;max-width:540px;">
+                            <div style="color:var(--text-muted);font-size:0.85em;padding:20px;text-align:center;">正在读取缓存信息...</div>
+                        </div>
+                        <div style="margin-top:16px;max-width:540px;">
+                            <button onclick="clearAllCacheNow()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.35);">🗑️ 全部清除（含图片 Blob）</button>
+                        </div>
+                    </div>
+                    <div id="setPageAbout" style="display:none;">
+                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">ℹ️ 关于</h2>
+                        <p style="color:var(--text-muted);font-size:0.85rem;">VRChat Avatar Manager — Workers Edition</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

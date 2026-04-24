@@ -1173,6 +1173,7 @@ function switchTab(tab) {
     if (tab === "groups") loadGroupsPage('mine');
     if (tab === "download") fetchAvatars(true);
     if (tab === 'assets') initAssetsTab?.();
+    if (tab === 'settings') loadCacheStats();
   });
 }
 
@@ -1183,6 +1184,110 @@ function switchSettingsPage(page) {
     const btn = document.getElementById('setCat' + p.charAt(0).toUpperCase() + p.slice(1));
     if (btn) btn.classList.toggle('active', p === page);
   });
+  if (page === 'cache') loadCacheStats();
+}
+
+async function loadCacheStats() {
+  const container = document.getElementById('cacheStatsContainer');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--text-muted);font-size:0.85em;padding:12px;text-align:center;">正在读取...</div>';
+
+  await idb.init();
+  let allKeys = [];
+  try { allKeys = await idb.keys(); } catch(_) {}
+
+  const CATEGORIES = [
+    { id: 'friend',  label: '好友数据',        emoji: '👥', desc: '好友列表缓存',          match: k => k === 'friend_basics' },
+    { id: 'profile', label: '我的资料',        emoji: '🪪', desc: '个人资料缓存',           match: k => k === 'my_profile' },
+    { id: 'avatar',  label: '模型缓存',        emoji: '🎭', desc: '模型列表与收藏夹数据',   match: k => k.startsWith('avatar') || k.startsWith('avatars_') },
+    { id: 'world',   label: '世界缓存',        emoji: '🌍', desc: '世界列表与收藏夹数据',   match: k => k.startsWith('world') || k.startsWith('worlds_') },
+    { id: 'names',   label: '名称映射',        emoji: '📋', desc: '模型 ID → 名称映射',    match: k => k === 'persistent_avatar_names' },
+    { id: 'other',   label: '其他数据',        emoji: '📦', desc: '其他本地缓存',           match: k => true },
+  ];
+
+  const catKeys = {};
+  CATEGORIES.forEach(c => catKeys[c.id] = []);
+  for (const k of allKeys) {
+    let matched = false;
+    for (const cat of CATEGORIES.slice(0, -1)) {
+      if (cat.match(k)) { catKeys[cat.id].push(k); matched = true; break; }
+    }
+    if (!matched) catKeys['other'].push(k);
+  }
+
+  // Image blob count
+  let imageCount = 0;
+  try {
+    imageCount = await new Promise(res => {
+      const tx = idb.db.transaction('images','readonly');
+      const req = tx.objectStore('images').count();
+      req.onsuccess = () => res(req.result);
+      req.onerror  = () => res(0);
+    });
+  } catch(_) {}
+
+  let html = '';
+
+  // Render category rows
+  for (const cat of CATEGORIES) {
+    const keys = catKeys[cat.id];
+    if (keys.length === 0) continue;
+    html += `
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:14px;">
+        <span style="font-size:1.5em;">${cat.emoji}</span>
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:0.9em;">${cat.label}</div>
+          <div style="font-size:0.75em;color:var(--text-muted);margin-top:2px;">${cat.desc} · ${keys.length} 条记录</div>
+        </div>
+        <button onclick="clearCacheCategory(${JSON.stringify(keys.map(k=>k))})" class="btn btn-secondary" style="padding:6px 14px;font-size:0.82em;flex-shrink:0;">清除</button>
+      </div>`;
+  }
+
+  // Image blob row
+  if (imageCount > 0) {
+    html += `
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:14px;">
+        <span style="font-size:1.5em;">🖼️</span>
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:0.9em;">图片缓存 (Blob)</div>
+          <div style="font-size:0.75em;color:var(--text-muted);margin-top:2px;">本地图片 Blob 缓存 · ${imageCount} 张</div>
+        </div>
+        <button onclick="clearImageCache()" class="btn btn-secondary" style="padding:6px 14px;font-size:0.82em;flex-shrink:0;">清除</button>
+      </div>`;
+  }
+
+  if (!html) {
+    html = '<div style="color:var(--text-muted);font-size:0.85em;padding:20px;text-align:center;background:var(--bg-card);border-radius:12px;">✅ 缓存为空，无需清除</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+async function clearCacheCategory(keys) {
+  if (!confirm(`确定清除这 ${keys.length} 条缓存记录？`)) return;
+  await idb.init();
+  await new Promise(r => {
+    const tx = idb.db.transaction('cache','readwrite');
+    const store = tx.objectStore('cache');
+    let pending = keys.length;
+    if (pending === 0) { r(); return; }
+    keys.forEach(k => {
+      const req = store.delete(k);
+      req.onsuccess = req.onerror = () => { if (--pending === 0) r(); };
+    });
+  });
+  loadCacheStats();
+}
+
+async function clearImageCache() {
+  if (!confirm('确定清除所有图片 Blob 缓存？')) return;
+  await idb.init();
+  await new Promise(r => {
+    const tx = idb.db.transaction('images','readwrite');
+    tx.objectStore('images').clear();
+    tx.oncomplete = r; tx.onerror = r;
+  });
+  loadCacheStats();
 }
 
 async function clearAllCacheNow() {
@@ -1190,6 +1295,7 @@ async function clearAllCacheNow() {
   await idb.init();
   await new Promise(r => { const tx = idb.db.transaction('cache','readwrite'); tx.objectStore('cache').clear(); tx.oncomplete=r; tx.onerror=r; });
   await new Promise(r => { const tx = idb.db.transaction('images','readwrite'); tx.objectStore('images').clear(); tx.oncomplete=r; tx.onerror=r; });
+  loadCacheStats();
   alert('✅ 已清除所有缓存');
 }
 
@@ -5878,11 +5984,15 @@ function selectAllWorlds() {
     if (card) card.classList.toggle('selected', selectedWorldIds.has(w.id));
     const chk = card?.querySelector('[title="选择"]');
     if (chk) {
-      chk.style.background = selectedWorldIds.has(w.id) ? 'var(--accent)' : 'rgba(0,0,0,0.4)';
-      chk.style.borderColor = selectedWorldIds.has(w.id) ? 'var(--accent)' : 'rgba(255,255,255,0.4)';
-      chk.innerHTML = selectedWorldIds.has(w.id) ? '<span style="color:white;font-size:0.75em;">✓</span>' : '';
+      const sel = selectedWorldIds.has(w.id);
+      chk.style.background = sel ? 'var(--accent)' : 'rgba(0,0,0,0.4)';
+      chk.style.borderColor = sel ? 'var(--accent)' : 'rgba(255,255,255,0.4)';
+      chk.innerHTML = sel ? '<span style="color:white;font-size:0.75em;">✓</span>' : '';
     }
   });
+  // Toggle button text: 全选 ↔ 取消全选
+  const btn = document.getElementById('btnWorldSelectAll');
+  if (btn) btn.textContent = selectedWorldIds.size > 0 ? '取消全选' : '全选';
   _updateWorldActionBtns();
 }
 
@@ -5949,8 +6059,17 @@ function toggleSelectWorld(id, e) {
   e.stopPropagation();
   if (selectedWorldIds.has(id)) selectedWorldIds.delete(id);
   else selectedWorldIds.add(id);
+  const isSelected = selectedWorldIds.has(id);
   const card = document.getElementById('world-card-' + id);
-  if (card) card.classList.toggle('selected', selectedWorldIds.has(id));
+  if (card) {
+    card.classList.toggle('selected', isSelected);
+    const chk = card.querySelector('[title="选择"]');
+    if (chk) {
+      chk.style.background = isSelected ? 'var(--accent)' : 'rgba(0,0,0,0.4)';
+      chk.style.borderColor = isSelected ? 'var(--accent)' : 'rgba(255,255,255,0.4)';
+      chk.innerHTML = isSelected ? '<span style="color:white;font-size:0.75em;">✓</span>' : '';
+    }
+  }
   _updateWorldActionBtns();
 }
 
