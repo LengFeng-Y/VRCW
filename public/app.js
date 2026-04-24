@@ -15,6 +15,7 @@ let visibleAvatars = [];
 let currentTab = "download"; // Track active tab
 let currentUserId = ""; // Current logged-in user's VRChat ID
 let currentGlobalFetchSeq = 0; // Sequence to abort stale background tasks globally
+let currentWorldFetchSeq  = 0; // Separate seq for world fetches — not shared with friend syncs
 let isPriorityTaskRunning = false; // "Foveated" loading lock
 let backgroundLoadQueue = []; // Queue for deferred non-visible tasks
 let myModerations = []; // Player moderations (mute/block)
@@ -5625,7 +5626,7 @@ function switchWorldCategory(cat) {
 }
 
 async function fetchWorlds(category, forceRefresh = false) {
-  const seq = ++currentGlobalFetchSeq;
+  const seq = ++currentWorldFetchSeq;
   currentWorldCategory = category;
   const gridEl  = document.getElementById('worldGrid');
   const statsEl = document.getElementById('worldStats');
@@ -5648,14 +5649,15 @@ async function fetchWorlds(category, forceRefresh = false) {
 
   // ── Step 2: Streaming Refresh ───────────────────────────────────────────
   try {
-    let worlds = [];
+    const freshWorlds = [];
     const updateWorldBatch = (batch) => {
-      if (seq !== currentGlobalFetchSeq || category !== currentWorldCategory) return;
+      if (seq !== currentWorldFetchSeq || category !== currentWorldCategory) return;
       batch.forEach(w => {
-        const idx = allWorlds.findIndex(ex => ex.id === w.id);
-        if (idx !== -1) allWorlds[idx] = Object.assign(allWorlds[idx], w);
-        else allWorlds.push(w);
+        const idx = freshWorlds.findIndex(ex => ex.id === w.id);
+        if (idx !== -1) freshWorlds[idx] = Object.assign(freshWorlds[idx], w);
+        else freshWorlds.push(w);
       });
+      allWorlds = freshWorlds; // replace, never accumulate
       filterWorlds();
       saveWorldBasics(category);
     };
@@ -5667,11 +5669,11 @@ async function fetchWorlds(category, forceRefresh = false) {
       
       let offset = 0;
       while (true) {
-        if (seq !== currentGlobalFetchSeq) return;
+        if (seq !== currentWorldFetchSeq) return;
         const r = await apiCall(`/api/vrc/favorites?type=${favType}&tag=${groupName}&n=100&offset=${offset}`);
         if (!r.ok) break;
         const favs = await r.json();
-        if (!favs || !favs.length || seq !== currentGlobalFetchSeq) break;
+        if (!favs || !favs.length || seq !== currentWorldFetchSeq) break;
         
         const worldIds = favs.map(f => {
             if (f.favoriteId) worldFavoriteIdMap.set(f.favoriteId, f.id);
@@ -5681,7 +5683,7 @@ async function fetchWorlds(category, forceRefresh = false) {
         // High concurrency world metadata refresh
         const CONCURRENCY = 30;
         for (let i = 0; i < worldIds.length; i += CONCURRENCY) {
-            if (seq !== currentGlobalFetchSeq || category !== currentWorldCategory) return;
+            if (seq !== currentWorldFetchSeq || category !== currentWorldCategory) return;
             const chunk = worldIds.slice(i, i + CONCURRENCY);
             const results = await Promise.allSettled(chunk.map(wid => 
                 apiCall(`/api/vrc/worlds/${wid}`).then(async res => {
@@ -5713,7 +5715,7 @@ async function fetchWorlds(category, forceRefresh = false) {
       }
     }
 
-    if (statsEl) {
+    if (seq === currentWorldFetchSeq && statsEl) {
         const invalidCount = allWorlds.filter(w => w.isInvalid).length;
         statsEl.textContent = `${allWorlds.length} 个世界${invalidCount ? ` (${invalidCount} 个失效)` : ''}`;
     }
