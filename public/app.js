@@ -841,7 +841,7 @@ window.loginSaved = async function (idx) {
       }
     } catch (e) {
       const errEl = document.getElementById("login-error");
-      errEl.textContent = "Network error";
+      errEl.textContent = "Network error: " + e.message;
       errEl.style.display = "block";
     }
   }
@@ -885,7 +885,7 @@ async function doLogin() {
       errEl.style.display = "block";
     }
   } catch (e) {
-    errEl.textContent = "Network error";
+    errEl.textContent = "Network error: " + e.message;
     errEl.style.display = "block";
   }
   btn.disabled = false;
@@ -906,7 +906,7 @@ async function doVerify2FA() {
       alert(data.message || "Invalid code");
     }
   } catch (e) {
-    alert("Network error");
+    alert("Network error: " + e.message);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1632,13 +1632,7 @@ function renderGrid(list) {
 
   list.forEach((av) => {
     let thumb = av.thumbnailImageUrl || av.imageUrl || "";
-    if (
-      thumb &&
-      (thumb.includes("api.vrchat.cloud") ||
-        thumb.includes("files.vrchat.cloud"))
-    ) {
-      thumb = `${API_BASE}/api/image?url=${encodeURIComponent(thumb)}&auth=${encodeURIComponent(vrcAuth || "")}`;
-    }
+    thumb = proxyImg(thumb);
 
     const safeId = escHtml(av.id);
     const isOwner = currentUserId && av.authorId === currentUserId;
@@ -6106,22 +6100,38 @@ function toggleSelectWorld(id, e) {
   _updateWorldActionBtns();
 }
 
+// ── World Detail Tab Switcher ──────────────────────────────────────────────
+function switchWorldDetailTab(tab) {
+  const pages = { info: 'wdPageInfo', instances: 'wdPageInstances', raw: 'wdPageRaw' };
+  const btns  = { info: 'wdTabInfo',  instances: 'wdTabInstances',  raw: 'wdTabRaw' };
+  Object.entries(pages).forEach(([t, pageId]) => {
+    const page = document.getElementById(pageId);
+    if (page) page.style.display = (t === tab) ? '' : 'none';
+    const btn = document.getElementById(btns[t]);
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+}
+
 async function openWorldDetail(worldId, worldObj = null) {
   const modal = document.getElementById('worldDetailModal');
   if (!modal) return;
-  
-  // Reset UI to loading state
-  document.getElementById('worldDetailName').textContent = '加载中...';
-  document.getElementById('worldDetailBreadcrumbName').textContent = '加载中...';
-  document.getElementById('worldDetailBreadcrumbAuthor').textContent = '...';
-  document.getElementById('worldDetailInstances').innerHTML = '<div style="color:var(--text-muted);font-size:0.8em;padding:8px;text-align:center;">加载实例中...</div>';
-  document.getElementById('worldDetailFavStatus').textContent = '';
-  document.getElementById('worldDetailBadges').innerHTML = '';
-  document.getElementById('worldDetailRawJson').textContent = '';
-  
-  switchWorldDetailTab('info');
-  if (worldObj) document.getElementById('worldDetailImg').src = proxyImg(worldObj.thumbnailImageUrl||worldObj.imageUrl||'');
+
+  // Show the modal FIRST so the user sees something immediately,
+  // even if subsequent setup throws.
   modal.classList.remove('hidden');
+
+  // Reset UI to loading state
+  const safe = (id) => document.getElementById(id);
+  if (safe('worldDetailName'))          safe('worldDetailName').textContent = '加载中...';
+  if (safe('worldDetailBreadcrumbName'))safe('worldDetailBreadcrumbName').textContent = '加载中...';
+  if (safe('worldDetailBreadcrumbAuthor'))safe('worldDetailBreadcrumbAuthor').textContent = '...';
+  if (safe('worldDetailInstances'))     safe('worldDetailInstances').innerHTML = '<div style="color:var(--text-muted);font-size:0.8em;padding:8px;text-align:center;">加载实例中...</div>';
+  if (safe('worldDetailFavStatus'))     safe('worldDetailFavStatus').textContent = '';
+  if (safe('worldDetailBadges'))        safe('worldDetailBadges').innerHTML = '';
+  if (safe('worldDetailRawJson'))       safe('worldDetailRawJson').textContent = '';
+
+  switchWorldDetailTab('info');
+  if (worldObj) { const img = safe('worldDetailImg'); if (img) img.src = proxyImg(worldObj.thumbnailImageUrl||worldObj.imageUrl||''); }
 
   try {
     const r = await apiCall(`/api/vrc/worlds/${worldId}`);
