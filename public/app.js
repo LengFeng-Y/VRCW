@@ -16,6 +16,7 @@ let currentTab = "download"; // Track active tab
 let currentUserId = ""; // Current logged-in user's VRChat ID
 let currentGlobalFetchSeq = 0; // Sequence to abort stale background tasks globally
 let currentWorldFetchSeq  = 0; // Separate seq for world fetches — not shared with friend syncs
+let selectedWorldIds = new Set(); // Selected world IDs for batch operations
 let isPriorityTaskRunning = false; // "Foveated" loading lock
 let backgroundLoadQueue = []; // Queue for deferred non-visible tasks
 let myModerations = []; // Player moderations (mute/block)
@@ -5632,8 +5633,10 @@ async function fetchWorlds(category, forceRefresh = false) {
   const statsEl = document.getElementById('worldStats');
   if (!gridEl) return;
 
-  // Reset worlds list when switching category to avoid mixing
+  // Reset worlds list and selection when switching category to avoid mixing
   allWorlds = [];
+  selectedWorldIds.clear();
+  _updateWorldActionBtns();
 
   // ── Step 1: Load basics from cache immediately ──────────────────────────
   try {
@@ -5793,6 +5796,27 @@ function filterWorlds() {
   renderWorldGrid(list);
 }
 
+function toggleSelectWorld(id, e) {
+  e.stopPropagation();
+  if (selectedWorldIds.has(id)) selectedWorldIds.delete(id);
+  else selectedWorldIds.add(id);
+  const card = document.getElementById('world-card-' + id);
+  if (card) card.classList.toggle('selected', selectedWorldIds.has(id));
+  _updateWorldActionBtns();
+}
+
+function _updateWorldActionBtns() {
+  const hasSel = selectedWorldIds.size > 0;
+  const isFav  = currentWorldCategory && currentWorldCategory.startsWith('fav_');
+  const unfavBtn = document.getElementById('btnWorldUnfavoriteSelected');
+  const cleanBtn = document.getElementById('btnWorldCleanInvalid');
+  if (unfavBtn) unfavBtn.classList.toggle('hidden', !(hasSel && isFav));
+  if (cleanBtn) {
+    const hasInvalid = allWorlds.some(w => w.isInvalid);
+    cleanBtn.classList.toggle('hidden', !(isFav && hasInvalid));
+  }
+}
+
 function renderWorldGrid(list) {
   const gridEl = document.getElementById('worldGrid');
   if (!gridEl) return;
@@ -5806,9 +5830,11 @@ function renderWorldGrid(list) {
     const thumb = proxyImg(w.thumbnailImageUrl||w.imageUrl||'');
     const pc  = w.occupants || 0;
     const card = document.createElement('div');
-    card.className = `avatar-card ${w.isInvalid ? 'invalid-world' : ''}`; 
+    card.className = `avatar-card ${w.isInvalid ? 'invalid-world' : ''} ${selectedWorldIds.has(w.id) ? 'selected' : ''}`;
     card.style.cursor = 'pointer';
+    card.id = 'world-card-' + w.id;
     if (w.isInvalid) card.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+    card.setAttribute('data-worldid', w.id);
     
     // VRCX Style: How many friends are here?
     const friendsHere = allFriends.filter(f => f.location && f.location.startsWith(w.id)).length;
@@ -5818,6 +5844,9 @@ function renderWorldGrid(list) {
     card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached?'':'img-loading'}">
       ${isCached ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="">` : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`}
       <div class="avatar-name-overlay">${escHtml(w.name||'未知世界')}</div>
+      <div style="position:absolute;top:6px;left:6px;z-index:10;">
+        <div onclick="toggleSelectWorld('${w.id}', event)" style="width:20px;height:20px;border-radius:4px;background:${selectedWorldIds.has(w.id)?'var(--accent)':'rgba(0,0,0,0.4)'};border:2px solid ${selectedWorldIds.has(w.id)?'var(--accent)':'rgba(255,255,255,0.4)'};display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;" title="选择">${selectedWorldIds.has(w.id)?'<span style="color:white;font-size:0.75em;">✓</span>':''}</div>
+      </div>
       <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:4px;z-index:5;">
         ${friendsHere>0 ? `<div style="background:var(--accent);color:white;font-size:0.7em;padding:2px 6px;border-radius:4px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">🤝 ${friendsHere}</div>` : ''}
         ${pc>0 ? `<div class="world-player-badge" style="position:static;margin:0;">👥 ${pc}</div>` : ''}
@@ -5828,6 +5857,85 @@ function renderWorldGrid(list) {
     if (!isCached && thumb) {
       const img = card.querySelector('.avatar-thumb[data-src]');
       if (img) avatarObserver.observe(img);
+    }
+  });
+}
+
+function selectAllWorlds() {
+  const list = allWorlds; // use current allWorlds (filtered view could differ, keep it simple)
+  const allSelected = selectedWorldIds.size > 0 && selectedWorldIds.size === list.length;
+  selectedWorldIds.clear();
+  if (!allSelected) list.forEach(w => selectedWorldIds.add(w.id));
+  list.forEach(w => {
+    const card = document.getElementById('world-card-' + w.id);
+    if (card) card.classList.toggle('selected', selectedWorldIds.has(w.id));
+    // Update checkbox overlay
+    const chk = card?.querySelector('[title="选择"]');
+    if (chk) {
+      chk.style.background = selectedWorldIds.has(w.id) ? 'var(--accent)' : 'rgba(0,0,0,0.4)';
+      chk.style.borderColor = selectedWorldIds.has(w.id) ? 'var(--accent)' : 'rgba(255,255,255,0.4)';
+      chk.innerHTML = selectedWorldIds.has(w.id) ? '<span style="color:white;font-size:0.75em;">✓</span>' : '';
+    }
+  });
+  _updateWorldActionBtns();
+}
+
+async function unfavoriteSelectedWorlds() {
+  if (selectedWorldIds.size === 0) return;
+  const count = selectedWorldIds.size;
+  if (!confirm(`确定要将选中的 ${count} 个世界移出收藏夹吗？`)) return;
+  const ids = [...selectedWorldIds];
+  let success = 0, fail = 0;
+  for (const wid of ids) {
+    const fid = worldFavoriteIdMap.get(wid);
+    if (!fid) { fail++; continue; }
+    try {
+      const resp = await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
+      if (!resp.ok) throw new Error(await resp.text());
+      worldFavoriteIdMap.delete(wid);
+      allWorlds = allWorlds.filter(w => w.id !== wid);
+      selectedWorldIds.delete(wid);
+      const card = document.getElementById('world-card-' + wid);
+      if (card) {
+        card.style.transform = 'scale(0.9)';
+        card.style.opacity = '0';
+        card.style.transition = 'all 0.15s ease';
+        setTimeout(() => card.remove(), 150);
+      }
+      success++;
+    } catch(e) { fail++; }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  try { await idb.set('world_basics_' + currentWorldCategory, allWorlds); } catch(_) {}
+  _updateWorldActionBtns();
+  console.log(`世界取消收藏：成功 ${success}, 失败 ${fail}`);
+}
+
+async function cleanInvalidWorlds() {
+  if (!currentWorldCategory || !currentWorldCategory.startsWith('fav_')) return;
+  const invalid = allWorlds.filter(w => w.isInvalid);
+  if (!invalid.length) {
+    alert('✅ 当前收藏夹没有失效世界');
+    return;
+  }
+  _showCleanupModal({
+    title: '🧹 清理失效世界',
+    invalidItems: invalid,
+    privateNonOwnItems: [],
+    invalidLabel: item => item.name || '失效世界',
+    onConfirm: async (toDelete) => {
+      let success = 0, fail = 0;
+      for (const w of toDelete) {
+        const fid = worldFavoriteIdMap.get(w.id);
+        if (!fid) { fail++; continue; }
+        try {
+          await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
+          success++;
+        } catch(e) { fail++; }
+        await new Promise(r => setTimeout(r, 200));
+      }
+      try { await idb.set('world_basics_' + currentWorldCategory, []); } catch(_) {}
+      fetchWorlds(currentWorldCategory, true);
     }
   });
 }
@@ -5971,6 +6079,131 @@ function closeWorldDetail() {
   document.getElementById('worldDetailModal')?.classList.add('hidden');
   currentWorldDetail = null;
 }
+
+// ── Cache Management Modal ─────────────────────────────────────────────────
+async function showCacheClearModal() {
+  document.getElementById('cacheClearModal')?.remove();
+
+  // Read all cache keys
+  let allKeys = [];
+  try { allKeys = await idb.keys(); } catch(_) {}
+
+  // Define categories with matchers
+  const CATEGORIES = [
+    { id: 'friend',  label: '好友数据',       emoji: '👥', match: k => k === 'friend_basics' },
+    { id: 'profile', label: '个人资料',       emoji: '🪪', match: k => k === 'my_profile' },
+    { id: 'avatar',  label: '模型缓存',       emoji: '🎭', match: k => k.startsWith('avatar') || k.startsWith('avatars_') },
+    { id: 'world',   label: '世界缓存',       emoji: '🌍', match: k => k.startsWith('world') || k.startsWith('worlds_') },
+    { id: 'names',   label: '头像名称映射',   emoji: '📋', match: k => k === 'persistent_avatar_names' },
+    { id: 'images',  label: '图片缓存 (Blob)', emoji: '🖼️', match: () => false, isImages: true },
+    { id: 'other',   label: '其他',           emoji: '📦', match: k => true },
+  ];
+
+  // Assign each key to first matching category
+  const catKeys = {};
+  CATEGORIES.forEach(c => catKeys[c.id] = []);
+  for (const k of allKeys) {
+    let matched = false;
+    for (const cat of CATEGORIES) {
+      if (cat.isImages) continue;
+      if (cat.match(k)) { catKeys[cat.id].push(k); matched = true; break; }
+    }
+    if (!matched) catKeys['other'].push(k);
+  }
+
+  // Estimate image blob count
+  let imageCount = 0;
+  try {
+    imageCount = await new Promise(res => {
+      const tx = idb.db.transaction('images','readonly');
+      const req = tx.objectStore('images').count();
+      req.onsuccess = () => res(req.result);
+      req.onerror  = () => res(0);
+    });
+  } catch(_) {}
+  catKeys['images'] = imageCount > 0 ? Array(imageCount).fill('__img__') : [];
+
+  const modal = document.createElement('div');
+  modal.id = 'cacheClearModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+
+  const rows = CATEGORIES.map(cat => {
+    const count = catKeys[cat.id].length;
+    if (count === 0) return '';
+    return `<label style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,0.03);cursor:pointer;border:1px solid transparent;transition:border-color 0.15s;" onmouseover="this.style.borderColor='var(--border)'" onmouseout="this.style.borderColor='transparent'">
+      <input type="checkbox" id="ccc_${cat.id}" checked style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
+      <span style="font-size:1.2em;">${cat.emoji}</span>
+      <div style="flex:1;">
+        <div style="font-weight:600;font-size:0.88em;">${cat.label}</div>
+        <div style="font-size:0.75em;color:var(--text-muted);">${cat.isImages ? `${count} 个图片 Blob` : `${count} 条记录`}</div>
+      </div>
+    </label>`;
+  }).join('');
+
+  modal.innerHTML = `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:14px;box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2 style="margin:0;font-size:1.1em;">🗑️ 清除本地缓存</h2>
+      <button id="cccClose" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.5em;line-height:1;">×</button>
+    </div>
+    <div style="font-size:0.8em;color:var(--text-muted);background:rgba(255,200,0,0.08);border:1px solid rgba(255,200,0,0.25);border-radius:8px;padding:10px 12px;">
+      ⚠️ 清除后下次打开将重新从 API 拉取，不影响 VRChat 账号数据。
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${rows || '<div style="color:var(--text-muted);font-size:0.85em;text-align:center;padding:20px;">缓存为空，无需清除</div>'}
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button id="cccCancel" class="btn btn-secondary" style="padding:8px 20px;">取消</button>
+      <button id="cccConfirm" class="btn btn-primary" style="padding:8px 20px;background:linear-gradient(135deg,#ef4444,#dc2626);border-color:transparent;">🗑️ 确认清除</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  document.getElementById('cccClose').onclick = close;
+  document.getElementById('cccCancel').onclick = close;
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+
+  document.getElementById('cccConfirm').onclick = async () => {
+    const btn = document.getElementById('cccConfirm');
+    btn.disabled = true;
+    btn.textContent = '清除中...';
+
+    // Collect keys to delete
+    const keysToDelete = [];
+    for (const cat of CATEGORIES) {
+      if (cat.isImages) continue;
+      if (document.getElementById('ccc_' + cat.id)?.checked) {
+        keysToDelete.push(...catKeys[cat.id]);
+      }
+    }
+
+    // Delete from cache store
+    if (keysToDelete.length) {
+      await idb.init();
+      await new Promise(resolve => {
+        const tx = idb.db.transaction('cache', 'readwrite');
+        const store = tx.objectStore('cache');
+        keysToDelete.forEach(k => store.delete(k));
+        tx.oncomplete = resolve;
+        tx.onerror = resolve;
+      });
+    }
+
+    // Clear images store if checked
+    if (document.getElementById('ccc_images')?.checked && imageCount > 0) {
+      await new Promise(resolve => {
+        const tx = idb.db.transaction('images', 'readwrite');
+        tx.objectStore('images').clear();
+        tx.oncomplete = resolve;
+        tx.onerror = resolve;
+      });
+    }
+
+    close();
+    alert(`✅ 已清除 ${keysToDelete.length + (document.getElementById('ccc_images')?.checked ? imageCount : 0)} 条缓存记录`);
+  };
+}
+
 
 function joinWorldInstance() {
   if (!currentWorldDetail) return;

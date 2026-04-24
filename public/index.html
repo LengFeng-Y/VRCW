@@ -156,6 +156,7 @@
                                 data-i18n="btnDownload">Download Selected</button>
                             <button onclick="fetchAvatars(true)" class="btn btn-secondary btn-block"
                                 data-i18n="btnRefresh">Refresh</button>
+                            <button onclick="showCacheClearModal()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.3);">🗑️ 清除缓存</button>
                         </div>
                     </div>
                     <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;">
@@ -456,6 +457,16 @@
                         <div class="category-list">
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchWorldCategory('recent')" id="worldCatRecent" style="width:100%;">🕐 最近访问</button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchWorldCategory('active')" id="worldCatActive" style="width:100%;">🔥 热门世界</button>
+                        </div>
+                    </div>
+                    <div class="sidebar-section">
+                        <h3>操作</h3>
+                        <div class="btn-group">
+                            <button onclick="selectAllWorlds()" class="btn btn-secondary btn-block" id="btnWorldSelectAll">全选</button>
+                            <button onclick="cleanInvalidWorlds()" id="btnWorldCleanInvalid" class="btn btn-warning btn-block hidden">清理失效世界</button>
+                            <button onclick="unfavoriteSelectedWorlds()" id="btnWorldUnfavoriteSelected" class="btn btn-danger-full btn-block hidden">取消选中收藏</button>
+                            <button onclick="fetchWorlds(currentWorldCategory, true)" class="btn btn-secondary btn-block">刷新</button>
+                            <button onclick="showCacheClearModal()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.3);">🗑️ 清除缓存</button>
                         </div>
                     </div>
                     <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;">
