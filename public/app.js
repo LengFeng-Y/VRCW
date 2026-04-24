@@ -4751,6 +4751,11 @@ function renderFriendList(list) {
 
   for (const f of list) {
     const loc = f.location || '';
+    
+    // state 'unknown' = loaded from cache before API returned — show in webOnline
+    // to prevent all cache-loaded friends with empty location being grouped into one fake instance
+    if (f.state === 'unknown') { webOnline.push(f); continue; }
+
     // Fix: If they have a location, they ARE online, even if state is missing
     const isOffline = (f.state === 'offline' || !f.state) && (!loc || loc === 'offline');
     if (isOffline) { offline.push(f); continue; }
@@ -4758,6 +4763,10 @@ function renderFriendList(list) {
     // state 'active' usually means web/mobile. 
     // state 'online' means in-game.
     if (f.state === 'active') { webOnline.push(f); continue; }
+
+    // No location = can't place in an instance
+    if (!loc || loc === 'offline') { offline.push(f); continue; }
+
     if (!instanceMap.has(loc)) instanceMap.set(loc, []);
     instanceMap.get(loc).push(f);
   }
