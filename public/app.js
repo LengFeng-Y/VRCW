@@ -4758,10 +4758,17 @@ function renderFriendList(list) {
   for (const f of list) {
     const loc = f.location || '';
     
-    // Most reliable: has a real world location = in-game
+    // In-game with a real world location (public/friends/hidden/invite instances)
     if (loc.startsWith('wrld_')) {
       if (!instanceMap.has(loc)) instanceMap.set(loc, []);
       instanceMap.get(loc).push(f);
+      continue;
+    }
+    
+    // In-game but in a private/invite room — location is literally 'private'
+    if (loc === 'private' || loc === 'traveling') {
+      if (!instanceMap.has('private')) instanceMap.set('private', []);
+      instanceMap.get('private').push(f);
       continue;
     }
     
@@ -4771,7 +4778,7 @@ function renderFriendList(list) {
       continue;
     }
     
-    // Web/app online, unknown (cache placeholder), active, traveling, etc.
+    // Web/app online, unknown (cache placeholder), active, etc.
     webOnline.push(f);
   }
 
