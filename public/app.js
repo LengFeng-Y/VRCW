@@ -1153,11 +1153,14 @@ function switchTab(tab) {
     document.querySelectorAll(".nav-item, .nav-item-icon, .tab-btn").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(`[onclick*="'${tab}'"]`).forEach(b => b.classList.add("active"));
 
-    const panels = { download:'downloadPanel', upload:'uploadPanel', search:'searchPanel', friends:'friendsPanel', worlds:'worldsPanel', groups:'groupsPanel', assets:'assetsPanel' };
+    const panels = { download:'downloadPanel', upload:'uploadPanel', search:'searchPanel', friends:'friendsPanel', worlds:'worldsPanel', groups:'groupsPanel', assets:'assetsPanel', settings:'settingsPanel' };
     Object.entries(panels).forEach(([key, id]) => {
         const el = document.getElementById(id);
         if (el) el.classList.toggle('active', tab === key);
     });
+    // Also toggle hidden for non-active panels (settings panel uses hidden not active)
+    const sp = document.getElementById('settingsPanel');
+    if (sp) sp.classList.toggle('hidden', tab !== 'settings');
 
     if (tab === "friends") {
       if (!friendsLoaded) initFriendsTab();
@@ -1169,7 +1172,25 @@ function switchTab(tab) {
     }
     if (tab === "groups") loadGroupsPage('mine');
     if (tab === "download") fetchAvatars(true);
+    if (tab === 'assets') initAssetsTab?.();
   });
+}
+
+function switchSettingsPage(page) {
+  ['cache','about'].forEach(p => {
+    const el = document.getElementById('setPage' + p.charAt(0).toUpperCase() + p.slice(1));
+    if (el) el.style.display = p === page ? '' : 'none';
+    const btn = document.getElementById('setCat' + p.charAt(0).toUpperCase() + p.slice(1));
+    if (btn) btn.classList.toggle('active', p === page);
+  });
+}
+
+async function clearAllCacheNow() {
+  if (!confirm('确定要清除所有本地缓存吗？（包括图片 Blob）')) return;
+  await idb.init();
+  await new Promise(r => { const tx = idb.db.transaction('cache','readwrite'); tx.objectStore('cache').clear(); tx.oncomplete=r; tx.onerror=r; });
+  await new Promise(r => { const tx = idb.db.transaction('images','readwrite'); tx.objectStore('images').clear(); tx.oncomplete=r; tx.onerror=r; });
+  alert('✅ 已清除所有缓存');
 }
 
 // ── Categories ──
@@ -5806,15 +5827,13 @@ function toggleSelectWorld(id, e) {
 }
 
 function _updateWorldActionBtns() {
-  const hasSel = selectedWorldIds.size > 0;
-  const isFav  = currentWorldCategory && currentWorldCategory.startsWith('fav_');
-  const unfavBtn = document.getElementById('btnWorldUnfavoriteSelected');
-  const cleanBtn = document.getElementById('btnWorldCleanInvalid');
-  if (unfavBtn) unfavBtn.classList.toggle('hidden', !(hasSel && isFav));
-  if (cleanBtn) {
-    const hasInvalid = allWorlds.some(w => w.isInvalid);
-    cleanBtn.classList.toggle('hidden', !(isFav && hasInvalid));
-  }
+  const hasSel    = selectedWorldIds.size > 0;
+  const isFav     = currentWorldCategory && currentWorldCategory.startsWith('fav_');
+  const hasInvalid = allWorlds.some(w => w.isInvalid);
+
+  // Mirror the same hidden-toggle pattern used by the avatar panel (switchCategory)
+  document.getElementById('btnWorldCleanInvalid')?.classList.toggle('hidden', !(isFav && hasInvalid));
+  document.getElementById('btnWorldUnfavoriteSelected')?.classList.toggle('hidden', !(hasSel && isFav));
 }
 
 function renderWorldGrid(list) {

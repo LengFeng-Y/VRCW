@@ -94,6 +94,10 @@
                     <button class="nav-item" onclick="switchTab('search')" id="navItemSearch">
                         <span class="nav-icon">🔍</span><span class="nav-label">搜索</span>
                     </button>
+                    <div style="height:1px;background:var(--border);margin:4px 0;"></div>
+                    <button class="nav-item" onclick="switchTab('settings')" id="navItemSettings">
+                        <span class="nav-icon">⚙️</span><span class="nav-label">高级设置</span>
+                    </button>
                 </div>
                 <div class="global-nav-footer">
                     <div class="lang-switch" style="flex-direction:column;background:transparent;gap:2px;">
@@ -115,7 +119,9 @@
                 <button class="nav-item-icon" onclick="switchTab('upload')" id="navIconUpload" title="上传">⬆️</button>
                 <button class="nav-item-icon" onclick="switchTab('assets')" id="navIconAssets" title="资产">💰</button>
                 <button class="nav-item-icon" onclick="switchTab('search')" id="navIconSearch" title="搜索">🔍</button>
-                <button class="nav-item-icon" onclick="doLogout()" title="退出" style="margin-top:auto;color:var(--error);">🚪</button>
+                <hr style="width:70%;border-color:var(--border);margin:2px 0;">
+                <button class="nav-item-icon" onclick="switchTab('settings')" id="navIconSettings" title="高级设置">⚙️</button>
+                <button class="nav-item-icon" onclick="doLogout()" title="退出" style="margin-top:auto;color:var(--error);">🚩</button>
             </div>
 
         <div class="main-content">
@@ -156,7 +162,6 @@
                                 data-i18n="btnDownload">Download Selected</button>
                             <button onclick="fetchAvatars(true)" class="btn btn-secondary btn-block"
                                 data-i18n="btnRefresh">Refresh</button>
-                            <button onclick="showCacheClearModal()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.3);">🗑️ 清除缓存</button>
                         </div>
                     </div>
                     <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;">
@@ -466,7 +471,6 @@
                             <button onclick="cleanInvalidWorlds()" id="btnWorldCleanInvalid" class="btn btn-warning btn-block hidden">清理失效世界</button>
                             <button onclick="unfavoriteSelectedWorlds()" id="btnWorldUnfavoriteSelected" class="btn btn-danger-full btn-block hidden">取消选中收藏</button>
                             <button onclick="fetchWorlds(currentWorldCategory, true)" class="btn btn-secondary btn-block">刷新</button>
-                            <button onclick="showCacheClearModal()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.3);">🗑️ 清除缓存</button>
                         </div>
                     </div>
                     <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;">
@@ -553,6 +557,46 @@
             </div>
         </div>
     </div>
+
+
+            <!-- Settings Panel -->
+            <div id="settingsPanel" class="download-panel upload-panel hidden">
+                <div class="sidebar">
+                    <div class="sidebar-section">
+                        <h3>⚙️ 高级设置</h3>
+                        <div class="btn-group">
+                            <button class="btn btn-secondary btn-block cat-btn active" onclick="switchSettingsPage("cache")" id="setCatCache">🗑️ 缓存管理</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchSettingsPage("about")" id="setCatAbout">ℹ️ 关于</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid-area" style="padding:24px;overflow-y:auto;" id="settingsContentArea">
+                    <div id="setPageCache">
+                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">🗑️ 缓存管理</h2>
+                        <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">管理本地 IndexedDB 缓存。清除后数据将在下次访问时重新从 API 拉取，不影响 VRChat 账号。</p>
+                        <div style="display:flex;flex-direction:column;gap:12px;max-width:480px;">
+                            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;justify-content:space-between;align-items:center;">
+                                <div>
+                                    <div style="font-weight:600;font-size:0.9em;">选择性清除缓存</div>
+                                    <div style="font-size:0.78em;color:var(--text-muted);margin-top:3px;">按分类勾选要清除的缓存内容</div>
+                                </div>
+                                <button onclick="showCacheClearModal()" class="btn btn-primary" style="padding:8px 18px;font-size:0.85em;">打开管理器</button>
+                            </div>
+                            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;justify-content:space-between;align-items:center;">
+                                <div>
+                                    <div style="font-weight:600;font-size:0.9em;">清除全部缓存</div>
+                                    <div style="font-size:0.78em;color:var(--text-muted);margin-top:3px;">一键清除所有 IDB 缓存（含图片 Blob）</div>
+                                </div>
+                                <button onclick="clearAllCacheNow()" class="btn btn-secondary" style="padding:8px 18px;font-size:0.85em;color:#f87171;border-color:rgba(248,113,113,0.35);">全部清除</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="setPageAbout" style="display:none;">
+                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">ℹ️ 关于</h2>
+                        <p style="color:var(--text-muted);font-size:0.85rem;">VRChat Avatar Manager — Workers Edition</p>
+                    </div>
+                </div>
+            </div>
 
     <div id="friendProfileModal" class="modal hidden" onclick="if(event.target===this)closeFriendProfile()">
         <div class="modal-content" style="max-width:680px;width:100%;padding:0;overflow:hidden;max-height:90vh;display:flex;flex-direction:column;">
