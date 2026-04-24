@@ -4145,11 +4145,39 @@ async function fetchMyProfile(forceRefresh = false) {
       renderSidebarMiniProfile(cached);
     }
 
-    // 2. Always fetch fresh from API (gets latest location, status etc.)
+    // 2. Always fetch fresh from API (gets latest status etc.)
     const resp = await apiCall('/api/vrc/auth/user', { cache: 'no-store' });
     if (!resp.ok) throw new Error('Failed to fetch profile');
     const fresh = await resp.json();
     myProfileData = fresh;
+
+    // 3. auth/user may not return location — fetch it from users/{id}
+    //    which always includes the current in-game location
+    if (fresh.id) {
+      apiCall('/api/vrc/users/' + fresh.id).then(r => r.ok ? r.json() : null).then(full => {
+        if (!full) return;
+        myProfileData.location = full.location || myProfileData.location;
+        myProfileData.state    = full.state    || myProfileData.state;
+        // Update the location row without a full re-render
+        const locRow = document.getElementById('myProfileLocRow');
+        const locEl  = document.getElementById('myProfileLocText');
+        const loc = myProfileData.location;
+        if (locRow && locEl) {
+          if (loc && loc !== 'offline' && loc !== 'private') {
+            locRow.style.display = '';
+            getLocationDisplay(loc).then(txt => {
+              locEl.innerHTML = `<a href="#" onclick="openInstanceDetail('${escHtml(loc)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a> <button onclick="inviteSelf('${escHtml(loc)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;vertical-align:middle;">📩 邀请自己</button>`;
+            }).catch(() => { locEl.textContent = loc; });
+          } else if (loc === 'private') {
+            locRow.style.display = '';
+            locEl.textContent = '🔒 私人房间';
+          } else {
+            locRow.style.display = 'none';
+          }
+        }
+      }).catch(() => {});
+    }
+
     await idb.set('my_profile', fresh); // update cache
     const u = fresh;
     // Render profile INLINE into the right panel area
@@ -4351,16 +4379,19 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
   const friendMap = new Map();
 
   // ── Step 1: Load basics from cache immediately ──────────────────────────
+  let isLoadingFromCache = false;
   try {
     const cachedBasics = await idb.get('friend_basics') || [];
     if (cachedBasics.length > 0) {
-      // Initialize allFriends with cached basics (set to offline initially)
+      // Keep last known status from cache — don't force offline, that causes filter flash
       allFriends = cachedBasics.map(b => ({
         ...b,
-        status: 'offline',
-        location: 'offline',
-        state: 'offline'
+        // Only use cached status if it's stored, otherwise default to unknown
+        status: b.status || 'unknown',
+        location: b.location || '',
+        state: b.state || 'unknown'
       }));
+      isLoadingFromCache = true;
       filterFriends();
       if (statsEl) statsEl.textContent = `加载中... (${allFriends.length} 名缓存)`;
     } else {
@@ -4393,7 +4424,11 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
       userIcon: f.userIcon,
       profilePicOverrideThumbnail: f.profilePicOverrideThumbnail,
       tags: f.tags,
-      last_platform: f.last_platform
+      last_platform: f.last_platform,
+      // Persist last known volatile fields to avoid filter flash on next load
+      status: f.status,
+      location: f.location,
+      state: f.state
     }));
     idb.set('friend_basics', basics).catch(()=>{});
   };
