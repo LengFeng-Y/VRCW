@@ -5766,6 +5766,9 @@ async function fetchWorlds(category, forceRefresh = false) {
   selectedWorldIds.clear();
   _updateWorldActionBtns();
 
+  const catLabel = category.startsWith('fav_') ? `收藏夹 [${category.slice(4)}]` : category;
+  worldLogMsg(`📂 切换到 ${catLabel}`, 'info');
+
   // ── Step 1: Load basics from cache immediately ──────────────────────────
   try {
     const cachedBasics = await idb.get('world_basics_' + category) || [];
@@ -5773,14 +5776,17 @@ async function fetchWorlds(category, forceRefresh = false) {
       allWorlds = cachedBasics;
       filterWorlds();
       if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界 (缓存)`;
+      worldLogMsg(`⚡ 从缓存加载了 ${cachedBasics.length} 个世界`, 'info');
     } else {
       gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.3);">加载中...</div>';
+      worldLogMsg('🌐 从 API 获取世界列表...', 'info');
     }
   } catch(_) {}
 
   // ── Step 2: Streaming Refresh ───────────────────────────────────────────
   try {
     const freshWorlds = [];
+    let batchCount = 0;
     const updateWorldBatch = (batch) => {
       if (seq !== currentWorldFetchSeq || category !== currentWorldCategory) return;
       batch.forEach(w => {
@@ -5788,9 +5794,11 @@ async function fetchWorlds(category, forceRefresh = false) {
         if (idx !== -1) freshWorlds[idx] = Object.assign(freshWorlds[idx], w);
         else freshWorlds.push(w);
       });
-      allWorlds = freshWorlds; // replace, never accumulate
+      allWorlds = freshWorlds;
+      batchCount += batch.length;
       filterWorlds();
       saveWorldBasics(category);
+      worldLogMsg(`🔄 已加载 ${freshWorlds.length} 个世界...`, 'info');
     };
 
     if (category.startsWith('fav_')) {
@@ -5802,7 +5810,7 @@ async function fetchWorlds(category, forceRefresh = false) {
       while (true) {
         if (seq !== currentWorldFetchSeq) return;
         const r = await apiCall(`/api/vrc/favorites?type=${favType}&tag=${groupName}&n=100&offset=${offset}`);
-        if (!r.ok) break;
+        if (!r.ok) { worldLogMsg(`✗ 获取收藏列表失败 (HTTP ${r.status})`, 'error'); break; }
         const favs = await r.json();
         if (!favs || !favs.length || seq !== currentWorldFetchSeq) break;
         
@@ -5823,6 +5831,8 @@ async function fetchWorlds(category, forceRefresh = false) {
                 })
             ));
             const freshBatch = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+            const invalids = freshBatch.filter(w => w.isInvalid).length;
+            if (invalids > 0) worldLogMsg(`⚠ 发现 ${invalids} 个失效世界`, 'error');
             updateWorldBatch(freshBatch);
         }
         if (favs.length < 100) break;
@@ -5843,15 +5853,18 @@ async function fetchWorlds(category, forceRefresh = false) {
       if (url) {
           const r = await apiCall(url);
           if (r.ok) updateWorldBatch(await r.json() || []);
+          else worldLogMsg(`✗ 获取失败 (HTTP ${r.status})`, 'error');
       }
     }
 
     if (seq === currentWorldFetchSeq && statsEl) {
         const invalidCount = allWorlds.filter(w => w.isInvalid).length;
         statsEl.textContent = `${allWorlds.length} 个世界${invalidCount ? ` (${invalidCount} 个失效)` : ''}`;
+        worldLogMsg(`✅ 加载完成：${allWorlds.length} 个世界${invalidCount ? `，${invalidCount} 个失效` : ''}`, invalidCount > 0 ? 'error' : 'success');
     }
   } catch(e) {
     console.error('World fetch error', e);
+    worldLogMsg(`✗ 加载出错: ${e.message}`, 'error');
   }
 }
 
@@ -6001,11 +6014,13 @@ async function unfavoriteSelectedWorlds() {
   if (selectedWorldIds.size === 0) return;
   const count = selectedWorldIds.size;
   if (!confirm(`确定要将选中的 ${count} 个世界移出收藏夹吗？`)) return;
+  worldLogMsg(`🗑️ 开始批量移除 ${count} 个收藏...`, 'info');
   const ids = [...selectedWorldIds];
   let success = 0, fail = 0;
   for (const wid of ids) {
     const fid = worldFavoriteIdMap.get(wid);
-    if (!fid) { fail++; continue; }
+    const wName = allWorlds.find(w => w.id === wid)?.name || wid;
+    if (!fid) { fail++; worldLogMsg(`⚠ ${wName}: 找不到收藏 ID`, 'error'); continue; }
     try {
       const resp = await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
       if (!resp.ok) throw new Error(await resp.text());
@@ -6020,10 +6035,12 @@ async function unfavoriteSelectedWorlds() {
         setTimeout(() => card.remove(), 150);
       }
       success++;
-    } catch(e) { fail++; }
+      worldLogMsg(`✓ 已移除 ${wName}`, 'success');
+    } catch(e) { fail++; worldLogMsg(`✗ 移除失败 ${wName}: ${e.message}`, 'error'); }
     await new Promise(r => setTimeout(r, 300));
   }
   try { await idb.set('world_basics_' + currentWorldCategory, allWorlds); } catch(_) {}
+  worldLogMsg(`✅ 批量移除完成：成功 ${success}，失败 ${fail}`, success > 0 ? 'success' : 'error');
   _updateWorldActionBtns();
 }
 
@@ -6031,25 +6048,30 @@ async function cleanInvalidWorlds() {
   if (!currentWorldCategory || !currentWorldCategory.startsWith('fav_')) return;
   const invalid = allWorlds.filter(w => w.isInvalid);
   if (!invalid.length) {
+    worldLogMsg('✅ 当前收藏夹没有失效世界', 'success');
     alert('✅ 当前收藏夹没有失效世界');
     return;
   }
+  worldLogMsg(`🧹 发现 ${invalid.length} 个失效世界，准备清理...`, 'info');
   _showCleanupModal({
     title: '🧹 清理失效世界',
     invalidItems: invalid,
     privateNonOwnItems: [],
     invalidLabel: item => item.name || '失效世界',
     onConfirm: async (toDelete) => {
+      worldLogMsg(`🗑️ 开始清理 ${toDelete.length} 个失效世界...`, 'info');
       let success = 0, fail = 0;
       for (const w of toDelete) {
         const fid = worldFavoriteIdMap.get(w.id);
-        if (!fid) { fail++; continue; }
+        if (!fid) { fail++; worldLogMsg(`⚠ ${w.name}: 找不到收藏 ID`, 'error'); continue; }
         try {
           await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
           success++;
-        } catch(e) { fail++; }
+          worldLogMsg(`✓ 已移除失效世界: ${w.name || w.id}`, 'success');
+        } catch(e) { fail++; worldLogMsg(`✗ 移除失败: ${e.message}`, 'error'); }
         await new Promise(r => setTimeout(r, 200));
       }
+      worldLogMsg(`✅ 清理完毕：成功 ${success}，失败 ${fail}`, success > 0 ? 'success' : 'error');
       try { await idb.set('world_basics_' + currentWorldCategory, []); } catch(_) {}
       fetchWorlds(currentWorldCategory, true);
     }
