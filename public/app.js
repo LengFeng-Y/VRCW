@@ -4150,7 +4150,7 @@ async function fetchMyProfile(forceRefresh = false) {
     if (!resp.ok) throw new Error('Failed to fetch profile');
     const fresh = await resp.json();
     myProfileData = fresh;
-    await idb.put('my_profile', fresh); // update cache
+    await idb.set('my_profile', fresh); // update cache
     const u = fresh;
     // Render profile INLINE into the right panel area
     renderMyProfile(u);
