@@ -1,49 +1,58 @@
-const CACHE_NAME = 'vrcw-cache-v1';
-const urlsToCache = [
-  './',
-  './index.html',
-  './style.css',
-  './app.js',
-  './manifest.json'
-];
+/**
+ * VRCW Service Worker — Image Cache
+ * Intercepts /api/image?url=...&auth=... requests.
+ * Uses a stable cache key (URL without auth param) so the browser can
+ * cache avatar/world thumbnails indefinitely.
+ * After first view, images NEVER hit Cloudflare again.
+ */
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
-  );
-  self.skipWaiting();
-});
+const CACHE_NAME = 'vrcw-img-v1';
+const IMAGE_PATH = '/api/image';
 
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-  self.clients.claim();
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('fetch', event => {
-  // Only cache GET requests for same origin static assets
-  if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
-    return;
-  }
-  
-  // Skip API calls from caching aggressively
-  if (event.request.url.includes('/api/')) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
+  const url = new URL(event.request.url);
+  if (!url.pathname.endsWith(IMAGE_PATH) && url.pathname !== IMAGE_PATH) return;
 
-  // Network First strategy for the app shell to ensure latest version is fetched
+  // Build a stable cache key — same image URL regardless of auth token
+  const imageUrl = url.searchParams.get('url');
+  if (!imageUrl) return;
+  const stableKey = new Request(url.origin + IMAGE_PATH + '?url=' + encodeURIComponent(imageUrl));
+
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    caches.open(CACHE_NAME).then(async cache => {
+      // 1. Serve from cache if available
+      const cached = await cache.match(stableKey);
+      if (cached) return cached;
+
+      // 2. Fetch from network (hits Cloudflare Worker once)
+      try {
+        const response = await fetch(event.request);
+        if (response.ok && response.status === 200) {
+          // Clone before consuming, cache with stable key
+          cache.put(stableKey, response.clone());
+        }
+        return response;
+      } catch (e) {
+        // Network failure — return a transparent 1x1 pixel fallback
+        return new Response(
+          atob('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'),
+          { status: 200, headers: { 'Content-Type': 'image/gif' } }
+        );
+      }
+    })
   );
+});
+
+// Expose a way for the app to evict old image caches
+self.addEventListener('message', event => {
+  if (event.data === 'clearImageCache') {
+    caches.delete(CACHE_NAME).then(() => {
+      event.source?.postMessage({ type: 'imageCacheCleared' });
+    });
+  }
 });

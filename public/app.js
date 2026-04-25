@@ -6476,6 +6476,12 @@ async function showCacheClearModal() {
         tx.oncomplete = resolve;
         tx.onerror = resolve;
       });
+      // Also clear Service Worker image cache
+      if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage('clearImageCache');
+      } else {
+        caches.delete('vrcw-img-v1').catch(() => {});
+      }
     }
 
     close();
