@@ -4143,6 +4143,23 @@ function getPlatformEmoji(platform) {
 
 // Bug#1 fix: parse location AND cache world name for display
 const worldNameCache = new Map();
+// Load persisted world names from IDB on startup
+idb.get('world_name_cache').then(saved => {
+  if (saved && typeof saved === 'object') {
+    Object.entries(saved).forEach(([k, v]) => worldNameCache.set(k, v));
+  }
+}).catch(() => {});
+
+let _saveWorldNameCacheTimer = null;
+function _saveWorldNameCache() {
+  clearTimeout(_saveWorldNameCacheTimer);
+  _saveWorldNameCacheTimer = setTimeout(() => {
+    const obj = {};
+    worldNameCache.forEach((v, k) => { obj[k] = v; });
+    idb.set('world_name_cache', obj).catch(() => {});
+  }, 2000); // Debounced: batch all lookups into one IDB write
+}
+
 async function getLocationDisplay(location, worldId) {
   if (!location || location === 'offline') return '离线';
   if (location === 'private')   return '🔒 私人房间';
@@ -4164,7 +4181,12 @@ async function getLocationDisplay(location, worldId) {
   if (!worldName && wid && wid.startsWith('wrld_')) {
     try {
       const r = await apiCall(`/api/vrc/worlds/${wid}`);
-      if (r.ok) { const w = await r.json(); worldName = w.name; worldNameCache.set(wid, worldName); }
+      if (r.ok) {
+        const w = await r.json();
+        worldName = w.name;
+        worldNameCache.set(wid, worldName);
+        _saveWorldNameCache(); // Persist to IDB for next session
+      }
     } catch(_) {}
   }
   return `${regionFlag} ${worldName || wid} · ${type}`;
@@ -4210,10 +4232,8 @@ function worldLogMsg(msg, type = 'info') {
 
 function proxyImg(url) {
   if (!url) return '';
-  // files.vrchat.cloud is the public CDN — load directly to skip Worker requests
-  if (url.includes('files.vrchat.cloud')) return url;
-  // api.vrchat.cloud needs auth + redirect handling via Worker proxy
-  if (url.includes('api.vrchat.cloud'))
+  // All VRChat images go through Worker proxy (SW caches them after first view)
+  if (url.includes('api.vrchat.cloud') || url.includes('files.vrchat.cloud'))
     return `${API_BASE}/api/image?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(vrcAuth || '')}`;
   return url;
 }
