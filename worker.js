@@ -242,7 +242,7 @@ export default {
                     status: 200,
                     headers: {
                         "Content-Type": imgResp.headers.get("content-type") || "image/jpeg",
-                        "Cache-Control": "public, max-age=86400",
+                        "Cache-Control": "public, max-age=604800, immutable",
                         ...CORS_HEADERS
                     }
                 });

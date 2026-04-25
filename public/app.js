@@ -617,7 +617,19 @@ function applyI18n(root = document) {
 // ── API Helper ──
 let currentTabAbortController = null;
 
+const apiCache = new Map();
 async function apiCall(path, options = {}) {
+  const isGet = !options.method || options.method === 'GET';
+  const cacheKey = path + (options.body || '');
+  
+  // Return from memory cache if recent (5 seconds) to prevent burst requests
+  if (isGet && apiCache.has(cacheKey)) {
+    const entry = apiCache.get(cacheKey);
+    if (Date.now() - entry.time < 5000) {
+      return entry.resp.clone();
+    }
+  }
+
   const headers = options.headers || {};
   if (vrcAuth) headers["X-VRC-Auth"] = vrcAuth;
   if (options.json) {
@@ -639,6 +651,12 @@ async function apiCall(path, options = {}) {
       vrcAuth = newAuth;
       localStorage.setItem("vrc_auth", vrcAuth);
     }
+    
+    // Cache GET responses
+    if (isGet && resp.ok) {
+      apiCache.set(cacheKey, { resp: resp.clone(), time: Date.now() });
+    }
+
     return resp;
   } catch (err) {
     if (err.name === 'AbortError') {
@@ -1406,9 +1424,8 @@ async function fetchAvatars(forceRefresh = false) {
     idb.set("avatar_basics_" + currentCategory, basics).catch(()=>{});
     logMsg(`✅ Sync complete: ${avatars.length} avatars`, "success");
 
-    // Fire background batch prefetch — Worker downloads all thumbnails concurrently
-    // from VRC servers at edge speed and caches them, so browser image loads are instant
-    prefetchThumbnails(allFetched);
+    // Optimized: Disable background prefetch to save Cloudflare Worker requests
+    // prefetchThumbnails(allFetched);
 
     try {
       await idb.set("avatars_" + currentCategory, allFetched);
@@ -4193,7 +4210,10 @@ function worldLogMsg(msg, type = 'info') {
 
 function proxyImg(url) {
   if (!url) return '';
-  if (url.includes('api.vrchat.cloud') || url.includes('files.vrchat.cloud'))
+  // files.vrchat.cloud is the public CDN — load directly to skip Worker requests
+  if (url.includes('files.vrchat.cloud')) return url;
+  // api.vrchat.cloud needs auth + redirect handling via Worker proxy
+  if (url.includes('api.vrchat.cloud'))
     return `${API_BASE}/api/image?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(vrcAuth || '')}`;
   return url;
 }
@@ -4779,7 +4799,7 @@ setInterval(() => {
       }
     }).catch(()=>{});
   }
-}, 60000);
+}, 300000); // Optimized: Poll every 5 minutes instead of 1 minute to save quota
 
 async function openFriendProfileById(userId) {
   try {
@@ -5785,13 +5805,22 @@ async function fetchWorlds(category, forceRefresh = false) {
   worldLogMsg(`📂 切换到 ${catLabel}`, 'info');
 
   // ── Step 1: Load basics from cache immediately ──────────────────────────
+  const WORLDS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+  let cacheIsFresh = false;
   try {
     const cachedBasics = await idb.get('world_basics_' + category) || [];
+    const cacheAge = await idb.get('world_basics_age_' + category) || 0;
+    cacheIsFresh = cachedBasics.length > 0 && !forceRefresh && (Date.now() - cacheAge) < WORLDS_CACHE_TTL;
+
     if (cachedBasics.length > 0 && !forceRefresh) {
       allWorlds = cachedBasics;
       filterWorlds();
-      if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界 (缓存)`;
-      worldLogMsg(`⚡ 从缓存加载了 ${cachedBasics.length} 个世界`, 'info');
+      const freshLabel = cacheIsFresh ? '缓存' : '缓存(刷新中)';
+      if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界 (${freshLabel})`;
+      worldLogMsg(`⚡ 从缓存加载了 ${cachedBasics.length} 个世界${cacheIsFresh ? '，缓存有效跳过API' : ''}`, 'info');
+
+      // If cache is still fresh, skip API refresh entirely — saves 87+ requests
+      if (cacheIsFresh) return;
     } else {
       gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.3);">加载中...</div>';
       worldLogMsg('🌐 从 API 获取世界列表...', 'info');
@@ -5834,8 +5863,8 @@ async function fetchWorlds(category, forceRefresh = false) {
             return f.favoriteId;
         }).filter(Boolean);
 
-        // High concurrency world metadata refresh
-        const CONCURRENCY = 30;
+        // Reduced concurrency to prevent request burst on Cloudflare free tier
+        const CONCURRENCY = 5;
         for (let i = 0; i < worldIds.length; i += CONCURRENCY) {
             if (seq !== currentWorldFetchSeq || category !== currentWorldCategory) return;
             const chunk = worldIds.slice(i, i + CONCURRENCY);
@@ -5896,6 +5925,7 @@ function saveWorldBasics(cat) {
         isInvalid: w.isInvalid
     }));
     idb.set('world_basics_' + cat, basics).catch(()=>{});
+    idb.set('world_basics_age_' + cat, Date.now()).catch(()=>{}); // TTL timestamp
 }
 
 async function cleanupInvalidWorlds() {
