@@ -667,97 +667,160 @@ async function apiCall(path, options = {}) {
   }
 }
 
-// ── Polled Asynchronous Image Loading ──
+// ── Smart Image Loading with Viewport Cancellation ──
+// - Entering viewport  → start load (AbortController attached)
+// - Leaving viewport   → abort fetch if incomplete, restore data-src for retry
+// - Load complete      → unobserve, cleanup
 const imageQueue = [];
 let runningLoads = 0;
 const MAX_CONCURRENT_IMAGES = 6;
 const loadedImageUrls = new Set();
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 function processImageQueue() {
   while (runningLoads < MAX_CONCURRENT_IMAGES && imageQueue.length > 0) {
     runningLoads++;
     const { img, src } = imageQueue.shift();
-    const wrapper = img.parentElement;
 
-    // Use the 'url=' part of proxy as stable cache key
+    // Skip if cancelled while waiting in queue
+    if (img.dataset.cancelled) {
+      delete img.dataset.loading;
+      delete img.dataset.cancelled;
+      runningLoads--;
+      continue;
+    }
+
+    const wrapper = img.parentElement;
     const cacheKey = src.includes('url=') ? decodeURIComponent(src.split('url=')[1].split('&')[0]) : src;
 
-    const cleanup = () => {
+    // Called on successful load or permanent failure
+    const finishLoad = (success) => {
       img.onload = img.onerror = null;
-      img.classList.remove("loading");
-      if (wrapper) wrapper.classList.remove("img-loading");
+      delete img._abortCtrl;
+      img.classList.remove('loading');
+      if (wrapper) wrapper.classList.remove('img-loading');
+      runningLoads--;
+      if (success) {
+        img.removeAttribute('data-src');
+        delete img.dataset.loading;
+        avatarObserver.unobserve(img);
+      }
+      processImageQueue();
+    };
+
+    // Called when fetch is aborted (scrolled out) — restore state for retry
+    const cancelLoad = () => {
+      img.onload = img.onerror = null;
+      delete img._abortCtrl;
+      delete img.dataset.cancelled;
+      delete img.dataset.loading; // Allow re-queuing on next intersection
+      img.classList.remove('loading');
+      if (wrapper) wrapper.classList.remove('img-loading');
+      // Don't unobserve — observer will retrigger when image re-enters viewport
       runningLoads--;
       processImageQueue();
     };
 
-    img.onload = () => {
-      loadedImageUrls.add(src);
-      cleanup();
-    };
-
+    img.onload = () => { loadedImageUrls.add(src); finishLoad(true); };
     img.onerror = () => {
-      const retryCount = parseInt(img.dataset.retry || "0");
-      if (retryCount < 2) {
+      const retryCount = parseInt(img.dataset.retry || '0');
+      if (retryCount < 2 && !img.dataset.cancelled) {
         img.dataset.retry = retryCount + 1;
         imageQueue.push({ img, src });
+        finishLoad(false);
       } else {
-        img.classList.add("failed");
-        if (wrapper) wrapper.classList.add("img-failed");
+        img.classList.add('failed');
+        if (wrapper) wrapper.classList.add('img-failed');
+        img.removeAttribute('data-src');
+        delete img.dataset.loading;
+        avatarObserver.unobserve(img);
+        finishLoad(false);
       }
-      cleanup();
     };
 
-    // ── Check Cache First ──
+    img.classList.add('loading');
+    if (wrapper) wrapper.classList.add('img-loading');
+
+    // Check IDB cache first (instant, no network)
     idb.getImage(cacheKey).then(blob => {
+      if (img.dataset.cancelled) { cancelLoad(); return; }
+
       if (blob) {
         img.src = URL.createObjectURL(blob);
-        cleanup(); // MUST release slot and process next
+        // onload fires → finishLoad(true)
       } else {
-        // Not in cache, fetch and store
-        // FOVEATED: Double check priority lock before starting expensive image fetch
+        // Yield to priority tasks (tab switches etc.)
         if (isPriorityTaskRunning) {
-          imageQueue.push({ img, src });
+          imageQueue.unshift({ img, src });
           runningLoads--;
-          setTimeout(processImageQueue, 1000);
+          setTimeout(processImageQueue, 500);
           return;
         }
 
-        fetch(src).then(r => r.blob()).then(blob => {
-          if (blob && blob.type.startsWith('image/')) {
-            idb.setImage(cacheKey, blob);
-            img.src = URL.createObjectURL(blob);
-          } else {
-            img.src = src; // Fallback to direct load
-          }
-          cleanup();
-        }).catch(() => {
-          img.src = src; // Fallback
-          cleanup();
-        });
-      }
-    });
+        // Fetch with AbortController so we can cancel mid-flight
+        const ctrl = new AbortController();
+        img._abortCtrl = ctrl;
 
-    img.classList.add("loading");
-    if (wrapper) wrapper.classList.add("img-loading");
+        fetch(src, { signal: ctrl.signal })
+          .then(r => r.blob())
+          .then(blob => {
+            delete img._abortCtrl;
+            if (img.dataset.cancelled) { cancelLoad(); return; }
+            if (blob && blob.type.startsWith('image/')) {
+              idb.setImage(cacheKey, blob);
+              img.src = URL.createObjectURL(blob);
+              // onload fires → finishLoad(true)
+            } else {
+              img.src = src; // Fallback direct URL
+            }
+          })
+          .catch(e => {
+            delete img._abortCtrl;
+            if (e.name === 'AbortError') {
+              cancelLoad(); // Clean cancel — restore for retry
+            } else {
+              img.src = src; // Network error fallback
+            }
+          });
+      }
+    }).catch(() => { finishLoad(false); });
   }
 }
 
 const avatarObserver = new IntersectionObserver(
-  (entries, observer) => {
+  (entries) => {
     entries.forEach((entry) => {
+      const img = entry.target;
       if (entry.isIntersecting) {
-        const img = entry.target;
-        const src = img.getAttribute("data-src");
-        if (src) {
-          img.removeAttribute("data-src");
+        // Entering viewport: clear cancel flag, queue for load
+        delete img.dataset.cancelled;
+        const src = img.getAttribute('data-src');
+        if (src && !img.dataset.loading) {
+          img.dataset.loading = '1';
           imageQueue.push({ img, src });
-          observer.unobserve(img);
           processImageQueue();
+        }
+      } else {
+        // Leaving viewport: cancel if load is in progress
+        if (img.dataset.loading) {
+          img.dataset.cancelled = '1';
+          // Abort active network fetch
+          if (img._abortCtrl) {
+            img._abortCtrl.abort();
+            // AbortError catch → cancelLoad() will clean up
+          }
+          // Remove from pending queue if not yet started
+          const idx = imageQueue.findIndex(item => item.img === img);
+          if (idx !== -1) {
+            imageQueue.splice(idx, 1);
+            delete img.dataset.loading;
+            delete img.dataset.cancelled; // Already removed, no need to propagate
+          }
         }
       }
     });
   },
-  { rootMargin: "300px" },
+  { rootMargin: '200px' } // Pre-load 200px ahead; cancel sooner than 300px to save requests
 );
 
 // ── Batch Image Prefetch ──
