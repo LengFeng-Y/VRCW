@@ -1046,6 +1046,15 @@ function showMainApp() {
 // ── Sync All Favorites Globally ──
 async function syncAllFavoriteIds() {
   try {
+    // Clear maps to prevent accumulation on sync/refresh
+    favoriteIdMap.clear();
+    worldFavoriteIdMap.clear();
+    avatarFavGroupCounts.clear();
+    worldFavGroupCounts.clear();
+    friendFavoriteIdMap.clear();
+
+
+
     // 1. Avatars
     let offset = 0;
     while (true) {
@@ -4519,6 +4528,8 @@ function renderMyProfile(u) {
   const statCard = (label, val) =>
     `<div class="fp-stat-item"><div class="fp-stat-label">${label}</div><div class="fp-stat-value">${val||'–'}</div></div>`;
 
+
+
   const profileBig = proxyImg(u.profilePicOverride||u.currentAvatarThumbnailImageUrl||u.userIcon||'');
   const avatarThumb = proxyImg(u.currentAvatarThumbnailImageUrl||'');
 
@@ -6796,10 +6807,21 @@ async function joinWorldInstance() {
     allJoinBtns.forEach(b => { b.textContent = '✅ 已邀请'; });
   } catch(e) {
     if (statusEl) { statusEl.textContent = '❌ ' + e.message; statusEl.style.color = 'var(--error)'; }
-    allJoinBtns.forEach(b => { b.textContent = '⚡ 加入世界'; });
+    allJoinBtns.forEach(b => {
+      if (b.id === 'worldDetailJoinBtn') b.innerHTML = '⚡';
+      else b.textContent = '⚡ 加入世界';
+    });
   } finally {
     setTimeout(() => {
-      allJoinBtns.forEach(b => { b.disabled = false; b.innerHTML = '⚡ 加入世界'; });
+      allJoinBtns.forEach(b => { 
+        if(b) {
+          b.disabled = false; 
+          // Restore icon: worldDetailJoinBtn is just an icon, the other is ⚡ 加入世界
+          if (b.id === 'worldDetailJoinBtn') b.innerHTML = '⚡';
+          else b.innerHTML = '⚡ 加入世界';
+          b.classList.remove('btn-success'); 
+        }
+      });
       if (statusEl) statusEl.textContent = '';
     }, 4000);
   }
@@ -6845,14 +6867,11 @@ async function addWorldToFavorite(worldId, groupName, btn) {
 
 function toggleWorldFavMenu(event) {
   const menu = document.getElementById("worldFavMenu");
-  const btn = document.getElementById("worldDetailFavBtn");
+  // Use whichever fav button is currently visible
+  const isMobile = window.innerWidth <= 768;
+  const btn = document.getElementById(isMobile ? "worldDetailFavBtn" : "worldDetailMainFavBtn");
   if (!menu || !btn) return;
-  
-  const w = currentWorldDetail;
-  if (worldFavoriteIdMap.has(w?.id)) {
-    toggleWorldFavorite(); // Pass through to unfavorite logic
-    return;
-  }
+
 
   toggleFavMenuGeneric(event, menu, btn, () => {
     if (worldFavGroups.length === 0) return `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载世界收藏夹</div>`;

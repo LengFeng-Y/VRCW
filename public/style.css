@@ -2237,10 +2237,12 @@ select.input-field {
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto auto;
-    border-radius: 12px;
+    border-radius: 24px; /* increased from 12px for better premium look */
     padding: 8px;
     gap: 6px;
     background: var(--bg-glass);
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   /* Row 1: category + platform side by side */
