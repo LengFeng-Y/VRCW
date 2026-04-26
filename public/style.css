@@ -2398,6 +2398,18 @@ select.input-field {
     padding: 0 !important;
     border-right: none !important;
     border-bottom: 1px solid var(--border) !important;
+    overflow: hidden !important;        /* clip image to exact 180px */
+    flex-shrink: 0 !important;
+  }
+
+  /* Reset inner aspect-ratio wrapper so it fills the 180px col */
+  .world-detail-img-col > div {
+    width: 100% !important;
+    height: 100% !important;
+    aspect-ratio: unset !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
   }
 
   .world-detail-img-col img {
