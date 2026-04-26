@@ -2140,6 +2140,11 @@ select.input-field {
     min-height: 0;
   }
 
+  /* Search panel doesn't need internal scroll — allow dropdown to overflow freely */
+  #searchPanel.upload-panel.active {
+    overflow: visible !important;
+  }
+
   .avatar-grid {
     grid-template-columns: repeat(2, 1fr) !important;
     padding: 12px 8px !important;
