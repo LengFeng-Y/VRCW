@@ -2228,6 +2228,7 @@ select.input-field {
   /* Search bar: 2-row compact grid on mobile */
   .search-container-premium {
     padding: 8px 6px 4px;
+    overflow: visible !important;
   }
 
   .search-box-glass {
@@ -2238,6 +2239,7 @@ select.input-field {
     padding: 8px;
     gap: 6px;
     background: var(--bg-glass);
+    overflow: visible !important;   /* allow dropdown to extend beyond grid */
   }
 
   /* Row 1: category + platform side by side */
@@ -2300,7 +2302,8 @@ select.input-field {
     left: 0;
     right: 0;
     top: 100%;
-    border-radius: 0;
+    border-radius: 16px;     /* restored — was incorrectly set to 0 */
+    z-index: 3000 !important; /* above grid stacking context */
   }
 
   .mobile-hide {
