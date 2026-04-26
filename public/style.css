@@ -2374,6 +2374,86 @@ select.input-field {
   .my-profile-banner {
     margin: -14px -14px 0;
   }
+
+  /* ── World Detail Modal — Mobile Full-Screen ── */
+  .world-detail-modal-content {
+    max-width: 100% !important;
+    max-height: 100dvh !important;
+    height: 100dvh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Stack: image on top, info below */
+  .world-detail-body {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Image: full-width hero, fixed height */
+  .world-detail-img-col {
+    width: 100% !important;
+    height: 200px !important;
+    padding: 0 !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+
+  .world-detail-img-col img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    border-radius: 0 !important;
+  }
+
+  /* Info col: full width, no fixed height */
+  .world-detail-info-col {
+    overflow: visible !important;
+    flex: none !important;
+  }
+
+  /* Reduce padding on mobile */
+  .world-detail-info-header {
+    padding: 16px 16px 0 !important;
+  }
+
+  #worldDetailName {
+    font-size: 1.3em !important;
+  }
+
+  .world-detail-scroll {
+    padding: 16px !important;
+    overflow: visible !important;
+    flex: none !important;
+  }
+
+  /* Collapse 2-col meta grid to 1-col */
+  .world-detail-meta-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* Collapse 3-col dates grid to 2-col */
+  .world-detail-dates-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Hide header icon buttons (⭐ ⚡) on mobile — moved to bottom bar */
+  .world-detail-header-btns .btn-icon:not([title="关闭"]):not([title="删除世界"]) {
+    display: none !important;
+  }
+
+  /* Show the mobile bottom action bar */
+  .world-detail-mobile-actions {
+    display: flex !important;
+  }
+
+  /* Breadcrumb: shorten */
+  .world-detail-header {
+    padding: 12px 14px !important;
+  }
 }
 
 /* ── My Profile Layout Tweaks ── */

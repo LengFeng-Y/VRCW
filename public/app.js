@@ -6144,18 +6144,24 @@ function renderWorldGrid(list) {
 
 // ── Global sync for favorite status ────────────────────────────────────────
 function _broadcastWorldFavUpdate(worldId, isFaved) {
-  // 1. Update all visible cards
+  // 1. Update all visible grid cards
   const btn = document.querySelector(`[data-fav-btn="${worldId}"]`);
   if (btn) {
     btn.textContent = isFaved ? '⭐' : '☆';
     btn.title = isFaved ? '取消收藏' : '添加到收藏夹';
   }
-  // 2. Update detail modal if open
+  // 2. Update mobile bottom action bar button (id=worldDetailFavBtn)
   if (currentWorldDetail && currentWorldDetail.id === worldId) {
-    const favBtn = document.getElementById('worldDetailFavBtn');
-    if (favBtn) {
-      favBtn.innerHTML = isFaved ? '⭐ 取消收藏' : '⭐ 收藏';
-      favBtn.className = isFaved ? 'btn btn-warning' : 'btn btn-secondary';
+    const mobileBtn = document.getElementById('worldDetailFavBtn');
+    if (mobileBtn) {
+      mobileBtn.innerHTML = isFaved ? '⭐ 取消收藏' : '⭐ 收藏';
+      mobileBtn.className = isFaved ? 'btn btn-warning' : 'btn btn-secondary';
+    }
+    // 3. Also update the desktop header icon button
+    const headerBtn = document.getElementById('worldDetailMainFavBtn');
+    if (headerBtn) {
+      headerBtn.innerHTML = isFaved ? '⭐' : '☆';
+      headerBtn.title = isFaved ? '取消收藏' : '添加到收藏夹';
     }
   }
 }
