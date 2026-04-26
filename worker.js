@@ -23,6 +23,21 @@ function jsonResp(data, status = 200, extraHeaders = {}) {
 }
 
 /**
+ * Unicode-safe Base64 encoder. btoa() only handles Latin-1 chars;
+ * this handles CJK, emoji, and any Unicode password/cookie values.
+ */
+function safeBtoa(str) {
+    try {
+        return btoa(str);
+    } catch {
+        const bytes = new TextEncoder().encode(str);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        return btoa(binary);
+    }
+}
+
+/**
  * Forward a request to VRChat API, preserving auth cookies.
  * Auth cookies are passed via X-VRC-Auth header (base64-encoded cookie string)
  * since Workers can't share browser cookies cross-origin.
@@ -113,7 +128,7 @@ export default {
         if (path === "/api/login" && request.method === "POST") {
             try {
                 const body = await request.json();
-                const basicAuth = btoa(`${body.username}:${body.password}`);
+                const basicAuth = safeBtoa(`${body.username}:${body.password}`);
 
                 const { resp, setCookies } = await vrcFetch("/auth/user", {
                     method: "GET",
@@ -129,7 +144,7 @@ export default {
                     return jsonResp(
                         { ok: true, needs2FA, user: data },
                         200,
-                        { "X-VRC-Auth": btoa(cookies) }
+                        { "X-VRC-Auth": safeBtoa(cookies) }
                     );
                 }
                 return jsonResp({ ok: false, message: data.error?.message || "Login failed" }, resp.status);
@@ -159,7 +174,7 @@ export default {
                 const cookies = mergeCookies(auth, setCookies);
 
                 if (resp.status === 200 && data.verified) {
-                    return jsonResp({ ok: true }, 200, { "X-VRC-Auth": btoa(cookies) });
+                    return jsonResp({ ok: true }, 200, { "X-VRC-Auth": safeBtoa(cookies) });
                 }
                 return jsonResp({ ok: false, message: "Invalid code" }, 400);
             } catch (e) {
@@ -374,7 +389,7 @@ export default {
                 headers: {
                     "Content-Type": resp.headers.get("content-type") || "application/json",
                     ...CORS_HEADERS,
-                    "X-VRC-Auth": btoa(cookies),
+                    "X-VRC-Auth": safeBtoa(cookies),
                 },
             });
         }

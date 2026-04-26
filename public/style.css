@@ -2375,13 +2375,13 @@ select.input-field {
     margin: -14px -14px 0;
   }
 
-  /* ── World Detail Modal — Mobile Full-Screen ── */
+  /* ── World Detail Modal — Mobile Half-Screen (matches avatar/player detail style) ── */
   .world-detail-modal-content {
     max-width: 100% !important;
-    max-height: 100dvh !important;
-    height: 100dvh !important;
-    border-radius: 0 !important;
-    margin: 0 !important;
+    max-height: 90dvh !important;
+    border-radius: 16px 16px 0 0 !important;
+    margin: auto 0 0 !important;
+    align-self: flex-end !important;
   }
 
   /* Stack: image on top, info below */
@@ -2394,7 +2394,7 @@ select.input-field {
   /* Image: full-width hero, fixed height */
   .world-detail-img-col {
     width: 100% !important;
-    height: 200px !important;
+    height: 180px !important;
     padding: 0 !important;
     border-right: none !important;
     border-bottom: 1px solid var(--border) !important;
@@ -2407,7 +2407,7 @@ select.input-field {
     border-radius: 0 !important;
   }
 
-  /* Info col: full width, no fixed height */
+  /* Info col: full width, natural height */
   .world-detail-info-col {
     overflow: visible !important;
     flex: none !important;
@@ -2415,15 +2415,15 @@ select.input-field {
 
   /* Reduce padding on mobile */
   .world-detail-info-header {
-    padding: 16px 16px 0 !important;
+    padding: 14px 16px 0 !important;
   }
 
   #worldDetailName {
-    font-size: 1.3em !important;
+    font-size: 1.2em !important;
   }
 
   .world-detail-scroll {
-    padding: 16px !important;
+    padding: 14px 16px !important;
     overflow: visible !important;
     flex: none !important;
   }
@@ -2431,13 +2431,13 @@ select.input-field {
   /* Collapse 2-col meta grid to 1-col */
   .world-detail-meta-grid {
     grid-template-columns: 1fr !important;
-    gap: 16px !important;
+    gap: 14px !important;
   }
 
   /* Collapse 3-col dates grid to 2-col */
   .world-detail-dates-grid {
     grid-template-columns: 1fr 1fr !important;
-    gap: 12px !important;
+    gap: 10px !important;
   }
 
   /* Hide header icon buttons (⭐ ⚡) on mobile — moved to bottom bar */
@@ -2450,10 +2450,11 @@ select.input-field {
     display: flex !important;
   }
 
-  /* Breadcrumb: shorten */
+  /* Compact header */
   .world-detail-header {
     padding: 12px 14px !important;
   }
+
 }
 
 /* ── My Profile Layout Tweaks ── */

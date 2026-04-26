@@ -3965,9 +3965,11 @@ function displayAvatarDetail(av) {
      if (favList) {
         let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(currentAvatarDetail)">📦 保存到本地 (200槽位)</button>`;
         if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
-        else html += favoriteGroups.map(g =>
-          `<button class="avtrdb-fav-group-btn" onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>`
-        ).join("");
+        else html += favoriteGroups.map(g => {
+          const count = g.count || 0; const cap = g.capacity || 100; const full = count >= cap;
+          const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
+          return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
+        }).join("");
         favList.innerHTML = html;
      }
   }
@@ -4041,9 +4043,11 @@ function toggleAvatarFavGridMenu(event, id, name, btn) {
   toggleFavMenuGeneric(event, menu, btn, () => {
     let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(visibleAvatars.find(a=>a.id==='${id}'))">📦 保存到本地 (200槽位)</button>`;
     if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
-    else html += favoriteGroups.map(g =>
-      `<button class="avtrdb-fav-group-btn" onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>`
-    ).join("");
+    else html += favoriteGroups.map(g => {
+      const count = g.count || 0; const cap = g.capacity || 100; const full = count >= cap;
+      const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
+      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
+    }).join("");
     return html;
   });
 }
@@ -4057,9 +4061,11 @@ function toggleAvtrdbFavMenu(event) {
     const id = idRow ? idRow.textContent : "";
     let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(currentAvatarDetail)">📦 保存到本地 (200槽位)</button>`;
     if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
-    else html += favoriteGroups.map(g =>
-      `<button class="avtrdb-fav-group-btn" onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>`
-    ).join("");
+    else html += favoriteGroups.map(g => {
+      const count = g.count || 0; const cap = g.capacity || 100; const full = count >= cap;
+      const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
+      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
+    }).join("");
     return html;
   });
 }
@@ -6711,10 +6717,51 @@ async function showCacheClearModal() {
 }
 
 
-function joinWorldInstance() {
+async function joinWorldInstance() {
   if (!currentWorldDetail) return;
-  window.open(`https://vrchat.com/home/world/${currentWorldDetail.id}`, '_blank');
+  const worldId = currentWorldDetail.id;
+  const myId = currentUserId || myProfileData?.id;
+  if (!myId) { alert('无法获取用户 ID，请重新登录'); return; }
+
+  // Update both header and mobile action buttons
+  const allJoinBtns = [
+    document.getElementById('worldDetailJoinBtn'),
+    document.querySelector('.world-detail-mobile-actions .btn-primary')
+  ].filter(Boolean);
+  allJoinBtns.forEach(b => { b.disabled = true; b.textContent = '⏳ 创建中...'; });
+
+  const statusEl = document.getElementById('worldDetailFavStatus');
+  if (statusEl) { statusEl.textContent = '正在创建 Friends+ 房间...'; statusEl.style.color = 'var(--text-muted)'; }
+
+  try {
+    // 1. Create a new hidden (~hidden = friends+) instance
+    const r = await apiCall('/api/vrc/instances', {
+      method: 'POST',
+      json: { worldId, type: 'hidden', region: 'use', ownerId: myId },
+      noAbort: true
+    });
+    if (!r.ok) throw new Error('创建实例失败 HTTP ' + r.status);
+    const inst = await r.json();
+    const location = inst.location || (worldId + ':' + (inst.instanceId || inst.id));
+
+    // 2. Invite self
+    if (statusEl) statusEl.textContent = '正在发送邀请...';
+    const r2 = await apiCall(`/api/vrc/invite/myself/to/${encodeURIComponent(location)}`, { method: 'POST', noAbort: true });
+    if (!r2.ok) throw new Error('邀请失败 HTTP ' + r2.status);
+
+    if (statusEl) { statusEl.textContent = '✅ 邀请已发送，请在游戏内查收'; statusEl.style.color = 'var(--success)'; }
+    allJoinBtns.forEach(b => { b.textContent = '✅ 已邀请'; });
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = '❌ ' + e.message; statusEl.style.color = 'var(--error)'; }
+    allJoinBtns.forEach(b => { b.textContent = '⚡ 加入世界'; });
+  } finally {
+    setTimeout(() => {
+      allJoinBtns.forEach(b => { b.disabled = false; b.innerHTML = '⚡ 加入世界'; });
+      if (statusEl) statusEl.textContent = '';
+    }, 4000);
+  }
 }
+
 
 function joinSpecificInstance(worldId, instanceId) {
   window.open(`vrchat://launch?ref=vrchat.com&id=${encodeURIComponent(worldId+':'+instanceId)}`, '_self');
@@ -6766,10 +6813,15 @@ function toggleWorldFavMenu(event) {
 
   toggleFavMenuGeneric(event, menu, btn, () => {
     if (worldFavGroups.length === 0) return `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载世界收藏夹</div>`;
-    return worldFavGroups.map(g =>
-      `<button class="avtrdb-fav-group-btn" onclick="addWorldToFavorite('${escHtml(w?.id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>`
-    ).join("");
+    return worldFavGroups.map(g => {
+      const count = g.count || 0;
+      const cap = g.capacity || 100;
+      const full = count >= cap;
+      const countLabel = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
+      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addWorldToFavorite('${escHtml(w?.id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${countLabel}</button>`;
+    }).join("");
   });
+
 }
 
 async function toggleWorldFavorite() {
