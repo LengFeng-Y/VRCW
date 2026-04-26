@@ -6096,11 +6096,16 @@ function renderWorldGrid(list) {
 
     card.onclick = () => openWorldDetail(w.id, w);
     const isCached = loadedImageUrls.has(thumb);
+    const isFaved  = worldFavoriteIdMap.has(w.id);
     card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached?'':'img-loading'}">
       ${isCached ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="">` : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`}
       <div class="avatar-name-overlay">${escHtml(w.name||'未知世界')}</div>
       <div style="position:absolute;top:6px;left:6px;z-index:10;">
         <div onclick="toggleSelectWorld('${w.id}', event)" style="width:20px;height:20px;border-radius:4px;background:${selectedWorldIds.has(w.id)?'var(--accent)':'rgba(0,0,0,0.4)'};border:2px solid ${selectedWorldIds.has(w.id)?'var(--accent)':'rgba(255,255,255,0.4)'};display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;" title="选择">${selectedWorldIds.has(w.id)?'<span style="color:white;font-size:0.75em;">✓</span>':''}</div>
+      </div>
+      <div style="position:absolute;bottom:6px;left:6px;z-index:10;">
+        <div data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escHtml(w.id)}',event)"
+          style="width:26px;height:26px;border-radius:6px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.85em;transition:transform 0.15s;" title="${isFaved?'取消收藏':'添加到收藏夹'}">${isFaved?'⭐':'☆'}</div>
       </div>
       <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:4px;z-index:5;">
         ${friendsHere>0 ? `<div style="background:var(--accent);color:white;font-size:0.7em;padding:2px 6px;border-radius:4px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">🤝 ${friendsHere}</div>` : ''}
@@ -6115,6 +6120,112 @@ function renderWorldGrid(list) {
     }
   });
 }
+
+// ── Global sync for favorite status ────────────────────────────────────────
+function _broadcastWorldFavUpdate(worldId, isFaved) {
+  // 1. Update all visible cards
+  const btn = document.querySelector(`[data-fav-btn="${worldId}"]`);
+  if (btn) {
+    btn.textContent = isFaved ? '⭐' : '☆';
+    btn.title = isFaved ? '取消收藏' : '添加到收藏夹';
+  }
+  // 2. Update detail modal if open
+  if (currentWorldDetail && currentWorldDetail.id === worldId) {
+    const favBtn = document.getElementById('worldDetailFavBtn');
+    if (favBtn) {
+      favBtn.innerHTML = isFaved ? '⭐ 取消收藏' : '⭐ 收藏';
+      favBtn.className = isFaved ? 'btn btn-warning' : 'btn btn-secondary';
+    }
+  }
+}
+
+// ── Quick World Favorite (from grid card) ──────────────────────────────────
+async function quickWorldFav(worldId, event) {
+  event.stopPropagation();
+  const btn = event.currentTarget;
+
+  if (worldFavoriteIdMap.has(worldId)) {
+    if (!confirm('确定要取消收藏这个世界吗？')) return;
+    btn.textContent = '⏳';
+    try {
+      const favId = worldFavoriteIdMap.get(worldId);
+      const r = await apiCall(`/api/vrc/favorites/${favId}`, { method: 'DELETE' });
+      if (r.ok) {
+        worldFavoriteIdMap.delete(worldId);
+        _broadcastWorldFavUpdate(worldId, false);
+        if (currentWorldCategory.startsWith('fav_')) {
+          allWorlds = allWorlds.filter(w => w.id !== worldId);
+          filterWorlds();
+        }
+      } else { btn.textContent = '⭐'; alert('取消收藏失败'); }
+    } catch(e) { btn.textContent = '⭐'; }
+    return;
+  }
+
+  // Auto-load groups if empty
+  if (!worldFavGroups.length) {
+    btn.textContent = '⏳';
+    await loadWorldFavGroups();
+    btn.textContent = '☆';
+    if (!worldFavGroups.length) { alert('无法获取收藏组列表，请重试'); return; }
+  }
+
+  document.getElementById('_wqfMenu')?.remove();
+  const menu = document.createElement('div');
+  menu.id = '_wqfMenu';
+  menu.style.cssText = `
+    position:fixed;z-index:9999;
+    background:var(--bg-card);border:1px solid var(--border);
+    border-radius:10px;padding:6px;min-width:150px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.6);
+  `;
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'font-size:0.72em;color:var(--text-muted);padding:4px 8px 6px;border-bottom:1px solid var(--border);margin-bottom:4px;';
+  hdr.textContent = '⭐ 收藏到…';
+  menu.appendChild(hdr);
+
+  worldFavGroups.forEach(g => {
+    const b = document.createElement('button');
+    b.className = 'avtrdb-fav-group-btn';
+    b.style.cssText = 'width:100%;display:block;text-align:left;';
+    b.textContent = g.displayName || g.name;
+    b.onclick = async () => {
+      btn.textContent = '⏳';
+      try {
+        const r = await apiCall('/api/vrc/favorites', {
+          method: 'POST',
+          json: { type: 'world', favoriteId: worldId, tags: [g.name] }
+        });
+        if (r.ok) {
+          const res = await r.json();
+          worldFavoriteIdMap.set(worldId, res.id);
+          _broadcastWorldFavUpdate(worldId, true);
+          idb.set('world_basics_age_fav_' + g.name, 0).catch(()=>{});
+        } else { btn.textContent = '☆'; alert('收藏失败'); }
+      } catch(e) { btn.textContent = '☆'; }
+    };
+    menu.appendChild(b);
+  });
+
+  const rect = btn.getBoundingClientRect();
+  const menuW = 160, menuH = worldFavGroups.length * 38 + 40;
+  let left = rect.left, top = rect.bottom + 6;
+  if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8;
+  if (top + menuH > window.innerHeight - 8) top = rect.top - menuH - 6;
+  menu.style.left = left + 'px';
+  menu.style.top  = top  + 'px';
+
+  document.body.appendChild(menu);
+
+  const cleanup = () => { menu.remove(); document.removeEventListener('click', closeHandler, true); };
+  const closeHandler = e => { if (!menu.contains(e.target)) cleanup(); };
+  menu.querySelectorAll('button').forEach(b => {
+    const original = b.onclick;
+    b.onclick = async (e) => { await original(e); cleanup(); };
+  });
+  setTimeout(() => document.addEventListener('click', closeHandler, true), 10);
+}
+
 
 function selectAllWorlds() {
   const list = allWorlds;
@@ -6600,9 +6711,8 @@ async function addWorldToFavorite(worldId, groupName, btn) {
     if (r.ok) {
       const res = await r.json();
       worldFavoriteIdMap.set(worldId, res.id);
+      _broadcastWorldFavUpdate(worldId, true);
       if (statusEl) { statusEl.textContent = `✓ 已收藏到 ${groupName}`; statusEl.style.color='var(--success)'; }
-      const favBtn = document.getElementById('worldDetailFavBtn');
-      if (favBtn) { favBtn.innerHTML='⭐ 取消收藏'; favBtn.className='btn btn-warning'; }
       try { await idb.set('worlds_' + groupName, null); } catch (_) {}
     } else {
       const err = await r.json().catch(() => ({}));

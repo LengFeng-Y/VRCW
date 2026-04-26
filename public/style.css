@@ -2300,6 +2300,41 @@ select.input-field {
     font-size: 0.72rem;
   }
 
+  /* World Panel filter bar: compact single row on mobile */
+  .world-filter-bar {
+    padding: 10px 10px 0 !important;
+    gap: 6px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .world-filter-bar .glass-search-input-pill {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  .world-filter-bar .glass-search-input-pill input {
+    font-size: 0.82em;
+    min-width: 0;
+  }
+
+  .world-filter-bar .glass-select {
+    width: auto !important;
+    min-width: 95px !important;
+    max-width: 125px !important;
+    flex: 0 0 105px;
+  }
+
+  .world-filter-bar .glass-select-trigger {
+    padding: 10px 6px !important;
+    font-size: 0.75rem;
+  }
+
+  .world-filter-bar .btn {
+    flex-shrink: 0;
+    padding: 8px 10px;
+    font-size: 0.82em;
+  }
+
   /* My Profile Layout Tweaks */
   .my-profile-banner {
     margin: -14px -14px 0;
