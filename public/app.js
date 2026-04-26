@@ -6746,7 +6746,7 @@ async function joinWorldInstance() {
 
     // 2. Invite self
     if (statusEl) statusEl.textContent = '正在发送邀请...';
-    const r2 = await apiCall(`/api/vrc/invite/myself/to/${encodeURIComponent(location)}`, { method: 'POST', noAbort: true });
+    const r2 = await apiCall(`/api/vrc/invite/myself/to/${location}`, { method: 'POST', noAbort: true });
     if (!r2.ok) throw new Error('邀请失败 HTTP ' + r2.status);
 
     if (statusEl) { statusEl.textContent = '✅ 邀请已发送，请在游戏内查收'; statusEl.style.color = 'var(--success)'; }
