@@ -24,7 +24,9 @@ let favoriteGroups = []; // Avatar favorite groups
 let worldFavGroups  = []; // World favorite groups
 let friendFavGroups = []; // Friend favorite groups
 let favoriteIdMap = new Map(); // avatarId -> favoriteId
-let worldFavoriteIdMap = new Map(); // worldId -> favoriteId (moved/sync)
+let worldFavoriteIdMap = new Map(); // worldId -> favoriteId
+let worldFavGroupCounts = new Map(); // groupName -> count (populated by syncAllFavoriteIds)
+let avatarFavGroupCounts = new Map(); // groupName -> count
 let friendFavoriteIdMap = new Map(); // userId -> favoriteId
 window._localNameMap = new Map(); // GLOBAL CACHE: avatarId -> name (for recovery)
 let localAvatarFavs = []; // Local favorites collection (max 200)
@@ -1051,7 +1053,11 @@ async function syncAllFavoriteIds() {
       if (!resp.ok) break;
       const favs = await resp.json();
       if (!favs || favs.length === 0 || favs.error) break;
-      favs.forEach((f) => favoriteIdMap.set(f.favoriteId, f.id));
+       favs.forEach((f) => {
+        favoriteIdMap.set(f.favoriteId, f.id);
+        const tag = f.tags?.[0];
+        if (tag) avatarFavGroupCounts.set(tag, (avatarFavGroupCounts.get(tag) || 0) + 1);
+      });
       if (favs.length < 100) break;
       offset += 100;
       if (offset >= 500) break;
@@ -1063,7 +1069,12 @@ async function syncAllFavoriteIds() {
       if (!resp.ok) break;
       const favs = await resp.json();
       if (!favs || favs.length === 0 || favs.error) break;
-      favs.forEach((f) => worldFavoriteIdMap.set(f.favoriteId, f.id));
+       favs.forEach((f) => {
+        worldFavoriteIdMap.set(f.favoriteId, f.id);
+        const tag = f.tags?.[0];
+        if (tag) worldFavGroupCounts.set(tag, (worldFavGroupCounts.get(tag) || 0) + 1);
+      });
+
       if (favs.length < 100) break;
       offset += 100;
     }
@@ -3966,7 +3977,7 @@ function displayAvatarDetail(av) {
         let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(currentAvatarDetail)">📦 保存到本地 (200槽位)</button>`;
         if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
         else html += favoriteGroups.map(g => {
-          const count = g.count || 0; const cap = g.capacity || 100; const full = count >= cap;
+          const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 100; const full = count >= cap;
           const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
           return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
         }).join("");
@@ -4044,7 +4055,7 @@ function toggleAvatarFavGridMenu(event, id, name, btn) {
     let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(visibleAvatars.find(a=>a.id==='${id}'))">📦 保存到本地 (200槽位)</button>`;
     if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
     else html += favoriteGroups.map(g => {
-      const count = g.count || 0; const cap = g.capacity || 100; const full = count >= cap;
+      const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 100; const full = count >= cap;
       const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
       return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
     }).join("");
@@ -4062,7 +4073,7 @@ function toggleAvtrdbFavMenu(event) {
     let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(currentAvatarDetail)">📦 保存到本地 (200槽位)</button>`;
     if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
     else html += favoriteGroups.map(g => {
-      const count = g.count || 0; const cap = g.capacity || 100; const full = count >= cap;
+      const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 100; const full = count >= cap;
       const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
       return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
     }).join("");
@@ -6814,8 +6825,8 @@ function toggleWorldFavMenu(event) {
   toggleFavMenuGeneric(event, menu, btn, () => {
     if (worldFavGroups.length === 0) return `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载世界收藏夹</div>`;
     return worldFavGroups.map(g => {
-      const count = g.count || 0;
-      const cap = g.capacity || 100;
+      const count = worldFavGroupCounts.get(g.name) || 0;
+      const cap = 100;
       const full = count >= cap;
       const countLabel = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
       return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addWorldToFavorite('${escHtml(w?.id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${countLabel}</button>`;
