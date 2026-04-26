@@ -2216,32 +2216,84 @@ select.input-field {
     grid-template-columns: repeat(2, 1fr) !important;
   }
 
-  /* Search & Profile Fixes */
-  .search-container-premium {
-    padding: 8px 6px 4px;
-  }
-
-  .search-box-glass {
-    flex-direction: column;
-    border-radius: 12px;
-    padding: 6px;
-    gap: 0;
-  }
-
-  .search-category-select,
-  .search-db-select,
-  .search-platform-select {
-    width: 100%;
-    border: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
+  /* Global glass-select: full-width on mobile by default */
   .glass-select {
     width: 100%;
   }
 
   .glass-select-trigger {
-    padding: 14px;
+    padding: 12px 10px;
+  }
+
+  /* Search bar: 2-row compact grid on mobile */
+  .search-container-premium {
+    padding: 8px 6px 4px;
+  }
+
+  .search-box-glass {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    border-radius: 12px;
+    padding: 8px;
+    gap: 6px;
+    background: var(--bg-glass);
+  }
+
+  /* Row 1: category + platform side by side */
+  .search-category-select {
+    grid-column: 1;
+    grid-row: 1;
+    width: auto;
+    border: none;
+    border-bottom: none;
+  }
+
+  .search-platform-select {
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
+    border: none;
+    border-bottom: none;
+  }
+
+  /* Row 2: text input + search button */
+  .search-box-glass input {
+    grid-column: 1;
+    grid-row: 2;
+    width: auto;
+    padding: 10px 12px;
+    font-size: 0.9em;
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+  }
+
+  .search-btn-premium {
+    grid-column: 2;
+    grid-row: 2;
+    width: auto;
+    margin-top: 0;
+    border-radius: 8px;
+    justify-content: center;
+    padding: 10px 12px;
+  }
+
+  /* Hide text label on search button, keep icon only */
+  .search-btn-text {
+    display: none;
+  }
+
+  .search-box-divider {
+    display: none;
+  }
+
+  .search-box-glass .glass-select {
+    width: 100%;
+  }
+
+  .search-box-glass .glass-select-trigger {
+    padding: 10px 8px;
+    font-size: 0.75rem;
   }
 
   .glass-select-options {
@@ -2249,23 +2301,6 @@ select.input-field {
     right: 0;
     top: 100%;
     border-radius: 0;
-  }
-
-  .search-box-divider {
-    display: none;
-  }
-
-  .search-box-glass input {
-    width: 100%;
-    padding: 14px;
-    background: rgba(255, 255, 255, 0.02);
-  }
-
-  .search-btn-premium {
-    width: 100%;
-    margin-top: 4px;
-    border-radius: 8px;
-    justify-content: center;
   }
 
   .mobile-hide {

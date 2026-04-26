@@ -3578,15 +3578,36 @@ async function vrcdbFetch(cat, query) {
         </div>`;
       }).join('');
     } else if (cat === 'worlds') {
-      grid.innerHTML = filteredData.map(w => {
-        return `<div class="avatar-card" onclick="openWorldDetail('${w.id}')">
-          <img src="${escHtml(proxyImg(w.thumbnailImageUrl))}" class="avatar-thumb" style="aspect-ratio:16/9;" onerror="this.style.display=\'none\'">
-          <div class="avatar-info">
-            <div class="avatar-name" style="font-size:1em;margin-bottom:4px;">${escHtml(w.name)}</div>
-            <div class="avatar-author">👥 ${w.occupants||0} | ⭐ ${w.favorites||0}</div>
+      grid.innerHTML = '';
+      filteredData.forEach(w => {
+        const thumb = proxyImg(w.thumbnailImageUrl || w.imageUrl || '');
+        const isFaved = worldFavoriteIdMap.has(w.id);
+        const isCached = loadedImageUrls.has(thumb);
+        const card = document.createElement('div');
+        card.className = 'avatar-card';
+        card.style.cursor = 'pointer';
+        card.onclick = () => openWorldDetail(w.id, w);
+        card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached?'':'img-loading'}">
+          ${isCached
+            ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="">`
+            : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`}
+          <div class="avatar-name-overlay">${escHtml(w.name||'未知世界')}</div>
+          <div style="position:absolute;bottom:6px;left:6px;z-index:10;">
+            <div data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escHtml(w.id)}',event)"
+              style="width:26px;height:26px;border-radius:6px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.85em;" title="${isFaved?'取消收藏':'添加到收藏夹'}">${isFaved?'\u2b50':'\u2606'}</div>
+          </div>
+          <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:4px;z-index:5;">
+            ${(w.occupants||0)>0 ? `<div class="world-player-badge" style="position:static;margin:0;">\u{1f465} ${w.occupants}</div>` : ''}
+            ${(w.favorites||0)>0 ? `<div style="background:rgba(0,0,0,0.55);color:#fbbf24;font-size:0.7em;padding:2px 6px;border-radius:4px;">\u2b50 ${w.favorites}</div>` : ''}
           </div>
         </div>`;
-      }).join('');
+        grid.appendChild(card);
+        if (!isCached && thumb) {
+          const img = card.querySelector('.avatar-thumb[data-src]');
+          if (img) avatarObserver.observe(img);
+        }
+      });
+
     } else if (cat === 'groups') {
       grid.innerHTML = filteredData.map(g => {
         return `<div class="friend-card" style="box-shadow: 0 4px 12px rgba(0,0,0,0.5);border:1px solid var(--border);">
