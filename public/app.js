@@ -3428,12 +3428,37 @@ async function startUpload() {
 // ── Custom Glass Select Managers ──
 function toggleGlassSelect(e, el) {
   e.stopPropagation();
-  // Close others
+  const isNowActive = !el.classList.contains('active');
+
+  // Close all others and reset their fixed styles
   document.querySelectorAll('.glass-select').forEach(s => {
-    if (s !== el) s.classList.remove('active');
+    if (s !== el) {
+      s.classList.remove('active');
+      const o = s.querySelector('.glass-select-options');
+      if (o) { o.style.position = ''; o.style.top = ''; o.style.left = ''; o.style.width = ''; }
+    }
   });
+
   el.classList.toggle('active');
+
+  // On mobile: position:fixed so dropdown escapes scroll-container clipping
+  if (isNowActive && window.innerWidth <= 768) {
+    const opts = el.querySelector('.glass-select-options');
+    const trigger = el.querySelector('.glass-select-trigger');
+    if (opts && trigger) {
+      const r = trigger.getBoundingClientRect();
+      opts.style.position = 'fixed';
+      opts.style.top  = (r.bottom + 4) + 'px';
+      opts.style.left = r.left + 'px';
+      opts.style.width = Math.max(r.width, 160) + 'px';
+      opts.style.right = '';
+    }
+  } else if (!isNowActive) {
+    const opts = el.querySelector('.glass-select-options');
+    if (opts) { opts.style.position = ''; opts.style.top = ''; opts.style.left = ''; opts.style.width = ''; }
+  }
 }
+
 
 function selectGlassOption(e, el, val, callbackName) {
   e.stopPropagation();
@@ -3460,8 +3485,11 @@ function selectGlassOption(e, el, val, callbackName) {
   select.querySelectorAll('.glass-option').forEach(opt => opt.classList.remove('selected'));
   el.classList.add('selected');
   
-  // Close
+  // Close and reset fixed styles
   select.classList.remove('active');
+  const opts = select.querySelector('.glass-select-options');
+  if (opts) { opts.style.position = ''; opts.style.top = ''; opts.style.left = ''; opts.style.width = ''; }
+
   
   // Trigger callback
   if (callbackName && typeof window[callbackName] === 'function') {
@@ -3469,10 +3497,14 @@ function selectGlassOption(e, el, val, callbackName) {
   }
 }
 
-// Global click closer
 document.addEventListener('click', () => {
-  document.querySelectorAll('.glass-select').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.glass-select').forEach(s => {
+    s.classList.remove('active');
+    const o = s.querySelector('.glass-select-options');
+    if (o) { o.style.position = ''; o.style.top = ''; o.style.left = ''; o.style.width = ''; }
+  });
 });
+
 
 // Original Avtrdb Logic
 let avtrdbPage = 0;

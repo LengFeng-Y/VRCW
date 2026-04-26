@@ -2141,9 +2141,7 @@ select.input-field {
   }
 
   /* Search panel doesn't need internal scroll — allow dropdown to overflow freely */
-  #searchPanel.upload-panel.active {
-    overflow: visible !important;
-  }
+  /* Removed: overflow:visible was breaking panel scroll. Fixed via JS position:fixed instead. */
 
   .avatar-grid {
     grid-template-columns: repeat(2, 1fr) !important;
@@ -2233,7 +2231,6 @@ select.input-field {
   /* Search bar: 2-row compact grid on mobile */
   .search-container-premium {
     padding: 8px 6px 4px;
-    overflow: visible !important;
   }
 
   .search-box-glass {
@@ -2244,7 +2241,6 @@ select.input-field {
     padding: 8px;
     gap: 6px;
     background: var(--bg-glass);
-    overflow: visible !important;   /* allow dropdown to extend beyond grid */
   }
 
   /* Row 1: category + platform side by side */
