@@ -6872,6 +6872,14 @@ function toggleWorldFavMenu(event) {
   const btn = document.getElementById(isMobile ? "worldDetailFavBtn" : "worldDetailMainFavBtn");
   if (!menu || !btn) return;
 
+  const w = currentWorldDetail;
+  if (!w) return;
+
+  // If already favorited, clicking should toggle unfavorite
+  if (worldFavoriteIdMap.has(w.id)) {
+    toggleWorldFavorite();
+    return;
+  }
 
   toggleFavMenuGeneric(event, menu, btn, () => {
     if (worldFavGroups.length === 0) return `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载世界收藏夹</div>`;
@@ -6880,10 +6888,9 @@ function toggleWorldFavMenu(event) {
       const cap = 100;
       const full = count >= cap;
       const countLabel = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
-      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addWorldToFavorite('${escHtml(w?.id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${countLabel}</button>`;
+      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addWorldToFavorite('${escHtml(w.id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${countLabel}</button>`;
     }).join("");
   });
-
 }
 
 async function toggleWorldFavorite() {
@@ -6898,11 +6905,12 @@ async function toggleWorldFavorite() {
     if (isFaved) {
       const favId = worldFavoriteIdMap.get(w.id);
       const r = await apiCall(`/api/vrc/favorites/${favId}`, {method:'DELETE'});
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) throw new Error('取消收藏失败 HTTP ' + r.status);
+      try { await r.json(); } catch(_) {} // Consume if JSON, ignore if not
       worldFavoriteIdMap.delete(w.id);
-      if (favBtn) { favBtn.innerHTML='⭐ 收藏'; favBtn.className='btn btn-secondary'; }
+      _broadcastWorldFavUpdate(w.id, false);
       if (statusEl) { statusEl.textContent='✓ 已取消收藏'; statusEl.style.color='var(--text-muted)'; }
-      if (currentWorldCategory.startsWith('fav_')) {
+      if (currentWorldCategory && currentWorldCategory.startsWith('fav_')) {
         allWorlds = allWorlds.filter(aw => aw.id!==w.id);
         await idb.set('worlds_'+currentWorldCategory, allWorlds);
         filterWorlds();
