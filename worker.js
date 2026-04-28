@@ -136,6 +136,9 @@ export default {
                 "X-Platform":     "standalonewindows",
                 "X-SDK-Version":  "VRCSDK3-2024.01.22.18.33",
                 "X-HWID":         hwid,
+                // Forward the user's real home IP so VRChat sees it instead of Cloudflare datacenter IP
+                "X-Forwarded-For": request.headers.get("CF-Connecting-IP") || "",
+                "X-Real-IP":       request.headers.get("CF-Connecting-IP") || "",
             };
 
             let vrcResp = await fetch(`${VRC_API}/auth/user`, { method: "GET", headers: sentHeaders });
