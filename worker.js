@@ -111,31 +111,27 @@ export default {
 
         // POST /api/login
         if (path === "/api/login" && request.method === "POST") {
-            try {
-                const body = await request.json();
-                const basicAuth = btoa(`${encodeURIComponent(body.username)}:${body.password}`);
+            const body = await request.json();
+            const basicAuth = btoa(`${body.username}:${body.password}`);
 
-                const { resp, setCookies } = await vrcFetch("/auth/user", {
-                    method: "GET",
-                    headers: { Authorization: `Basic ${basicAuth}` },
-                });
+            const { resp, setCookies } = await vrcFetch("/auth/user", {
+                method: "GET",
+                headers: { Authorization: `Basic ${basicAuth}` },
+            });
 
-                const data = await resp.json();
-                const cookies = mergeCookies("", setCookies);
+            const data = await resp.json();
+            const cookies = mergeCookies("", setCookies);
 
-                if (resp.status === 200) {
-                    const needs2FA =
-                        data.requiresTwoFactorAuth && data.requiresTwoFactorAuth.length > 0;
-                    return jsonResp(
-                        { ok: true, needs2FA, user: data },
-                        200,
-                        { "X-VRC-Auth": btoa(cookies) }
-                    );
-                }
-                return jsonResp({ ok: false, message: data.error?.message || "Login failed" }, resp.status);
-            } catch (e) {
-                return jsonResp({ ok: false, message: "登录失败：服务器异常，请稍后重试 (" + e.message + ")" }, 500);
+            if (resp.status === 200) {
+                const needs2FA =
+                    data.requiresTwoFactorAuth && data.requiresTwoFactorAuth.length > 0;
+                return jsonResp(
+                    { ok: true, needs2FA, user: data },
+                    200,
+                    { "X-VRC-Auth": btoa(cookies) }
+                );
             }
+            return jsonResp({ ok: false, message: data.error?.message || "Login failed" }, resp.status);
         }
 
         // POST /api/2fa
