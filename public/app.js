@@ -957,7 +957,10 @@ async function doLogin() {
     });
     const data = await resp.json();
     if (data.ok) {
-      if (data.needs2FA) {
+      if (data.needsLoginPlace) {
+        // New device/location — VRChat sent a verification email
+        document.getElementById('loginplace-section').style.display = 'block';
+      } else if (data.needs2FA) {
         document.getElementById("tfa-section").classList.add("active");
       } else {
         saveAccountInfo(user);

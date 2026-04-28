@@ -48,6 +48,12 @@
                 </div>
                 <button onclick="doVerify2FA()" class="btn btn-primary btn-block" data-i18n="btnVerify">Verify</button>
             </div>
+            <div id="loginplace-section" style="display:none;margin-top:16px;padding:16px;background:rgba(255,200,0,0.1);border:1px solid rgba(255,200,0,0.4);border-radius:12px;text-align:center;">
+                <div style="font-size:1.5em;margin-bottom:8px;">📧</div>
+                <div style="font-weight:600;margin-bottom:6px;">需要验证新设备</div>
+                <div style="font-size:0.88em;opacity:0.85;line-height:1.5;">VRChat 已向您的邮箱发送了一封验证邮件。<br>请点击邮件中的链接完成验证，<br>然后重新点击「登录」按钮。</div>
+                <button onclick="document.getElementById('loginplace-section').style.display='none';doLogin()" class="btn btn-primary btn-block" style="margin-top:12px;">重新登录</button>
+            </div>
             <div style="text-align:center;margin-top:16px;">
                 <div class="lang-switch">
                     <button class="lang-btn" onclick="setLang('en')">EN</button>

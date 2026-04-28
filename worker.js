@@ -123,8 +123,12 @@ export default {
             const cookies = mergeCookies("", setCookies);
 
             if (resp.status === 200) {
-                const needs2FA =
-                    data.requiresTwoFactorAuth && data.requiresTwoFactorAuth.length > 0;
+                const tfaTypes = data.requiresTwoFactorAuth || [];
+                // New device/location: VRChat sends an email with a link to verify the login place
+                if (tfaTypes.includes("loginplace")) {
+                    return jsonResp({ ok: true, needsLoginPlace: true }, 200, { "X-VRC-Auth": btoa(cookies) });
+                }
+                const needs2FA = tfaTypes.length > 0;
                 return jsonResp(
                     { ok: true, needs2FA, user: data },
                     200,
