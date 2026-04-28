@@ -101,7 +101,7 @@ export default {
         if (path === "/api/login" && request.method === "POST") {
             try {
                 const body = await request.json();
-                const basicAuth = safeBtoa(`${body.username}:${body.password}`);
+                const basicAuth = safeBtoa(`${encodeURIComponent(body.username)}:${encodeURIComponent(body.password)}`);
                 const { resp, setCookies } = await vrcFetch("/auth/user", {
                     method: "GET",
                     headers: { Authorization: `Basic ${basicAuth}` },
