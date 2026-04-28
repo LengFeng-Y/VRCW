@@ -4430,7 +4430,7 @@ function worldLogMsg(msg, type = 'info') {
 function proxyImg(url) {
   if (!url) return '';
   // All VRChat images go through Worker proxy (SW caches them after first view)
-  if (url.includes('api.vrchat.cloud') || url.includes('files.vrchat.cloud'))
+  if (url.includes('vrchat.cloud') || url.includes('vrchat.com'))
     return `${API_BASE}/api/image?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(vrcAuth || '')}`;
   return url;
 }
@@ -7525,6 +7525,12 @@ function groupCardHtml(g, myId) {
 }
 
 async function openGroupDetail(groupId) {
+  // Force update if old structure exists (legacy cached DOM)
+  const existing = document.getElementById('groupDetailModal');
+  if (existing && existing.querySelector('#gdBanner')?.style.height !== '140px') {
+    existing.remove();
+  }
+
   // Ensure group modal exists
   if (!document.getElementById('groupDetailModal')) {
     const html = `<div id="groupDetailModal" class="modal hidden" onclick="if(event.target===this)this.classList.add('hidden')">
