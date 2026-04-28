@@ -6848,15 +6848,20 @@ async function joinWorldInstance() {
 
 
   try {
-    // 1. Create a new hidden (~hidden = friends+) instance
+    // Map internal pref keys to VRChat API fields
+    // 'invite' and 'inviteplus' both use type:'private'; inviteplus adds canRequestInvite:true
+    const apiType = (_joinType === 'invite' || _joinType === 'inviteplus') ? 'private' : _joinType;
+    const instanceBody = {
+      worldId,
+      type:    apiType,
+      region:  _joinRegion,
+      ownerId: myId,
+    };
+    if (_joinType === 'inviteplus') instanceBody.canRequestInvite = true;
+
     const r = await apiCall('/api/vrc/instances', {
       method: 'POST',
-      json: {
-        worldId,
-        type:    localStorage.getItem(PREF_TYPE)   || 'hidden',
-        region:  localStorage.getItem(PREF_REGION) || 'use',
-        ownerId: myId,
-      },
+      json: instanceBody,
       noAbort: true
     });
     if (!r.ok) throw new Error('创建实例失败 HTTP ' + r.status);
