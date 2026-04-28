@@ -570,6 +570,7 @@
                         <h3>⚙️ 高级设置</h3>
                         <div class="btn-group">
                             <button class="btn btn-secondary btn-block cat-btn active" onclick="switchSettingsPage('cache')" id="setCatCache">🗑️ 缓存管理</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchSettingsPage('join')" id="setCatJoin">🚀 加入偏好</button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchSettingsPage('about')" id="setCatAbout">ℹ️ 关于</button>
                         </div>
                     </div>
@@ -585,6 +586,57 @@
                             <button onclick="clearAllCacheNow()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.35);">🗑️ 全部清除（含图片 Blob）</button>
                         </div>
                     </div>
+                    <div id="setPageJoin" style="display:none;max-width:520px;">
+                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">🚀 加入偏好</h2>
+                        <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">点击“加入世界”时自动使用以下设置创建实例。</p>
+
+                        <div style="display:flex;flex-direction:column;gap:20px;">
+                            <!-- Instance Type -->
+                            <div>
+                                <label style="display:block;font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">房间类型</label>
+                                <div class="glass-select" id="instanceTypeSelect">
+                                    <div class="glass-select-trigger" onclick="toggleGlassSelect(event,this.parentElement)">
+                                        <span class="selected-label">Friends+ (好友加)</span>
+                                        <span style="opacity:0.5;">&#9660;</span>
+                                    </div>
+                                    <div class="glass-select-options">
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'hidden','')" data-val="hidden">好友加 (Friends+) — 推荐</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'public','')" data-val="public">公开 (Public)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'friends','')" data-val="friends">仅好友 (Friends Only)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'invite','')" data-val="invite">邀请 (Invite Only)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'inviteplus','')" data-val="inviteplus">邀请加 (Invite+)</div>
+                                    </div>
+                                    <input type="hidden" id="settingInstanceType" value="hidden">
+                                </div>
+                                <p style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">Friends+ 表示好友及好友的好友可加入。</p>
+                            </div>
+
+                            <!-- Region -->
+                            <div>
+                                <label style="display:block;font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">服务器地区</label>
+                                <div class="glass-select" id="instanceRegionSelect">
+                                    <div class="glass-select-trigger" onclick="toggleGlassSelect(event,this.parentElement)">
+                                        <span class="selected-label">🇯🇵 日本 (Japan)</span>
+                                        <span style="opacity:0.5;">&#9660;</span>
+                                    </div>
+                                    <div class="glass-select-options">
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'use','')" data-val="use">🇺🇸 美国东 (US East)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'usw','')" data-val="usw">🇺🇸 美国西 (US West)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'eu','')" data-val="eu">🇪🇺 欧洲 (Europe)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'jp','')" data-val="jp">🇯🇵 日本 (Japan)</div>
+                                    </div>
+                                    <input type="hidden" id="settingRegion" value="jp">
+                                </div>
+                            </div>
+
+                            <!-- Save Button -->
+                            <div>
+                                <button class="btn btn-primary" onclick="saveJoinPrefs()" style="min-width:120px;">保存设置</button>
+                                <span id="joinPrefsSaveStatus" style="margin-left:12px;font-size:0.82rem;color:var(--success);display:none;">✓ 已保存</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div id="setPageAbout" style="display:none;">
                         <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">ℹ️ 关于</h2>
                         <p style="color:var(--text-muted);font-size:0.85rem;">VRCW</p>

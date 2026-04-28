@@ -1279,13 +1279,68 @@ function switchTab(tab) {
 }
 
 function switchSettingsPage(page) {
-  ['cache','about'].forEach(p => {
+  ['cache', 'join', 'about'].forEach(p => {
     const el = document.getElementById('setPage' + p.charAt(0).toUpperCase() + p.slice(1));
     if (el) el.style.display = p === page ? '' : 'none';
     const btn = document.getElementById('setCat' + p.charAt(0).toUpperCase() + p.slice(1));
     if (btn) btn.classList.toggle('active', p === page);
   });
   if (page === 'cache') loadCacheStats();
+  if (page === 'join') loadJoinPrefs();
+}
+
+// ── Join Preferences (localStorage) ──
+const PREF_TYPE   = 'vrcw_default_instance_type';
+const PREF_REGION = 'vrcw_default_region';
+
+const INSTANCE_TYPE_LABELS = {
+  hidden:     'Friends+ (好友加)',
+  public:     '公开 (Public)',
+  friends:    '仅好友 (Friends Only)',
+  invite:     '邀请 (Invite Only)',
+  inviteplus: '邀请加 (Invite+)',
+};
+const REGION_LABELS = {
+  use: '🇺🇸 美国东 (US East)',
+  usw: '🇺🇸 美国西 (US West)',
+  eu:  '🇪🇺 欧洲 (Europe)',
+  jp:  '🇯🇵 日本 (Japan)',
+};
+
+function loadJoinPrefs() {
+  const type   = localStorage.getItem(PREF_TYPE)   || 'hidden';
+  const region = localStorage.getItem(PREF_REGION) || 'jp';
+
+  // Set hidden inputs
+  const typeInput   = document.getElementById('settingInstanceType');
+  const regionInput = document.getElementById('settingRegion');
+  if (typeInput)   typeInput.value   = type;
+  if (regionInput) regionInput.value = region;
+
+  // Update displayed labels
+  const typeSelect   = document.getElementById('instanceTypeSelect');
+  const regionSelect = document.getElementById('instanceRegionSelect');
+  if (typeSelect)   typeSelect.querySelector('.selected-label').textContent   = INSTANCE_TYPE_LABELS[type]   || type;
+  if (regionSelect) regionSelect.querySelector('.selected-label').textContent = REGION_LABELS[region]        || region;
+
+  // Mark selected option
+  typeSelect?.querySelectorAll('.glass-option').forEach(o =>
+    o.classList.toggle('selected', o.dataset.val === type));
+  regionSelect?.querySelectorAll('.glass-option').forEach(o =>
+    o.classList.toggle('selected', o.dataset.val === region));
+}
+
+function saveJoinPrefs() {
+  const type   = document.getElementById('settingInstanceType')?.value   || 'hidden';
+  const region = document.getElementById('settingRegion')?.value         || 'use';
+  localStorage.setItem(PREF_TYPE, type);
+  localStorage.setItem(PREF_REGION, region);
+
+  const status = document.getElementById('joinPrefsSaveStatus');
+  if (status) {
+    status.style.display = 'inline';
+    setTimeout(() => { status.style.display = 'none'; }, 2500);
+  }
 }
 
 async function loadCacheStats() {
@@ -6785,13 +6840,23 @@ async function joinWorldInstance() {
   allJoinBtns.forEach(b => { b.disabled = true; b.textContent = '⏳ 创建中...'; });
 
   const statusEl = document.getElementById('worldDetailFavStatus');
-  if (statusEl) { statusEl.textContent = '正在创建 Friends+ 房间...'; statusEl.style.color = 'var(--text-muted)'; }
+  const _joinType   = localStorage.getItem(PREF_TYPE)   || 'hidden';
+  const _joinRegion = localStorage.getItem(PREF_REGION) || 'jp';
+  const _typeLabel   = INSTANCE_TYPE_LABELS[_joinType]   || _joinType;
+  const _regionLabel = REGION_LABELS[_joinRegion]?.replace(/🇺🇸|🇪🇺|🇯🇵/u, '').trim() || _joinRegion;
+  if (statusEl) { statusEl.textContent = `正在创建 ${_typeLabel} · ${_regionLabel} 房间...`; statusEl.style.color = 'var(--text-muted)'; }
+
 
   try {
     // 1. Create a new hidden (~hidden = friends+) instance
     const r = await apiCall('/api/vrc/instances', {
       method: 'POST',
-      json: { worldId, type: 'hidden', region: 'use', ownerId: myId },
+      json: {
+        worldId,
+        type:    localStorage.getItem(PREF_TYPE)   || 'hidden',
+        region:  localStorage.getItem(PREF_REGION) || 'use',
+        ownerId: myId,
+      },
       noAbort: true
     });
     if (!r.ok) throw new Error('创建实例失败 HTTP ' + r.status);
