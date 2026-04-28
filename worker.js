@@ -109,39 +109,81 @@ export default {
         // ── API Routes ──
         const auth = getAuth(request);
 
-        // POST /api/login
+        // POST /api/login (ROBUST DEBUG MODE - FIXED)
         if (path === "/api/login" && request.method === "POST") {
             const body = await request.json();
-            // Match VRCX encoding: both username and password MUST be encodeURIComponent'd
-            const basicAuth = btoa(`${encodeURIComponent(body.username)}:${encodeURIComponent(body.password)}`);
+            const safeBtoa = (str) => {
+                try { return btoa(str); } catch (e) { return "ERROR_ENCODING"; }
+            };
+            
+            // Try 1: Encoded (VRCX style)
+            const authEncoded = `${encodeURIComponent(body.username)}:${encodeURIComponent(body.password)}`;
 
-            const { resp, setCookies } = await vrcFetch("/auth/user", {
-                method: "GET",
-                headers: { Authorization: `Basic ${basicAuth}` },
-            });
+            // Random device fingerprint — makes each login look like a fresh VRChat install.
+            // Only used for the login request; session is maintained by Cookie after login.
+            const randHex = (len) => Array.from(crypto.getRandomValues(new Uint8Array(len)))
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+            const randMac = () => [randHex(1),randHex(1),randHex(1),randHex(1),randHex(1),randHex(1)].join(':');
+            const randVer = `1.${(Math.floor(Math.random() * 3) + 24)}.${Math.floor(Math.random() * 9)}`; // e.g. 1.24.3
+            const hwid    = randHex(16); // 32-char random hardware ID
 
-            const data = await resp.json();
-            const cookies = mergeCookies("", setCookies);
+            const sentHeaders = { 
+                "User-Agent":     `VRChat/${randVer} Win32`,
+                "Authorization":  `Basic ${safeBtoa(authEncoded)}`,
+                "Accept":         "application/json",
+                "X-MacAddress":   randMac(),
+                "X-Client-Version": randVer,
+                "X-Platform":     "standalonewindows",
+                "X-SDK-Version":  "VRCSDK3-2024.01.22.18.33",
+                "X-HWID":         hwid,
+            };
 
-            const tfaTypes = data.requiresTwoFactorAuth || [];
-            // VRChat returns 401 when email verification (loginplace) is required
-            // Or it might be in the error message
-            const isLoginPlace = tfaTypes.includes("loginplace") || 
-                                (data.error && data.error.message && data.error.message.toLowerCase().includes("verify your email"));
+            let vrcResp = await fetch(`${VRC_API}/auth/user`, { method: "GET", headers: sentHeaders });
+            let respText = await vrcResp.text();
+            let vrcData;
+            try { vrcData = JSON.parse(respText); } catch { vrcData = respText; }
 
-            if (isLoginPlace) {
-                return jsonResp({ ok: true, needsLoginPlace: true }, 200, { "X-VRC-Auth": btoa(cookies) });
+            let usedAuth = authEncoded;
+            let retryAttempted = false;
+
+            // Only retry if it's a 401 AND the message is specifically about invalid credentials
+            // Do NOT retry if it's a 'Login Place' (new device) notification
+            const errorMsg = (vrcData.error?.message || "").toLowerCase();
+            const isInvalidCreds = vrcResp.status === 401 && errorMsg.includes("invalid");
+
+            if (isInvalidCreds) {
+                const authRaw = `${body.username}:${body.password}`;
+                const b64Raw = safeBtoa(authRaw);
+                if (b64Raw !== "ERROR_ENCODING") {
+                    const altResp = await fetch(`${VRC_API}/auth/user`, {
+                        method: "GET",
+                        headers: { ...sentHeaders, "Authorization": `Basic ${b64Raw}` }
+                    });
+                    if (altResp.status !== 401 || altResp.status === 200) {
+                        vrcResp = altResp;
+                        respText = await altResp.text();
+                        try { vrcData = JSON.parse(respText); } catch { vrcData = respText; }
+                        usedAuth = authRaw;
+                        retryAttempted = true;
+                    }
+                }
             }
 
-            if (resp.status === 200) {
-                const needs2FA = tfaTypes.length > 0;
-                return jsonResp(
-                    { ok: true, needs2FA, user: data },
-                    200,
-                    { "X-VRC-Auth": btoa(cookies) }
-                );
+            const setCookies = vrcResp.headers.getAll ? vrcResp.headers.getAll("set-cookie") : [vrcResp.headers.get("set-cookie")].filter(Boolean);
+            const responseHeaders = new Headers(CORS_HEADERS);
+            if (setCookies.length > 0) {
+                responseHeaders.set("X-VRC-Auth", btoa(mergeCookies("", setCookies)));
             }
-            return jsonResp({ ok: false, message: data.error?.message || "Login failed" }, resp.status);
+
+            return jsonResp({
+                vrcResponse: vrcData,
+                vrcStatus: vrcResp.status,
+                debugRequest: {
+                    usedAuthString: usedAuth,
+                    retryAttempted: retryAttempted,
+                    vrcHeaders: Object.fromEntries(vrcResp.headers)
+                }
+            }, 200, Object.fromEntries(responseHeaders));
         }
 
         // POST /api/2fa

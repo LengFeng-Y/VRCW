@@ -958,18 +958,34 @@ async function doLogin() {
       json: { username: user, password: pass },
     });
     const data = await resp.json();
-    if (data.ok) {
-      if (data.needsLoginPlace) {
-        // New device/location — VRChat sent a verification email
-        document.getElementById('loginplace-section').style.display = 'block';
-      } else if (data.needs2FA) {
+    
+    // Log debug info to console
+    console.log("[Login Debug] VRChat Response:", data.vrcResponse);
+    console.log("[Login Debug] VRChat Status:", data.vrcStatus);
+    console.log("[Login Debug] Request Sent by Worker:", data.debugRequest);
+
+    const vrcData = data.vrcResponse;
+    const vrcStatus = data.vrcStatus;
+    
+    if (vrcStatus === 200) {
+      const tfa = vrcData.requiresTwoFactorAuth || [];
+      if (tfa.length > 0) {
         document.getElementById("tfa-section").classList.add("active");
       } else {
         saveAccountInfo(user);
         showMainApp();
       }
+    } else if (vrcStatus === 401) {
+      const tfa = vrcData.requiresTwoFactorAuth || [];
+      const msg = (vrcData.error?.message || "").toLowerCase();
+      if (tfa.includes("loginplace") || msg.includes("verify your email")) {
+        document.getElementById('loginplace-section').style.display = 'block';
+      } else {
+        errEl.textContent = vrcData.error?.message || "Invalid Username/Email or Password";
+        errEl.style.display = "block";
+      }
     } else {
-      errEl.textContent = data.message || "Login failed";
+      errEl.textContent = vrcData.error?.message || "Error " + vrcStatus;
       errEl.style.display = "block";
     }
   } catch (e) {
