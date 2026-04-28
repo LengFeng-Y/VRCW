@@ -964,6 +964,24 @@ async function doLogin() {
     console.log("[Login Debug] VRChat Status:", data.vrcStatus);
     console.log("[Login Debug] Request Sent by Worker:", data.debugRequest);
 
+    // Rate-limit detection
+    if (data.rateLimited) {
+      let secs = data.retryAfterSeconds || 60;
+      errEl.textContent = `VRChat 登录请求过于频繁，请等待 ${secs} 秒后重试。`;
+      errEl.style.display = "block";
+      btn.disabled = true;
+      const countdown = setInterval(() => {
+        secs--;
+        errEl.textContent = `VRChat 登录请求过于频繁，请等待 ${secs} 秒后重试。`;
+        if (secs <= 0) {
+          clearInterval(countdown);
+          btn.disabled = false;
+          errEl.style.display = "none";
+        }
+      }, 1000);
+      return;
+    }
+
     const vrcData = data.vrcResponse;
     const vrcStatus = data.vrcStatus;
     
@@ -978,7 +996,7 @@ async function doLogin() {
     } else if (vrcStatus === 401) {
       const tfa = vrcData.requiresTwoFactorAuth || [];
       const msg = (vrcData.error?.message || "").toLowerCase();
-      if (tfa.includes("loginplace") || msg.includes("verify your email")) {
+      if (tfa.includes("loginplace") || msg.includes("somewhere new") || msg.includes("verify your email")) {
         document.getElementById('loginplace-section').style.display = 'block';
       } else {
         errEl.textContent = vrcData.error?.message || "Invalid Username/Email or Password";

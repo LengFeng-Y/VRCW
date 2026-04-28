@@ -175,6 +175,18 @@ export default {
                 responseHeaders.set("X-VRC-Auth", btoa(mergeCookies("", setCookies)));
             }
 
+            // Detect IP rate-limit: VRChat sends retry-after when hammering too fast
+            const retryAfter = vrcResp.headers.get("retry-after");
+            if (retryAfter && vrcResp.status === 401) {
+                return jsonResp({
+                    vrcResponse: vrcData,
+                    vrcStatus: 429,
+                    rateLimited: true,
+                    retryAfterSeconds: parseInt(retryAfter),
+                    debugRequest: { usedAuthString: usedAuth, retryAttempted }
+                }, 200, Object.fromEntries(responseHeaders));
+            }
+
             return jsonResp({
                 vrcResponse: vrcData,
                 vrcStatus: vrcResp.status,
