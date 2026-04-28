@@ -7939,7 +7939,7 @@ async function fetchMutualFriendsFallback(userId, el) {
     const thumb = proxyImg(u.profilePicOverrideThumbnail || u.userIcon || u.currentAvatarThumbnailImageUrl || '');
     return `
       <div class="group-member-card" onclick="openFriendProfile(this);" data-friend="${safeJson}" style="cursor:pointer;width:100%;max-width:none;">
-        <img src="${escHtml(thumb)}" class="member-avatar" onerror="this.src='https://vrchat.com/assets/images/default_avatar.png'">
+        <img src="${escHtml(thumb)}" class="member-avatar" onerror="this.onerror=null; this.src='data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=='">
         <div class="member-info">
           <div class="member-name" style="color:${t.color};" title="${escHtml(u.displayName || '')}">${escHtml(u.displayName || 'Unknown')}</div>
           <div class="member-role">${t.text || 'User'}</div>
