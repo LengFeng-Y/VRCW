@@ -112,7 +112,8 @@ export default {
         // POST /api/login
         if (path === "/api/login" && request.method === "POST") {
             const body = await request.json();
-            const basicAuth = btoa(`${body.username}:${body.password}`);
+            // Match VRCX encoding: both username and password MUST be encodeURIComponent'd
+            const basicAuth = btoa(`${encodeURIComponent(body.username)}:${encodeURIComponent(body.password)}`);
 
             const { resp, setCookies } = await vrcFetch("/auth/user", {
                 method: "GET",
@@ -122,12 +123,17 @@ export default {
             const data = await resp.json();
             const cookies = mergeCookies("", setCookies);
 
+            const tfaTypes = data.requiresTwoFactorAuth || [];
+            // VRChat returns 401 when email verification (loginplace) is required
+            // Or it might be in the error message
+            const isLoginPlace = tfaTypes.includes("loginplace") || 
+                                (data.error && data.error.message && data.error.message.toLowerCase().includes("verify your email"));
+
+            if (isLoginPlace) {
+                return jsonResp({ ok: true, needsLoginPlace: true }, 200, { "X-VRC-Auth": btoa(cookies) });
+            }
+
             if (resp.status === 200) {
-                const tfaTypes = data.requiresTwoFactorAuth || [];
-                // New device/location: VRChat sends an email with a link to verify the login place
-                if (tfaTypes.includes("loginplace")) {
-                    return jsonResp({ ok: true, needsLoginPlace: true }, 200, { "X-VRC-Auth": btoa(cookies) });
-                }
                 const needs2FA = tfaTypes.length > 0;
                 return jsonResp(
                     { ok: true, needs2FA, user: data },

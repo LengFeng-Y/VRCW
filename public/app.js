@@ -941,7 +941,7 @@ function saveAccountInfo(username) {
 
 async function doLogin() {
   const user = document.getElementById("username").value.trim();
-  const pass = document.getElementById("password").value.trim();
+  const pass = document.getElementById("password").value;
   if (!user || !pass) return;
 
   lastAttemptUser = user;
@@ -949,6 +949,8 @@ async function doLogin() {
   btn.disabled = true;
   const errEl = document.getElementById("login-error");
   errEl.style.display = "none";
+  const lpEl = document.getElementById('loginplace-section');
+  if (lpEl) lpEl.style.display = 'none';
 
   try {
     const resp = await apiCall("/api/login", {
