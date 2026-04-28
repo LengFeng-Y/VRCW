@@ -7702,7 +7702,7 @@ async function fetchGroupMembers(groupId) {
       const fJson = JSON.stringify(u).replace(/\\/g,'\\\\').replace(/"/g,'&quot;');
       return `
         <div class="group-member-card" onclick="openFriendProfile(this)" data-friend="${fJson}" style="cursor:pointer;">
-          <img src="${escHtml(proxyImg(u.userIcon || u.profilePicOverrideThumbnail || u.currentAvatarThumbnailImageUrl || ''))}" class="member-avatar" onerror="this.src='https://vrchat.com/assets/images/default_avatar.png'">
+          <img src="${escHtml(proxyImg(u.userIcon || u.profilePicOverrideThumbnail || u.currentAvatarThumbnailImageUrl || ''))}" class="member-avatar" onerror="this.onerror=null; this.src='data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=='">
           <div class="member-info">
             <div class="member-name" title="${escHtml(u.displayName || '')}">${escHtml(u.displayName || 'Unknown')}</div>
             <div class="member-role">${escHtml(m.roleNames?.[0] || 'Member')}</div>
@@ -7894,7 +7894,7 @@ async function fetchMutualFriends(userId, containerId) {
       const thumb = proxyImg(u.profilePicOverrideThumbnail || u.userIcon || u.currentAvatarThumbnailImageUrl || '');
       return `
         <div class="group-member-card" onclick="openFriendProfile(this);" data-friend="${safeJson}" style="cursor:pointer;width:100%;max-width:none;">
-          <img src="${escHtml(thumb)}" class="member-avatar" onerror="this.src='https://vrchat.com/assets/images/default_avatar.png'">
+          <img src="${escHtml(thumb)}" class="member-avatar" onerror="this.onerror=null; this.src='data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=='">
           <div class="member-info">
             <div class="member-name" style="color:${t.color};" title="${escHtml(u.displayName || '')}">${escHtml(u.displayName || 'Unknown')}</div>
             <div class="member-role">${t.text || 'User'}</div>
