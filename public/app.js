@@ -7529,16 +7529,17 @@ async function openGroupDetail(groupId) {
   if (!document.getElementById('groupDetailModal')) {
     const html = `<div id="groupDetailModal" class="modal hidden" onclick="if(event.target===this)this.classList.add('hidden')">
       <div class="modal-content" style="max-width:560px;padding:0;overflow:hidden;">
-        <div id="gdBanner" style="height:120px;background:var(--bg-secondary);background-size:cover;background-position:center;position:relative;">
-          <button onclick="document.getElementById('groupDetailModal').classList.add('hidden')" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:99px;width:28px;height:28px;cursor:pointer;font-size:1rem;">\u00d7</button>
+        <div id="gdBanner" style="height:140px;background:var(--bg-secondary);background-size:cover;background-position:center;position:relative;flex-shrink:0;">
+          <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.55) 0%,transparent 60%);pointer-events:none;"></div>
+          <button onclick="document.getElementById('groupDetailModal').classList.add('hidden')" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.55);border:none;color:#fff;border-radius:99px;width:30px;height:30px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;">\u00d7</button>
         </div>
-        <div style="padding:0 24px 24px; overflow-y:auto; max-height:calc(100vh - 160px);">
-          <div style="display:flex;gap:16px;align-items:flex-end;margin:-28px 0 12px;position:relative;z-index:2;">
-            <div style="width:56px;height:56px;border-radius:10px;overflow:hidden;border:2px solid var(--bg-primary);background:var(--bg-card);flex-shrink:0;">
+        <div style="padding:0 24px 24px; overflow-y:auto; max-height:calc(100vh - 180px);">
+          <div style="display:flex;gap:16px;align-items:flex-end;margin-top:-44px;margin-bottom:12px;position:relative;z-index:2;">
+            <div style="width:72px;height:72px;border-radius:14px;overflow:hidden;border:3px solid var(--bg-primary);background:var(--bg-card);flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.4);">
               <img id="gdIcon" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">
             </div>
-            <div style="flex:1;">
-              <div id="gdName" style="font-size:1.1rem;font-weight:700;"></div>
+            <div style="flex:1;padding-bottom:2px;">
+              <div id="gdName" style="font-size:1.15rem;font-weight:700;color:var(--text-primary);"></div>
               <div id="gdShortCode" style="font-size:0.75em;color:var(--text-muted);"></div>
             </div>
           </div>
