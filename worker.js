@@ -22,14 +22,8 @@ function jsonResp(data, status = 200, extraHeaders = {}) {
 }
 
 function safeBtoa(str) {
-    try {
-        return btoa(str);
-    } catch {
-        const bytes = new TextEncoder().encode(str);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-        return btoa(binary);
-    }
+    // Used only for cookie strings (always ASCII-safe)
+    try { return btoa(str); } catch { return btoa(unescape(encodeURIComponent(str))); }
 }
 
 async function vrcFetch(path, options = {}, authCookies = "") {
@@ -39,7 +33,7 @@ async function vrcFetch(path, options = {}, authCookies = "") {
         ...(options.headers || {}),
     };
     if (authCookies) headers["Cookie"] = authCookies;
-    
+
     if (options.json) {
         headers["Content-Type"] = "application/json";
         options.body = JSON.stringify(options.json);
@@ -101,7 +95,10 @@ export default {
         if (path === "/api/login" && request.method === "POST") {
             try {
                 const body = await request.json();
-                const basicAuth = safeBtoa(`${encodeURIComponent(body.username)}:${encodeURIComponent(body.password)}`);
+                // VRChat official spec: base64(encodeURIComponent(username) + ':' + encodeURIComponent(password))
+                // This supports any Unicode username (Chinese, Japanese, etc.) and special chars in passwords.
+                // For ASCII-only credentials, encodeURIComponent is a no-op, so behavior is unchanged.
+                const basicAuth = btoa(`${encodeURIComponent(body.username)}:${encodeURIComponent(body.password)}`);
                 const { resp, setCookies } = await vrcFetch("/auth/user", {
                     method: "GET",
                     headers: { Authorization: `Basic ${basicAuth}` },
@@ -135,7 +132,7 @@ export default {
         if (path === "/api/image" && request.method === "GET") {
             const targetUrl = url.searchParams.get("url");
             if (!targetUrl) return new Response("Missing url", { status: 400 });
-            
+
             const cache = caches.default;
             const cacheKey = new Request(request.url, { method: "GET" });
             let cached = await cache.match(cacheKey);
@@ -148,7 +145,7 @@ export default {
                     redirect: "follow"
                 });
                 if (!imgResp.ok) return new Response("Fail", { status: imgResp.status, headers: CORS_HEADERS });
-                
+
                 const resp = new Response(imgResp.body, {
                     status: 200,
                     headers: {
@@ -190,7 +187,7 @@ export default {
                 try {
                     const r = await fetch(u, { headers: { "User-Agent": USER_AGENT, "Referer": "https://vrchat.com/", "Cookie": auth } });
                     if (r.ok) await cache.put(ck, new Response(r.body, { headers: { "Content-Type": r.headers.get("content-type"), "Cache-Control": "public, max-age=86400", ...CORS_HEADERS } }));
-                } catch {}
+                } catch { }
             });
             ctx.waitUntil(Promise.all(promises));
             return jsonResp({ ok: true });
