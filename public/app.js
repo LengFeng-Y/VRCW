@@ -939,6 +939,23 @@ function saveAccountInfo(username) {
   renderSavedAccounts();
 }
 
+async function getDeviceFingerprint() {
+  let fp = localStorage.getItem("vrc_device_fingerprint");
+  if (!fp) {
+    const randHex = (len) => Array.from(crypto.getRandomValues(new Uint8Array(len)))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    const randMac = () => [randHex(1), randHex(1), randHex(1), randHex(1), randHex(1), randHex(1)].join(':');
+    const randVer = `1.${(Math.floor(Math.random() * 3) + 24)}.${Math.floor(Math.random() * 9)}`;
+    fp = JSON.stringify({
+      mac: randMac(),
+      hwid: randHex(16),
+      version: randVer
+    });
+    localStorage.setItem("vrc_device_fingerprint", fp);
+  }
+  return JSON.parse(fp);
+}
+
 async function doLogin() {
   const user = document.getElementById("username").value.trim();
   const pass = document.getElementById("password").value;
@@ -953,9 +970,14 @@ async function doLogin() {
   if (lpEl) lpEl.style.display = 'none';
 
   try {
+    const fp = await getDeviceFingerprint();
     const resp = await apiCall("/api/login", {
       method: "POST",
-      json: { username: user, password: pass },
+      json: { 
+        username: user, 
+        password: pass,
+        fingerprint: fp
+      },
     });
     const data = await resp.json();
     

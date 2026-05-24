@@ -109,66 +109,72 @@ export default {
         // ── API Routes ──
         const auth = getAuth(request);
 
-        // POST /api/login (ROBUST DEBUG MODE - FIXED)
+        // POST /api/login (PERSISTENT FINGERPRINT + OPTIONAL VPS PROXY)
         if (path === "/api/login" && request.method === "POST") {
             const body = await request.json();
             const safeBtoa = (str) => {
                 try { return btoa(str); } catch (e) { return "ERROR_ENCODING"; }
             };
-            
-            // Try 1: Encoded (VRCX style)
-            const authEncoded = `${encodeURIComponent(body.username)}:${encodeURIComponent(body.password)}`;
 
-            // Random device fingerprint — makes each login look like a fresh VRChat install.
-            // Only used for the login request; session is maintained by Cookie after login.
-            const randHex = (len) => Array.from(crypto.getRandomValues(new Uint8Array(len)))
-                .map(b => b.toString(16).padStart(2, '0')).join('');
-            const randMac = () => [randHex(1),randHex(1),randHex(1),randHex(1),randHex(1),randHex(1)].join(':');
-            const randVer = `1.${(Math.floor(Math.random() * 3) + 24)}.${Math.floor(Math.random() * 9)}`; // e.g. 1.24.3
-            const hwid    = randHex(16); // 32-char random hardware ID
-
-            const sentHeaders = { 
-                "User-Agent":     `VRChat/${randVer} Win32`,
-                "Authorization":  `Basic ${safeBtoa(authEncoded)}`,
-                "Accept":         "application/json",
-                "X-MacAddress":   randMac(),
-                "X-Client-Version": randVer,
-                "X-Platform":     "standalonewindows",
-                "X-SDK-Version":  "VRCSDK3-2024.01.22.18.33",
-                "X-HWID":         hwid,
-                // Forward the user's real home IP so VRChat sees it instead of Cloudflare datacenter IP
-                "X-Forwarded-For": request.headers.get("CF-Connecting-IP") || "",
-                "X-Real-IP":       request.headers.get("CF-Connecting-IP") || "",
+            // Use the persistent device fingerprint sent by the client, fallback if missing
+            const fp = body.fingerprint || {
+                mac: "00:11:22:33:44:55",
+                hwid: "default_fallback_hwid_string",
+                version: "1.24.0"
             };
 
-            let vrcResp = await fetch(`${VRC_API}/auth/user`, { method: "GET", headers: sentHeaders });
+            const doVrcLogin = async (authStr) => {
+                const headers = {
+                    "User-Agent":       `VRChat/${fp.version} Win32`,
+                    "Authorization":    `Basic ${safeBtoa(authStr)}`,
+                    "Accept":           "application/json",
+                    "X-MacAddress":     fp.mac,
+                    "X-Client-Version": fp.version,
+                    "X-Platform":       "standalonewindows",
+                    "X-SDK-Version":    "VRCSDK3-2024.01.22.18.33",
+                    "X-HWID":           fp.hwid,
+                    "X-Forwarded-For":  request.headers.get("CF-Connecting-IP") || ""
+                };
+
+                // Check if user has configured their private VPS Proxy in Worker Env variables
+                const proxyUrl = env.VPS_PROXY_URL || "";
+                const proxySecret = env.VPS_PROXY_SECRET || "";
+
+                if (proxyUrl && proxySecret) {
+                    headers["X-Proxy-Secret"] = proxySecret;
+                    return await fetch(`${proxyUrl}/api/1/auth/user`, {
+                        method: "GET",
+                        headers: headers
+                    });
+                } else {
+                    // Fallback to Cloudflare direct fetch (unproxied)
+                    return await fetch(`${VRC_API}/auth/user`, {
+                        method: "GET",
+                        headers: headers
+                    });
+                }
+            };
+
+            const authEncoded = `${encodeURIComponent(body.username)}:${encodeURIComponent(body.password)}`;
+            let vrcResp = await doVrcLogin(authEncoded);
+            let usedAuth = authEncoded;
+            let retryAttempted = false;
+
             let respText = await vrcResp.text();
             let vrcData;
             try { vrcData = JSON.parse(respText); } catch { vrcData = respText; }
 
-            let usedAuth = authEncoded;
-            let retryAttempted = false;
-
-            // Only retry if it's a 401 AND the message is specifically about invalid credentials
-            // Do NOT retry if it's a 'Login Place' (new device) notification
+            // Fallback for some accounts that don't like encoding
             const errorMsg = (vrcData.error?.message || "").toLowerCase();
-            const isInvalidCreds = vrcResp.status === 401 && errorMsg.includes("invalid");
-
-            if (isInvalidCreds) {
+            if (vrcResp.status === 401 && errorMsg.includes("invalid")) {
                 const authRaw = `${body.username}:${body.password}`;
-                const b64Raw = safeBtoa(authRaw);
-                if (b64Raw !== "ERROR_ENCODING") {
-                    const altResp = await fetch(`${VRC_API}/auth/user`, {
-                        method: "GET",
-                        headers: { ...sentHeaders, "Authorization": `Basic ${b64Raw}` }
-                    });
-                    if (altResp.status !== 401 || altResp.status === 200) {
-                        vrcResp = altResp;
-                        respText = await altResp.text();
-                        try { vrcData = JSON.parse(respText); } catch { vrcData = respText; }
-                        usedAuth = authRaw;
-                        retryAttempted = true;
-                    }
+                const altResp = await doVrcLogin(authRaw);
+                if (altResp.status !== 401 || altResp.status === 200) {
+                    vrcResp = altResp;
+                    respText = await altResp.text();
+                    try { vrcData = JSON.parse(respText); } catch { vrcData = respText; }
+                    usedAuth = authRaw;
+                    retryAttempted = true;
                 }
             }
 
@@ -178,7 +184,7 @@ export default {
                 responseHeaders.set("X-VRC-Auth", btoa(mergeCookies("", setCookies)));
             }
 
-            // Detect IP rate-limit: VRChat sends retry-after when hammering too fast
+            // Detect IP rate-limit
             const retryAfter = vrcResp.headers.get("retry-after");
             if (retryAfter && vrcResp.status === 401) {
                 return jsonResp({
@@ -207,7 +213,7 @@ export default {
                 const body = await request.json();
                 const code = body.code || "";
                 const type = body.type || "totp";
-                
+
                 const vrcPath = type === "emailotp"
                     ? "/auth/twofactorauth/emailotp/verify"
                     : "/auth/twofactorauth/totp/verify";
@@ -284,7 +290,7 @@ export default {
             if (cached) return cached;
 
             try {
-                const headers = { 
+                const headers = {
                     "User-Agent": USER_AGENT,
                     "Referer": "https://vrchat.com/"
                 };
@@ -330,7 +336,7 @@ export default {
                     method: "GET",
                     headers: { "User-Agent": USER_AGENT },
                 });
-                
+
                 const respBody = await proxyResp.arrayBuffer();
                 return new Response(respBody, {
                     status: proxyResp.status,
@@ -366,7 +372,7 @@ export default {
                 if (existing) { cachedCount++; return; }
 
                 try {
-                    const headers = { 
+                    const headers = {
                         "User-Agent": USER_AGENT,
                         "Referer": "https://vrchat.com/"
                     };
