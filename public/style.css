@@ -1142,7 +1142,9 @@ select.input-field {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  /* 1100 (was 1000) so modals always sit ABOVE the mobile .bottom-nav (1000).
+     modalZTop() in core.js starts at 2001 so dynamic stacking is unaffected. */
+  z-index: 1100;
 }
 
 .modal-content {
@@ -2175,7 +2177,7 @@ select.input-field {
   .modal {
     align-items: flex-end;
     padding: 0;
-    z-index: 1000;
+    z-index: 1100;
   }
 
   .modal-content {

@@ -365,7 +365,10 @@ async function uploadPrint(inputId) {
     fd.append('timestamp', new Date().toISOString());
     if (noteEl && noteEl.value.trim()) fd.append('note', noteEl.value.trim());
 
-    const r = await fetch('/api/vrc/prints', { method: 'POST', body: fd });
+    // Route through apiCall so X-VRC-Auth is attached (raw fetch would strip it
+    // and VRChat returns 401 → silent print upload failure). Same trap as the
+    // groups-instance.js vrcGroupAction fix.
+    const r = await apiCall('/api/vrc/prints', { method: 'POST', body: fd });
     if (!r.ok) {
       const txt = await r.text();
       throw new Error('HTTP ' + r.status + ': ' + txt);
@@ -488,7 +491,9 @@ async function openEditProfileModal() {
   
   const modal = document.createElement('div');
   modal.className = 'modal-overlay active';
-  modal.style.zIndex = '2000';
+  // Use modalZTop() so this modal stacks above any already-open modal (was hard-
+  // coded to 2000, which sits at the bottom of the modal range and got covered).
+  modal.style.zIndex = modalZTop();
   modal.innerHTML = `
     <div class="modal-content glass" style="max-width:500px;padding:24px;width:90%;border:1px solid var(--border);border-radius:16px;">
       <h3 style="margin-bottom:20px;display:flex;align-items:center;gap:10px;font-size:1.1em;">
@@ -497,7 +502,7 @@ async function openEditProfileModal() {
       <div style="display:flex;flex-direction:column;gap:16px;">
         <div class="form-group" style="display:flex;flex-direction:column;gap:6px;">
           <label style="font-size:0.85em;color:var(--text-secondary);">在线状态 (Status)</label>
-          <select id="editStatus" class="glass-input" style="width:100%;padding:10px;border-radius:8px;background:rgba(255,255,255,0.05);color:var(--text-primary);border:1px solid var(--border);outline:none;">
+          <select id="editProfileStatus" class="glass-input" style="width:100%;padding:10px;border-radius:8px;background:rgba(255,255,255,0.05);color:var(--text-primary);border:1px solid var(--border);outline:none;">
             <option value="active" ${u.status === 'active' ? 'selected' : ''} style="background:var(--bg-card);color:var(--text-primary);">Online (🟢 Active)</option>
             <option value="join me" ${u.status === 'join me' ? 'selected' : ''} style="background:var(--bg-card);color:var(--text-primary);">Join Me (🔵 Join)</option>
             <option value="ask me" ${u.status === 'ask me' ? 'selected' : ''} style="background:var(--bg-card);color:var(--text-primary);">Ask Me (🟡 Ask)</option>
@@ -531,7 +536,7 @@ async function openEditProfileModal() {
     btn.textContent = '保存中...';
     try {
       const payload = {
-        status: document.getElementById('editStatus').value,
+        status: document.getElementById('editProfileStatus').value,
         statusDescription: document.getElementById('editStatusDesc').value,
         pronouns: document.getElementById('editPronouns').value,
         bio: document.getElementById('editBio').value

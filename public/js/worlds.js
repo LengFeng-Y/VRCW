@@ -810,7 +810,8 @@ async function showCacheClearModal() {
 
   const modal = document.createElement('div');
   modal.id = 'cacheClearModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+  // z-index set after appendChild via modalZTop() so it stacks above any open modal.
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;padding:16px;';
 
   const rows = CATEGORIES.map(cat => {
     const count = catKeys[cat.id].length;
@@ -843,7 +844,10 @@ async function showCacheClearModal() {
   </div>`;
 
   document.body.appendChild(modal);
-  const close = () => modal.remove();
+  // Stack above any open modal and lock background scroll.
+  modal.style.zIndex = modalZTop();
+  lockBodyScroll();
+  const close = () => { modal.remove(); unlockBodyScroll(); };
   document.getElementById('cccClose').onclick = close;
   document.getElementById('cccCancel').onclick = close;
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
