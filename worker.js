@@ -616,11 +616,6 @@ export default {
             // If content-type IS required by signing, we already set it in s3Headers above.
             const bodyBlob = new Blob([bodyBuffer]);
 
-            // Debug: log what we're sending (visible in CF Workers dashboard logs)
-            console.log("[s3proxy] signedHeaders:", signedHeadersList.join(";"));
-            console.log("[s3proxy] sending headers:", [...s3Headers.entries()].map(([k, v]) => `${k}: ${v}`).join(", ") || "(none)");
-            console.log("[s3proxy] bodySize:", bodyBuffer.byteLength);
-
             const s3Resp = await fetch(s3Url, {
                 method: "PUT",
                 headers: s3Headers,

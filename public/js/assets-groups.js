@@ -72,9 +72,11 @@ async function uploadToVRC(tag, fileInput, onDone) {
   if (statusEl) { statusEl.textContent = '上传中...'; statusEl.style.color = 'var(--text-muted)'; }
 
   try {
-    const r = await fetch('/api/vrc/file/image', {
+    // Route through apiCall so the freshest in-memory vrcAuth is used (not a
+    // possibly-stale localStorage copy) and response auth gets updated. FormData
+    // body intentionally has no Content-Type set — the browser adds the multipart boundary.
+    const r = await apiCall('/api/vrc/file/image', {
       method: 'POST',
-      headers: { 'X-VRC-Auth': localStorage.getItem('vrc_auth') || '' },
       body: formData,
     });
     if (!r.ok) {
@@ -144,7 +146,7 @@ async function loadGroupsPage(cat) {
     area.innerHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">' +
       filtered.map(g => {
         const icon = proxyImg(g.iconUrl || g.bannerUrl || '');
-        return '<div onclick="openGroupDetail(\'' + (g.groupId || g.id) + '\')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;cursor:pointer;">' +
+        return '<div onclick="openGroupDetail(\'' + escJsAttr(g.groupId || g.id) + '\')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;cursor:pointer;">' +
           '<img src="' + escHtml(icon) + '" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
           '<div style="flex:1;min-width:0;">' +
             '<div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(g.name || '') + '</div>' +
@@ -176,7 +178,7 @@ async function searchGroups() {
     results.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">' +
       groups.map(g => {
         const icon = proxyImg(g.iconUrl || g.bannerUrl || '');
-        return '<div onclick="openGroupDetail(\'' + (g.id || '') + '\')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;cursor:pointer;">' +
+        return '<div onclick="openGroupDetail(\'' + escJsAttr(g.id || '') + '\')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;cursor:pointer;">' +
           '<img src="' + escHtml(icon) + '" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
           '<div style="flex:1;min-width:0;">' +
             '<div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(g.name || '') + '</div>' +
@@ -369,78 +371,6 @@ async function fetchSubscriptions(container) {
     container.innerHTML = `<div style="color:var(--error);">Failed to load subscriptions: ${e.message}</div>`;
   }
 }
-
-async function fetchGallery(container, gen) {
-  try {
-    const me = await (await apiCall('/api/vrc/auth/user')).json();
-    if (_assetsGen !== gen) return;
-    const [rGallery, rPrints] = await Promise.all([
-      apiCall('/api/vrc/files?tag=gallery&n=60'),
-      apiCall('/api/vrc/prints/user/' + me.id + '?n=60&offset=0'),
-    ]);
-    if (_assetsGen !== gen) return;
-    const galleryFiles = rGallery.ok ? await rGallery.json() : [];
-    const prints = rPrints.ok ? await rPrints.json() : [];
-
-    container.innerHTML = '<h2 style="margin-bottom:16px;">🖼️ 相册与文件</h2>' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:12px;background:var(--bg-glass);border:1px solid var(--border);border-radius:8px;flex-wrap:wrap;">' +
-        '<label style="font-size:0.85em;color:var(--text-secondary);">📤 上传到 VRC+ 相册:</label>' +
-        '<input type="file" id="galleryUploadInput" accept="image/*" style="font-size:0.8em;color:var(--text-muted);">' +
-        '<button class="btn btn-primary" onclick="uploadToVRC(\'gallery\', document.getElementById(\'galleryUploadInput\'), () => switchAssetsPage(\'gallery\'))" style="font-size:0.8em;padding:4px 12px;">上传</button>' +
-        '<span id="uploadStatus_gallery" style="font-size:0.75em;"></span>' +
-      '</div>';
-
-    // Gallery images section
-    container.innerHTML += '<h3 style="font-size:0.95rem;margin-bottom:10px;">📸 VRC+ 相册 (' + galleryFiles.length + ')</h3>';
-    if (galleryFiles.length) {
-      container.innerHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:24px;">' +
-        galleryFiles.map(f => {
-          // Find the latest complete version with a file URL
-          const imgUrl = proxyImg(extractFileVersionUrl(f));
-          return '<div style="border-radius:8px;overflow:hidden;background:var(--bg-glass);border:1px solid var(--border);cursor:pointer;" onclick="if(this.querySelector(\'img\').src)window.open(this.querySelector(\'img\').src,\'_blank\')">' +
-            '<img src="' + escHtml(imgUrl) + '" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;" loading="lazy" onerror="this.style.display=\'none\'">' +
-
-            '<div style="padding:4px 6px;font-size:0.68em;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(f.name || '') + '</div>' +
-          '</div>';
-        }).join('') +
-      '</div>';
-    } else {
-      container.innerHTML += '<div style="color:var(--text-muted);font-size:0.85em;margin-bottom:24px;">暂无 VRC+ 相册图片（需在游戏内或官网上传）</div>';
-    }
-
-    // Prints (polaroid photos) section
-    container.innerHTML += '<h3 style="font-size:0.95rem;margin-bottom:10px;">🎞️ 拍立得照片 (' + prints.length + ')</h3>';
-    if (prints.length) {
-      container.innerHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;">' +
-        prints.map(p => {
-          // VRChat API /prints/user/{id}: image is at p.files.image
-          const rawUrl = (p.files && p.files.image) ? p.files.image
-                        : (p.imageUrl || p.thumbnailImageUrl || '');
-          const imgUrl = proxyImg(rawUrl);
-          const world = p.worldName || p.worldId || '';
-          const author = p.ownerDisplayName || '';
-          const date = p.createdAt ? new Date(p.createdAt).toLocaleDateString('zh-CN') : '';
-          // Polaroid-style card
-          return '<div onclick="window.open(\'' + escHtml(imgUrl) + '\',\'_blank\')" style="cursor:pointer;background:#fff;border-radius:4px;padding:10px 10px 20px;box-shadow:0 4px 16px rgba(0,0,0,0.4);transition:transform 0.15s;" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'\'">'+
-            '<img src="' + escHtml(imgUrl) + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block;border-radius:2px;" loading="lazy" onerror="this.style.display=\'none\'">' +
-
-            '<div style="margin-top:8px;">' +
-              '<div style="font-size:0.7em;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:sans-serif;">' + escHtml(world) + '</div>' +
-              '<div style="font-size:0.65em;color:#888;font-family:sans-serif;display:flex;justify-content:space-between;">' +
-                '<span>' + escHtml(author) + '</span><span>' + date + '</span>' +
-              '</div>' +
-            '</div>' +
-          '</div>';
-        }).join('') +
-      '</div>';
-    } else {
-      container.innerHTML += '<div style="color:var(--text-muted);font-size:0.85em;">暂无拍立得照片（需要 VRC+ 并在游戏中拍摄）</div>';
-    }
-  } catch(e) {
-    container.innerHTML = '<div style="color:var(--error);">加载失败: ' + e.message + '</div>';
-  }
-}
-
 
 async function fetchEmoji(container, gen) {
   try {

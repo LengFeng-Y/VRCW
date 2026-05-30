@@ -7,7 +7,7 @@
  */
 function openFriendProfile(el) {
   window._fpIsSelf = false;
-  const f = JSON.parse(el.dataset.friend.replace(/&quot;/g,'"').replace(/&amp;/g,'&'));
+  const f = parseAttrJson(el.dataset.friend);
   currentFriendProfile = f;
   const modal = document.getElementById('friendProfileModal');
   if (!modal) return;
@@ -34,7 +34,12 @@ function _renderFriendProfileUI(f, modal) {
   if (!f) return;
   const id = f.id || '';
   const name = f.displayName || '';
-  const isSelf = id === (window._myUser && window._myUser.id);
+  // Determine if this profile is the logged-in user. The canonical globals are
+  // currentUserId (core.js) and myProfileData (friends.js). The old `window._myUser`
+  // was never assigned anywhere, so isSelf was always false and self-profiles
+  // wrongly showed add/delete-friend/boop buttons.
+  const myId = (typeof currentUserId !== 'undefined' && currentUserId) || (window.myProfileData && window.myProfileData.id) || '';
+  const isSelf = !!id && id === myId;
   const isFriend = f.isFriend || (window.allFriends && window.allFriends.some(af => af.id === id));
 
   // Show modal and ensure it's on top
@@ -124,9 +129,9 @@ function _renderFriendProfileUI(f, modal) {
       // If they have a valid world location and it's not private, they are joinable
       const isJoinable = !f.location.includes('~private');
       const btns = isJoinable ? `
-        <button onclick="inviteSelf('${escHtml(f.location)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;margin-left:8px;vertical-align:middle;" title="发送邀请给自己">📩 邀请自己</button>
+        <button onclick="inviteSelf('${escJsAttr(f.location)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;margin-left:8px;vertical-align:middle;" title="发送邀请给自己">📩 邀请自己</button>
       ` : '';
-      fpWorldInfo.innerHTML = `<a href="#" onclick="openInstanceDetail('${escHtml(f.location)}'); event.preventDefault();" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--accent-light);vertical-align:middle;">${escHtml(txt)}</a>` + isMineTag + btns; 
+      fpWorldInfo.innerHTML = `<a href="#" onclick="openInstanceDetail('${escJsAttr(f.location)}'); event.preventDefault();" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--accent-light);vertical-align:middle;">${escHtml(txt)}</a>` + isMineTag + btns; 
     }).catch(()=>{ fpWorldInfo.innerHTML = escHtml(f.location||'') + isMineTag; });
   }
 
@@ -157,7 +162,7 @@ function _renderFriendProfileUI(f, modal) {
 
   document.getElementById('fpUserId').innerHTML =
     `<span style="font-family:monospace;font-size:0.9em;">${escHtml(f.id||'')}</span>
-    <button onclick="navigator.clipboard.writeText('${escHtml(f.id||'')}').then(()=>this.textContent='✓')" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.9em;">复制</button>`;
+    <button onclick="navigator.clipboard.writeText('${escJsAttr(f.id||'')}').then(()=>this.textContent='✓')" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.9em;">复制</button>`;
 
   const isFriendFaved = friendFavoriteIdMap.has(id);
   const isOnline = f.state === 'online' || (f.location && f.location !== 'offline');

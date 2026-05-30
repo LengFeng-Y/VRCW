@@ -9,3 +9,6 @@ dist/
 # Local-only files (not part of the published source)
 public/app.monolith.bak.js
 public/gifuct.esm.js
+
+# Internal dev memory — NEVER commit / sync
+memory.md

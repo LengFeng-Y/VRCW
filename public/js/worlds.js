@@ -303,15 +303,15 @@ function renderWorldGrid(list) {
       <div style="position:absolute;top:6px;left:6px;z-index:10;">
         <div onclick="toggleSelectWorld('${w.id}', event)" style="width:20px;height:20px;border-radius:4px;background:${selectedWorldIds.has(w.id)?'var(--accent)':'rgba(0,0,0,0.4)'};border:2px solid ${selectedWorldIds.has(w.id)?'var(--accent)':'rgba(255,255,255,0.4)'};display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;" title="选择">${selectedWorldIds.has(w.id)?'<span style="color:white;font-size:0.75em;">✓</span>':''}</div>
       </div>
-      <div style="position:absolute;bottom:6px;left:6px;z-index:10;">
-        <div data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escHtml(w.id)}',event)"
+      <div style="position:absolute;top:6px;right:6px;z-index:10;">
+        <div data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escJsAttr(w.id)}',event)"
           style="width:26px;height:26px;border-radius:6px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.85em;transition:transform 0.15s;" title="${isFaved?'取消收藏':'添加到收藏夹'}">${isFaved?'⭐':'☆'}</div>
       </div>
       <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:4px;z-index:5;">
         ${friendsHere>0 ? `<div style="background:var(--accent);color:white;font-size:0.7em;padding:2px 6px;border-radius:4px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">🤝 ${friendsHere}</div>` : ''}
         ${pc>0 ? `<div class="world-player-badge" style="position:static;margin:0;">👥 ${pc}</div>` : ''}
       </div>
-      ${w.isInvalid ? `<div style="position:absolute;top:8px;right:8px;background:var(--error);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;">已失效</div>` : ''}
+      ${w.isInvalid ? `<div style="position:absolute;top:8px;left:32px;background:var(--error);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;">已失效</div>` : ''}
     </div>`;
     gridEl.appendChild(card);
     if (!isCached && thumb) {
@@ -647,7 +647,7 @@ async function openWorldDetail(worldId, worldObj = null) {
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
             <span style="font-size:0.65em;padding:2px 8px;border-radius:6px;background:${typeColor}22;color:${typeColor};border:1px solid ${typeColor}44;font-weight:700;">${typeLabel}</span>
             <span style="flex:1;font-size:0.75em;opacity:0.6;font-family:monospace;overflow:hidden;text-overflow:ellipsis;">#${escHtml(instStr.split('~')[0])}</span>
-            ${!instStr.includes('~private') ? `<button class="btn btn-xs" onclick="inviteSelf('${escHtml(fullLoc)}')" style="padding:4px 10px;font-size:0.75em;background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2);">📩 邀请自己</button>` : ''}
+            ${!instStr.includes('~private') ? `<button class="btn btn-xs" onclick="inviteSelf('${escJsAttr(fullLoc)}')" style="padding:4px 10px;font-size:0.75em;background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2);">📩 邀请自己</button>` : ''}
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${friends.map(f => {
@@ -691,8 +691,8 @@ async function openWorldDetail(worldId, worldObj = null) {
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
             <span style="font-size:0.7em;padding:2px 7px;border-radius:99px;background:${typeColor}22;color:${typeColor};border:1px solid ${typeColor}44;">${typeLabel}</span>
             <span style="flex:1;font-size:0.72em;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(instStr.split('~')[0])}</span>
-            ${!isPrivateInst ? `<button class="btn btn-xs" onclick="inviteSelf('${escHtml(fullLoc)}')" style="padding:2px 8px;font-size:0.75em;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);border-radius:4px;cursor:pointer;">📩 邀请自己</button>` : ''}
-            <button class="btn btn-xs" onclick="openInstanceDetail('${escHtml(fullLoc)}')" style="padding:2px 8px;font-size:0.75em;background:rgba(255, 255, 255, 0.1);color:#d4d4d8;border:1px solid rgba(255, 255, 255, 0.2);border-radius:4px;cursor:pointer;">👥 详情</button>
+            ${!isPrivateInst ? `<button class="btn btn-xs" onclick="inviteSelf('${escJsAttr(fullLoc)}')" style="padding:2px 8px;font-size:0.75em;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);border-radius:4px;cursor:pointer;">📩 邀请自己</button>` : ''}
+            <button class="btn btn-xs" onclick="openInstanceDetail('${escJsAttr(fullLoc)}')" style="padding:2px 8px;font-size:0.75em;background:rgba(255, 255, 255, 0.1);color:#d4d4d8;border:1px solid rgba(255, 255, 255, 0.2);border-radius:4px;cursor:pointer;">👥 详情</button>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             ${friends.map(f => {
@@ -735,8 +735,8 @@ async function openWorldDetail(worldId, worldObj = null) {
           <span style="font-size:0.68em;padding:2px 7px;border-radius:99px;background:${typeColor}22;color:${typeColor};border:1px solid ${typeColor}44;">${typeLabel}</span>
           <span class="inst-players" style="font-size:0.75em;opacity:0.7;">👥 ${count}/${w.capacity||'∞'}</span>
           <div style="display:flex;gap:4px;">
-            <button class="btn btn-xs" onclick="event.stopPropagation();openInstanceDetail('${escHtml(w.id)}:${escHtml(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(255, 255, 255, 0.15);color:var(--accent-light);border:1px solid var(--accent);cursor:pointer;" title="查看谁在此实例">👥</button>
-            ${!isPrivate ? `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(w.id)}:${escHtml(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请">&nbsp;📩&nbsp;</button>` : ''}
+            <button class="btn btn-xs" onclick="event.stopPropagation();openInstanceDetail('${escJsAttr(w.id)}:${escJsAttr(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(255, 255, 255, 0.15);color:var(--accent-light);border:1px solid var(--accent);cursor:pointer;" title="查看谁在此实例">👥</button>
+            ${!isPrivate ? `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escJsAttr(w.id)}:${escJsAttr(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请">&nbsp;📩&nbsp;</button>` : ''}
           </div>
         </div>`;
       }).join('');
@@ -1028,7 +1028,7 @@ function toggleWorldFavMenu(event) {
       const cap = 100;
       const full = count >= cap;
       const countLabel = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
-      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addWorldToFavorite('${escHtml(w.id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${countLabel}</button>`;
+      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addWorldToFavorite('${escJsAttr(w.id)}','${escJsAttr(g.name)}',this)">${escHtml(g.displayName || g.name)} ${countLabel}</button>`;
     }).join("");
   });
 }

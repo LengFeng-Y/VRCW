@@ -206,7 +206,7 @@ async function showGroupInviteMenu(ev, userId, userName) {
 
   const modal = document.createElement('div');
   modal.id = '_groupInvitePickerModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;';
   modal.innerHTML = `
     <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:24px;min-width:min(320px,92vw);max-width:480px;max-height:70vh;display:flex;flex-direction:column;gap:12px;">
       <div style="font-weight:600;font-size:1em;">选择要邀请 ${escHtml(userName)} 加入的群组</div>
@@ -221,6 +221,8 @@ async function showGroupInviteMenu(ev, userId, userName) {
       <button onclick="document.getElementById('_groupInvitePickerModal')?.remove()" style="background:rgba(255,255,255,0.08);border:none;border-radius:8px;padding:8px;cursor:pointer;color:#fff;">取消</button>
     </div>`;
   document.body.appendChild(modal);
+  // Stack above whatever modal opened it; modalZTop() stays below the toast (99999).
+  modal.style.zIndex = modalZTop();
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
 
@@ -259,7 +261,7 @@ function showReportUserDialog(userId, userName) {
 
   const modal = document.createElement('div');
   modal.id = '_reportUserModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;';
   modal.innerHTML = `
     <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:24px;min-width:min(340px,92vw);max-width:480px;display:flex;flex-direction:column;gap:12px;">
       <div style="font-weight:600;">🚩 举报 ${escHtml(userName)}</div>
@@ -277,6 +279,7 @@ function showReportUserDialog(userId, userName) {
       </div>
     </div>`;
   document.body.appendChild(modal);
+  modal.style.zIndex = modalZTop();
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
 
@@ -383,7 +386,7 @@ async function showUserNoteDialog(userId, userName) {
 
   const modal = document.createElement('div');
   modal.id = '_userNoteModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;';
   modal.innerHTML = `
     <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:24px;min-width:min(320px,92vw);max-width:460px;display:flex;flex-direction:column;gap:12px;">
       <div style="font-weight:600;">📝 备注 ${escHtml(userName)}</div>
@@ -398,6 +401,7 @@ async function showUserNoteDialog(userId, userName) {
       </div>
     </div>`;
   document.body.appendChild(modal);
+  modal.style.zIndex = modalZTop();
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   setTimeout(() => document.getElementById('_userNoteText')?.focus(), 50);
 }

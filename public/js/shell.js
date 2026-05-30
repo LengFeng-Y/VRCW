@@ -271,7 +271,7 @@ const REGION_LABELS = {
 
 function loadJoinPrefs() {
   const type   = localStorage.getItem(PREF_TYPE)   || 'hidden';
-  const region = localStorage.getItem(PREF_REGION) || 'jp';
+  const region = localStorage.getItem(PREF_REGION) || 'use';
 
   // Set hidden inputs
   const typeInput   = document.getElementById('settingInstanceType');

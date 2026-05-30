@@ -408,6 +408,20 @@ function escJsAttr(str) {
     .replace(/"/g, "&quot;");
 }
 
+// ── JSON-in-attribute helpers (for data-friend="..." round-trips) ──
+// Cards stash a whole object in a double-quoted attribute, then openFriendProfile
+// reads it back. The only chars that can break a double-quoted attribute are " and
+// & (entity ambiguity), so encode exactly those — and in this order so decode is a
+// clean inverse. The previous hand-rolled variants were inconsistent (some escaped
+// \\ which corrupted names with backslashes, some never encoded &), causing parse
+// failures / mojibake for unusual display names. Always use these as a matched pair.
+function escAttrJson(obj) {
+  return JSON.stringify(obj).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+function parseAttrJson(str) {
+  return JSON.parse(String(str).replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
+}
+
 // ── Clipboard helper (referenced by inline onclick in index.html) ──
 // Copies text and shows brief feedback. Falls back to a hidden textarea when
 // the async Clipboard API is unavailable (insecure context / older browsers).

@@ -189,9 +189,9 @@ async function uploadToVRCStyled(inputId, tag, refreshPage) {
       statusEl.textContent = '⏳ 上传中...';
     }
 
-    const r = await fetch('/api/vrc/file/image', {
+    // Route through apiCall (fresh in-memory vrcAuth + multipart boundary auto-set).
+    const r = await apiCall('/api/vrc/file/image', {
       method: 'POST',
-      headers: { 'X-VRC-Auth': localStorage.getItem('vrc_auth') || '' },
       body: fd
     });
     if (!r.ok) {

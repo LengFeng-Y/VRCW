@@ -515,7 +515,7 @@ function _showCleanupModal(opts) {
 
   const modal = document.createElement('div');
   modal.id = 'cleanupModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center;z-index:2000;padding:16px;';
   modal.innerHTML = `
     <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:500px;width:100%;max-height:82vh;overflow-y:auto;display:flex;flex-direction:column;gap:16px;box-shadow:0 24px 64px rgba(0,0,0,0.6);">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -564,8 +564,11 @@ function _showCleanupModal(opts) {
     </div>
   `;
   document.body.appendChild(modal);
+  // Stack above any open modal and lock background scroll (released in closeModal).
+  modal.style.zIndex = modalZTop();
+  lockBodyScroll();
 
-  const closeModal = () => modal.remove();
+  const closeModal = () => { modal.remove(); unlockBodyScroll(); };
   document.getElementById('cuClose').onclick = closeModal;
   document.getElementById('cuCancel').onclick = closeModal;
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
@@ -683,7 +686,13 @@ function editAvatar(id) {
   if (note) note.textContent = "";
   if (input) input.value = ""; // Reset file picker
 
-  document.getElementById("editModal").classList.remove("hidden");
+  const editModal = document.getElementById("editModal");
+  editModal.style.zIndex = modalZTop();
+  editModal.classList.remove("hidden");
+  if (!editModal.dataset.scrollLocked) {
+    lockBodyScroll();
+    editModal.dataset.scrollLocked = '1';
+  }
 }
 
 // Handle thumbnail file selection — show local preview
@@ -697,7 +706,12 @@ function onEditThumbSelected(input) {
 }
 
 function closeEditModal() {
-  document.getElementById("editModal").classList.add("hidden");
+  const editModal = document.getElementById("editModal");
+  editModal.classList.add("hidden");
+  if (editModal.dataset.scrollLocked) {
+    unlockBodyScroll();
+    delete editModal.dataset.scrollLocked;
+  }
   currentEditId = null;
 }
 

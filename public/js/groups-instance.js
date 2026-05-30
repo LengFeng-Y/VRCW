@@ -39,7 +39,6 @@ async function loadMyGroups() {
 }
 
 function groupCardHtml(g, myId) {
-  const gJson = JSON.stringify(g).replace(/\\/g,'\\\\').replace(/"/g,'&quot;');
   const isOwner = g.ownerId === myId;
   return '<div class="friend-card" onclick="openGroupDetail(' + JSON.stringify(g.groupId||g.id) + ')" style="cursor:pointer;">' +
     '<div class="friend-avatar-wrap" style="border-radius:10px;">' +
@@ -55,25 +54,25 @@ function groupCardHtml(g, myId) {
 async function openGroupDetail(groupId) {
   // Force update if old structure exists (legacy cached DOM)
   const existing = document.getElementById('groupDetailModal');
-  if (existing && existing.querySelector('#gdBanner')?.style.height !== '140px') {
+  if (existing && existing.querySelector('#gdBanner')?.style.height !== '120px') {
     existing.remove();
   }
 
   // Ensure group modal exists
   if (!document.getElementById('groupDetailModal')) {
-    const html = `<div id="groupDetailModal" class="modal hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+    const html = `<div id="groupDetailModal" class="modal hidden" onclick="if(event.target===this)closeGroupDetail()">
       <div class="modal-content" style="max-width:560px;padding:0;overflow:hidden;">
-        <div id="gdBanner" style="height:140px;background:var(--bg-secondary);background-size:cover;background-position:center;position:relative;flex-shrink:0;">
-          <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.55) 0%,transparent 60%);pointer-events:none;"></div>
-          <button onclick="document.getElementById('groupDetailModal').classList.add('hidden')" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.55);border:none;color:#fff;border-radius:99px;width:30px;height:30px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;">\u00d7</button>
+        <div id="gdBanner" style="height:120px;background:var(--bg-secondary);background-size:cover;background-position:center;position:relative;flex-shrink:0;">
+          <div style="position:absolute;inset:0;background:linear-gradient(to top,var(--bg-card) 0%,rgba(0,0,0,0.35) 50%,rgba(0,0,0,0.15) 100%);pointer-events:none;"></div>
+          <button onclick="closeGroupDetail()" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.55);border:none;color:#fff;border-radius:99px;width:30px;height:30px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;z-index:3;">\u00d7</button>
         </div>
         <div style="padding:0 24px 24px; overflow-y:auto; max-height:calc(100vh - 180px);">
-          <div style="display:flex;gap:16px;align-items:flex-end;margin-top:-44px;margin-bottom:12px;position:relative;z-index:2;">
-            <div style="width:72px;height:72px;border-radius:14px;overflow:hidden;border:3px solid var(--bg-primary);background:var(--bg-card);flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.4);">
+          <div style="display:flex;gap:16px;align-items:flex-end;margin-top:-32px;margin-bottom:12px;position:relative;z-index:2;">
+            <div style="width:64px;height:64px;border-radius:14px;overflow:hidden;border:3px solid var(--bg-card);background:var(--bg-secondary);flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.5);">
               <img id="gdIcon" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">
             </div>
-            <div style="flex:1;padding-bottom:2px;">
-              <div id="gdName" style="font-size:1.15rem;font-weight:700;color:var(--text-primary);"></div>
+            <div style="flex:1;padding-bottom:4px;min-width:0;">
+              <div id="gdName" style="font-size:1.15rem;font-weight:700;color:var(--text-primary);text-shadow:0 1px 4px rgba(0,0,0,0.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
               <div id="gdShortCode" style="font-size:0.75em;color:var(--text-muted);"></div>
             </div>
           </div>
@@ -96,6 +95,11 @@ async function openGroupDetail(groupId) {
   const modal = document.getElementById('groupDetailModal');
   modal.style.zIndex = modalZTop();
   modal.classList.remove('hidden');
+  // Lock background scroll (guard against double-lock if reopened/refreshed).
+  if (!modal.dataset.scrollLocked) {
+    lockBodyScroll();
+    modal.dataset.scrollLocked = '1';
+  }
   document.getElementById('gdName').textContent = '加载中...';
   document.getElementById('gdDesc').textContent = '';
   document.getElementById('gdStats').innerHTML = '';
@@ -141,9 +145,24 @@ async function openGroupDetail(groupId) {
   }
 }
 
+// Close the group detail modal and release the body scroll lock. Using a single
+// helper (instead of inline classList.add('hidden')) keeps lock/unlock balanced.
+function closeGroupDetail() {
+  const modal = document.getElementById('groupDetailModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  if (modal.dataset.scrollLocked) {
+    unlockBodyScroll();
+    delete modal.dataset.scrollLocked;
+  }
+}
+
 async function vrcGroupAction(groupId, action, myId, nextVis) {
   try {
-    let url, method = 'POST', body = null;
+    // NOTE: must go through apiCall() so the X-VRC-Auth header is attached.
+    // A raw fetch('/api/vrc/...') sends no auth → worker treats it as logged-out
+    // and join/leave/visibility silently fail. (Fixed: was `await fetch(...)`.)
+    let url, opts = { method: 'POST' };
     if (action === 'leave') {
       if(!confirm('确定要退出该群组吗？')) return;
       url = '/api/vrc/groups/' + groupId + '/leave';
@@ -151,17 +170,12 @@ async function vrcGroupAction(groupId, action, myId, nextVis) {
       url = '/api/vrc/groups/' + groupId + '/join';
     } else if (action === 'visibility') {
       url = '/api/vrc/groups/' + groupId + '/members/' + myId;
-      method = 'PUT';
-      body = JSON.stringify({ visibility: nextVis });
+      opts = { method: 'PUT', json: { visibility: nextVis } };
+    } else {
+      return;
     }
-    
-    let opts = { method };
-    if (body) {
-      opts.headers = { 'Content-Type': 'application/json' };
-      opts.body = body;
-    }
-    
-    const r = await fetch(url, opts);
+
+    const r = await apiCall(url, opts);
     if (!r.ok) throw new Error(await r.text());
     
     // Refresh modal
@@ -197,13 +211,15 @@ async function fetchGroupInstances(groupId) {
     }
     el.innerHTML = insts.map(i => {
       const region = { us: '🇺🇸', use: '🇺🇸', eu: '🇪🇺', jp: '🇯🇵' }[i.region] || '🌐';
+      const wName = (i.world && i.world.name) || i.worldName || '未知世界';
+      const wCap  = (i.world && i.world.capacity) || i.capacity || 0;
       return `<div class="group-instance-card">
         <div class="inst-info">
-          <div class="inst-name">${escHtml(i.world.name)}</div>
+          <div class="inst-name">${escHtml(wName)}</div>
           <div class="inst-meta">${region} ${escHtml(i.instanceId)} · ${escHtml(i.accessType)}</div>
         </div>
-        <div class="inst-occupants">${i.n_users||0} / ${i.world.capacity||0}</div>
-        <button class="btn btn-xs btn-primary" style="padding:4px 8px;font-size:0.7em;" onclick="inviteSelf('${escHtml(i.worldId + ':' + i.instanceId)}')">加入</button>
+        <div class="inst-occupants">${i.n_users||0} / ${wCap}</div>
+        <button class="btn btn-xs btn-primary" style="padding:4px 8px;font-size:0.7em;" onclick="inviteSelf('${escJsAttr(i.worldId + ':' + i.instanceId)}')">加入</button>
       </div>`;
     }).join('');
   } catch(e) {
@@ -226,7 +242,7 @@ async function fetchGroupMembers(groupId) {
     }
     el.innerHTML = members.map(m => {
       const u = m.user || {};
-      const fJson = JSON.stringify(u).replace(/\\/g,'\\\\').replace(/"/g,'&quot;');
+      const fJson = escAttrJson(u);
       return `
         <div class="group-member-card" onclick="openFriendProfile(this)" data-friend="${fJson}" style="cursor:pointer;">
           <img src="${escHtml(proxyImg(u.userIcon || u.profilePicOverrideThumbnail || u.currentAvatarThumbnailImageUrl || ''))}" class="member-avatar" onerror="this.onerror=null; this.src='data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=='">
@@ -284,11 +300,11 @@ async function openInstanceDetail(loc) {
   
   // Ensure modal exists
   if (!document.getElementById('instanceDetailModal')) {
-    const html = `<div id="instanceDetailModal" class="modal hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+    const html = `<div id="instanceDetailModal" class="modal hidden" onclick="if(event.target===this)closeInstanceDetail()">
       <div class="modal-content" style="max-width:560px;padding:0;overflow:hidden;">
         <div id="insBanner" style="height:160px;background-size:cover;background-position:center;position:relative;">
           <div style="position:absolute;inset:0;background:linear-gradient(to top, var(--bg-card), transparent);"></div>
-          <button onclick="document.getElementById('instanceDetailModal').classList.add('hidden')" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.5);border:none;color:#fff;border-radius:50%;width:30px;height:30px;cursor:pointer;z-index:10;">×</button>
+          <button onclick="closeInstanceDetail()" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.5);border:none;color:#fff;border-radius:50%;width:30px;height:30px;cursor:pointer;z-index:10;">×</button>
         </div>
         <div style="padding:20px;position:relative;margin-top:-40px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
@@ -325,6 +341,10 @@ async function openInstanceDetail(loc) {
   const modal = document.getElementById('instanceDetailModal');
   modal.style.zIndex = modalZTop();
   modal.classList.remove('hidden');
+  if (!modal.dataset.scrollLocked) {
+    lockBodyScroll();
+    modal.dataset.scrollLocked = '1';
+  }
   // Always update the action buttons for the CURRENT loc/worldId (fixes stale-closure bug)
   document.getElementById('insBtnWorld').onclick = () => openWorldDetail(worldId);
   // Show 'Invite Self' only for joinable instances (not ~private)
@@ -352,7 +372,7 @@ async function openInstanceDetail(loc) {
       const w = await wResp.json();
       document.getElementById('insWorldName').textContent = w.name;
       document.getElementById('insBanner').style.backgroundImage = `url(${proxyImg(w.imageUrl)})`;
-      document.getElementById('insAuthorLine').innerHTML = `by <a href="#" onclick="openFriendProfileById('${w.authorId}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${escHtml(w.authorName)}</a>`;
+      document.getElementById('insAuthorLine').innerHTML = `by <a href="#" onclick="openFriendProfileById('${escJsAttr(w.authorId)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${escHtml(w.authorName)}</a>`;
       document.getElementById('insDesc').textContent = w.description || '暂无世界简介';
       
       const region = loc.includes('~region(') ? loc.match(/~region\((.*?)\)/)[1].toUpperCase() : 'US';
@@ -388,7 +408,7 @@ async function openInstanceDetail(loc) {
     } else {
       listEl.innerHTML = friendsInIns.map(f => {
         const trust = getTrustInfo(f.tags||[]);
-        const safeJson = JSON.stringify(f).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        const safeJson = escAttrJson(f);
         return `<div class="friend-card" style="padding:10px;margin:0;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;transition:all 0.2s;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'" onclick="openFriendProfile(this)" data-friend="${safeJson}">
           <div style="position:relative;">
             <img src="${proxyImg(f.currentAvatarThumbnailImageUrl||f.userIcon||'')}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${trust.color}44;">
@@ -410,6 +430,17 @@ async function openInstanceDetail(loc) {
   }
 }
 
+// Close the instance detail modal and release the body scroll lock.
+function closeInstanceDetail() {
+  const modal = document.getElementById('instanceDetailModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  if (modal.dataset.scrollLocked) {
+    unlockBodyScroll();
+    delete modal.dataset.scrollLocked;
+  }
+}
+
 
 async function fetchMutualGroups(userId, containerId) {
   const el = document.getElementById(containerId);
@@ -417,7 +448,8 @@ async function fetchMutualGroups(userId, containerId) {
   el.innerHTML = '<span style="color:var(--text-muted);font-size:0.8em;">加载中...</span>';
   try {
     if (!myGroupsCache) {
-      const me = await apiCall('/api/vrc/auth/user');
+      const meResp = await apiCall('/api/vrc/auth/user');
+      const me = await meResp.json();
       const r = await apiCall('/api/vrc/users/' + me.id + '/groups');
       myGroupsCache = await r.json();
     }
@@ -457,7 +489,7 @@ async function fetchMutualFriends(userId, containerId) {
       return;
     }
     const renderUser = u => {
-      const safeJson = JSON.stringify(u).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+      const safeJson = escAttrJson(u);
       const t = getTrustInfo(u.tags || []);
       const thumb = proxyImg(u.profilePicOverrideThumbnail || u.userIcon || u.currentAvatarThumbnailImageUrl || '');
       return `
@@ -502,7 +534,7 @@ async function fetchMutualFriendsFallback(userId, el) {
   const colocated = targetLoc && targetLoc.startsWith('wrld_') ? myFriends.filter(f => f.location === targetLoc) : [];
   
   const renderUser = u => {
-    const safeJson = JSON.stringify(u).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    const safeJson = escAttrJson(u);
     const t = getTrustInfo(u.tags || []);
     const thumb = proxyImg(u.profilePicOverrideThumbnail || u.userIcon || u.currentAvatarThumbnailImageUrl || '');
     return `

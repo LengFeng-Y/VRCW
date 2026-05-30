@@ -25,14 +25,14 @@
       form-action 'self';">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon.png">
-    <title>VRCW — Avatar Manager</title>
+    <title>VRCW �?Avatar Manager</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=2">
     <script src="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js"></script>
     <script>
-      // Register Service Worker for image caching — eliminates repeat Cloudflare image requests
+      // Register Service Worker for image caching �?eliminates repeat Cloudflare image requests
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js', { scope: './' })
           .catch(e => console.warn('SW registration failed:', e));
@@ -69,14 +69,14 @@
             <div id="loginplace-section" style="display:none;margin-top:16px;padding:16px;background:rgba(255,200,0,0.1);border:1px solid rgba(255,200,0,0.4);border-radius:12px;text-align:center;">
                 <div style="font-size:1.5em;margin-bottom:8px;">📧</div>
                 <div style="font-weight:600;margin-bottom:6px;">需要验证新设备</div>
-                <div style="font-size:0.88em;opacity:0.85;line-height:1.5;">VRChat 已向您的邮箱发送了一封验证邮件。<br>请点击邮件中的链接完成验证，<br>然后重新点击「登录」按钮。</div>
+                <div style="font-size:0.88em;opacity:0.85;line-height:1.5;">VRChat 已向您的邮箱发送了一封验证邮件�?br>请点击邮件中的链接完成验证，<br>然后重新点击「登录」按钮�?/div>
                 <button onclick="document.getElementById('loginplace-section').style.display='none';doLogin()" class="btn btn-primary btn-block" style="margin-top:12px;">重新登录</button>
             </div>
             <div style="text-align:center;margin-top:16px;">
                 <div class="lang-switch">
                     <button class="lang-btn" onclick="setLang('en')">EN</button>
                     <button class="lang-btn active" onclick="setLang('zh')">中文</button>
-                    <button class="lang-btn" onclick="setLang('ja')">日本語</button>
+                    <button class="lang-btn" onclick="setLang('ja')">日本�?/button>
                 </div>
             </div>
         </div>
@@ -104,7 +104,7 @@
                 </div>
                 <div class="global-nav-items">
                     <button class="nav-item active" onclick="switchTab('download')" id="navItemDownload">
-                        <span class="nav-icon">🖼️</span><span class="nav-label">模型</span>
+                        <span class="nav-icon">🖼�?/span><span class="nav-label">模型</span>
                     </button>
                     <button class="nav-item" onclick="switchTab('friends')" id="navItemFriends">
                         <span class="nav-icon">👥</span><span class="nav-label">好友</span>
@@ -134,15 +134,15 @@
                     <div class="lang-switch" style="flex-direction:column;background:transparent;gap:2px;">
                         <button class="lang-btn" onclick="setLang('en')">EN</button>
                         <button class="lang-btn active" onclick="setLang('zh')">中文</button>
-                        <button class="lang-btn" onclick="setLang('ja')">日本語</button>
+                        <button class="lang-btn" onclick="setLang('ja')">日本�?/button>
                     </div>
-                    <button onclick="doLogout()" class="btn btn-danger btn-block" style="margin-top:8px;font-size:0.75rem;" data-i18n="btnSignOut">退出登录</button>
+                    <button onclick="doLogout()" class="btn btn-danger btn-block" style="margin-top:8px;font-size:0.75rem;" data-i18n="btnSignOut">退出登�?/button>
                 </div>
             </nav>
             <!-- Collapsed nav (icon only) -->
             <div class="global-nav-collapsed hidden" id="globalNavCollapsed">
                 <button class="nav-collapse-btn" onclick="toggleGlobalNav()" title="展开" style="margin:8px auto;">&#8250;</button>
-                <button class="nav-item-icon" onclick="switchTab('download')" id="navIconDownload" title="模型">🖼️</button>
+                <button class="nav-item-icon" onclick="switchTab('download')" id="navIconDownload" title="模型">🖼�?/button>
                 <button class="nav-item-icon" onclick="switchTab('friends')" id="navIconFriends" title="好友">👥</button>
                 <button class="nav-item-icon" onclick="switchTab('worlds')" id="navIconWorlds" title="世界">🌍</button>
                 <hr style="width:70%;border-color:var(--border);margin:2px 0;">
@@ -152,7 +152,7 @@
                 <button class="nav-item-icon" onclick="switchTab('search')" id="navIconSearch" title="搜索">🔍</button>
                 <hr style="width:70%;border-color:var(--border);margin:2px 0;">
                 <button class="nav-item-icon" onclick="switchTab('settings')" id="navIconSettings" title="高级设置">⚙️</button>
-                <button class="nav-item-icon" onclick="doLogout()" title="退出" style="margin-top:auto;color:var(--error);">🚩</button>
+                <button class="nav-item-icon" onclick="doLogout()" title="退�? style="margin-top:auto;color:var(--error);">🚩</button>
             </div>
 
         <div class="main-content">
@@ -211,7 +211,7 @@
                         <div class="glass-select" style="min-width: 130px;" onclick="toggleGlassSelect(event, this)">
                             <div class="glass-select-trigger">
                                 <span class="selected-label" data-i18n="filterAllStatus">All Status</span>
-                                <span class="chevron">▼</span>
+                                <span class="chevron">�?/span>
                             </div>
                             <div class="glass-select-options">
                                 <div class="glass-option selected" data-i18n="filterAllStatus" onclick="selectGlassOption(event, this, 'all', 'applyFilters')">All Status</div>
@@ -223,13 +223,13 @@
 
                         <div class="glass-select" style="min-width: 160px;" onclick="toggleGlassSelect(event, this)">
                             <div class="glass-select-trigger">
-                                <span class="selected-label" data-i18n="filterAllPlatform">所有平台</span>
-                                <span class="chevron">▼</span>
+                                <span class="selected-label" data-i18n="filterAllPlatform">所有平�?/span>
+                                <span class="chevron">�?/span>
                             </div>
                             <div class="glass-select-options">
-                                <div class="glass-option selected" data-i18n="filterAllPlatform" onclick="selectGlassOption(event, this, 'all', 'applyFilters')">所有平台</div>
-                                <div class="glass-option" data-i18n="filterPC" onclick="selectGlassOption(event, this, 'pc', 'applyFilters')">含 PC</div>
-                                <div class="glass-option" data-i18n="filterPCQuest" onclick="selectGlassOption(event, this, 'pc-quest', 'applyFilters')">含 PC + Quest</div>
+                                <div class="glass-option selected" data-i18n="filterAllPlatform" onclick="selectGlassOption(event, this, 'all', 'applyFilters')">所有平�?/div>
+                                <div class="glass-option" data-i18n="filterPC" onclick="selectGlassOption(event, this, 'pc', 'applyFilters')">�?PC</div>
+                                <div class="glass-option" data-i18n="filterPCQuest" onclick="selectGlassOption(event, this, 'pc-quest', 'applyFilters')">�?PC + Quest</div>
                                 <div class="glass-option" data-i18n="filterPCQuestApple" onclick="selectGlassOption(event, this, 'pc-quest-apple', 'applyFilters')">PC + Quest + Apple</div>
                             </div>
                             <input type="hidden" id="filterPlatform" value="all">
@@ -247,8 +247,8 @@
                     <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.4);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:flex-start;gap:12px;">
                         <span style="font-size:1.4em;flex-shrink:0;">🚫</span>
                         <div>
-                            <div style="color:#ef4444;font-weight:600;font-size:0.9em;margin-bottom:4px;">上传功能不可用 / Upload Unavailable</div>
-                            <div style="color:rgba(255,255,255,0.5);font-size:0.78em;line-height:1.5;">由于 VRChat 的限制，.vrca 文件无法通过网页直接上传。<br>Due to VRChat restrictions, .vrca files cannot be uploaded directly via web.</div>
+                            <div style="color:#ef4444;font-weight:600;font-size:0.9em;margin-bottom:4px;">上传功能不可�?/ Upload Unavailable</div>
+                            <div style="color:rgba(255,255,255,0.5);font-size:0.78em;line-height:1.5;">由于 VRChat 的限制，.vrca 文件无法通过网页直接上传�?br>Due to VRChat restrictions, .vrca files cannot be uploaded directly via web.</div>
                         </div>
                     </div>
                     <div class="upload-form">
@@ -300,7 +300,7 @@
                                 <div class="glass-select" style="flex: 1;" onclick="toggleGlassSelect(event, this)">
                                     <div class="glass-select-trigger">
                                         <span class="selected-label" data-i18n="selectAvatar">Select avatar...</span>
-                                        <span class="chevron">▼</span>
+                                        <span class="chevron">�?/span>
                                     </div>
                                     <div class="glass-select-options" id="avatarSelectOptions">
                                         <!-- Will be populated by JS -->
@@ -335,7 +335,7 @@
                                 <div class="glass-select" id="catGlassSelect" onclick="toggleGlassSelect(event, this)">
                                     <div class="glass-select-trigger">
                                         <span class="selected-label">模型 (Avatar)</span>
-                                        <span class="chevron">▼</span>
+                                        <span class="chevron">�?/span>
                                     </div>
                                     <div class="glass-select-options">
                                         <div class="glass-option selected" onclick="selectGlassOption(event, this, 'avatars', 'onSearchCategoryChange')">模型 (Avatar)</div>
@@ -347,16 +347,16 @@
                                 </div>
                             </div>
                             <div class="search-box-divider"></div>
-                            <input type="text" id="avtrdbSearch" placeholder="搜索模型、玩家、世界..." oninput="onAvtrdbInput()" onkeydown="if(event.key==='Enter')doAvtrdbSearch()">
+                            <input type="text" id="avtrdbSearch" placeholder="搜索模型、玩家、世�?.." oninput="onAvtrdbInput()" onkeydown="if(event.key==='Enter')doAvtrdbSearch()">
                             <div class="search-box-divider mobile-hide"></div>
                             <div class="search-platform-select">
                                 <div class="glass-select" id="platGlassSelect" onclick="toggleGlassSelect(event, this)" style="min-width:140px;">
                                     <div class="glass-select-trigger">
-                                        <span class="selected-label">所有平台 (All)</span>
-                                        <span class="chevron">▼</span>
+                                        <span class="selected-label">所有平�?(All)</span>
+                                        <span class="chevron">�?/span>
                                     </div>
                                     <div class="glass-select-options">
-                                        <div class="glass-option selected" data-i18n="filterAllPlatform" onclick="selectGlassOption(event, this, '', 'doAvtrdbSearch')">所有平台 (All)</div>
+                                        <div class="glass-option selected" data-i18n="filterAllPlatform" onclick="selectGlassOption(event, this, '', 'doAvtrdbSearch')">所有平�?(All)</div>
                                         <div class="glass-option" data-i18n="filterPC" onclick="selectGlassOption(event, this, 'pc', 'doAvtrdbSearch')">PC Only</div>
                                         <div class="glass-option" data-i18n="filterQuest" onclick="selectGlassOption(event, this, 'android', 'doAvtrdbSearch')">Quest Only</div>
                                         <div class="glass-option" data-i18n="filterApple" onclick="selectGlassOption(event, this, 'ios', 'doAvtrdbSearch')">Apple Only</div>
@@ -377,8 +377,8 @@
                         <div id="avtrdbStats" style="font-size:0.8em;color:rgba(255,255,255,0.4);flex:1;min-width:120px;"></div>
                         <div id="avtrdbSortBtns" class="sort-chips">
                             <span style="font-size:0.72em;color:var(--text-muted);margin-right:2px;">排序</span>
-                            <button class="sort-chip active" data-sort="relevance" onclick="setAvtrdbSort('relevance')">相关度</button>
-                            <button class="sort-chip" data-sort="newest" onclick="setAvtrdbSort('newest')">最新</button>
+                            <button class="sort-chip active" data-sort="relevance" onclick="setAvtrdbSort('relevance')">相关�?/button>
+                            <button class="sort-chip" data-sort="newest" onclick="setAvtrdbSort('newest')">最�?/button>
                             <button class="sort-chip" data-sort="name" onclick="setAvtrdbSort('name')">名称</button>
                         </div>
                     </div>
@@ -402,7 +402,7 @@
                         <div id="sidebarMyMiniProfile" class="sidebar-mini-profile" onclick="fetchMyProfile()">
                           <div class="mini-dot" style="background:#475569"></div>
                           <div style="flex:1;min-width:0;">
-                            <div class="mini-name">加载中...</div>
+                            <div class="mini-name">加载�?..</div>
                           </div>
                         </div>
                         <div class="category-list" id="friendCategoryList">
@@ -410,23 +410,23 @@
                         </div>
                     </div>
                     <div class="sidebar-section">
-                        <h3>好友收藏夹</h3>
+                        <h3>好友收藏�?/h3>
                         <div class="category-list" id="friendFavGroupList">
-                            <div style="font-size:0.75em;color:var(--text-muted);padding:4px 0;">加载中...</div>
+                            <div style="font-size:0.75em;color:var(--text-muted);padding:4px 0;">加载�?..</div>
                         </div>
                     </div>
                     <div class="sidebar-section">
                         <h3>全部好友</h3>
                         <div class="category-list">
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('all')" id="friendCatAll" style="width:100%;">👥 所有好友</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('online')" id="friendCatOnline" style="width:100%;">🟢 仅在线</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('all')" id="friendCatAll" style="width:100%;">👥 所有好�?/button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('online')" id="friendCatOnline" style="width:100%;">🟢 仅在�?/button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('notifications')" id="friendCatNotifications" style="width:100%;">🔔 消息通知</button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('modlog')" id="friendCatModlog" style="width:100%;">📜 管理记录</button>
                         </div>
                     </div>
                     <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;">
-                        <h3>控制台</h3>
-                        <div id="friendConsole" class="log-console"><span class="log-info">就绪。</span></div>
+                        <h3>控制�?/h3>
+                        <div id="friendConsole" class="log-console"><span class="log-info">就绪�?/span></div>
                     </div>
                 </div>
                 <!-- Main content -->
@@ -434,8 +434,7 @@
                     <!-- My Profile view -->
                     <div id="friendMyProfileView" style="flex:1;overflow-y:auto;padding:20px 24px;">
                         <div style="text-align:center;padding:60px;color:rgba(255,255,255,0.3);">
-                            登录后点击「我的资料」加载
-                        </div>
+                            登录后点击「我的资料」加�?                        </div>
                     </div>
                     <!-- Friend list view -->
                     <div id="friendListView" style="display:none;flex-direction:column;height:100%;overflow:hidden;">
@@ -449,12 +448,12 @@
                             <div class="glass-select" style="min-width: 130px;" onclick="toggleGlassSelect(event, this)">
                                 <div class="glass-select-trigger">
                                     <span class="selected-label" data-i18n="friendSortStatus">Sort by Status</span>
-                                    <span class="chevron">▼</span>
+                                    <span class="chevron">�?/span>
                                 </div>
                                 <div class="glass-select-options">
                                     <div class="glass-option selected" data-i18n="friendSortStatus" onclick="selectGlassOption(event, this, 'status', 'filterFriends')">在线优先</div>
                                     <div class="glass-option" data-i18n="friendSortName" onclick="selectGlassOption(event, this, 'name', 'filterFriends')">名字 A→Z</div>
-                                    <div class="glass-option" data-i18n="friendSortActivity" onclick="selectGlassOption(event, this, 'activity', 'filterFriends')">最近活跃</div>
+                                    <div class="glass-option" data-i18n="friendSortActivity" onclick="selectGlassOption(event, this, 'activity', 'filterFriends')">最近活�?/div>
                                 </div>
                                 <input type="hidden" id="friendSortBy" value="status">
                             </div>
@@ -467,7 +466,7 @@
                     <div id="friendModlogView" style="display:none;flex-direction:column;height:100%;overflow:hidden;">
                         <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border);">
                             <h3 style="margin:0;font-size:1.1em;">📜 玩家管理记录</h3>
-                            <button class="btn btn-secondary" style="font-size:0.8em;color:var(--text-danger);" onclick="clearModerationLog()">🗑️ 清空记录</button>
+                            <button class="btn btn-secondary" style="font-size:0.8em;color:var(--text-danger);" onclick="clearModerationLog()">🗑�?清空记录</button>
                         </div>
                         <div id="modLogList" style="flex:1;overflow-y:auto;padding:16px 24px;">
                             <div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">暂无管理记录</div>
@@ -491,30 +490,30 @@
                 <!-- Sidebar -->
                 <div class="sidebar">
                     <div class="sidebar-section">
-                        <h3>收藏夹</h3>
+                        <h3>收藏�?/h3>
                         <div class="category-list" id="worldFavGroupList">
-                            <div style="font-size:0.75em;color:var(--text-muted);padding:4px 0;">加载中...</div>
+                            <div style="font-size:0.75em;color:var(--text-muted);padding:4px 0;">加载�?..</div>
                         </div>
                     </div>
                     <div class="sidebar-section">
                         <h3>发现</h3>
                         <div class="category-list">
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchWorldCategory('recent')" id="worldCatRecent" style="width:100%;">🕐 最近访问</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchWorldCategory('recent')" id="worldCatRecent" style="width:100%;">🕐 最近访�?/button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchWorldCategory('active')" id="worldCatActive" style="width:100%;">🔥 热门世界</button>
                         </div>
                     </div>
                     <div class="sidebar-section">
                         <h3>操作</h3>
                         <div class="btn-group">
-                            <button onclick="selectAllWorlds()" class="btn btn-secondary btn-block" id="btnWorldSelectAll">全选</button>
+                            <button onclick="selectAllWorlds()" class="btn btn-secondary btn-block" id="btnWorldSelectAll">全�?/button>
                             <button onclick="cleanInvalidWorlds()" id="btnWorldCleanInvalid" class="btn btn-warning btn-block hidden">清理失效世界</button>
                             <button onclick="unfavoriteSelectedWorlds()" id="btnWorldUnfavoriteSelected" class="btn btn-danger-full btn-block hidden">取消选中收藏</button>
                             <button onclick="fetchWorlds(currentWorldCategory, true)" class="btn btn-secondary btn-block">刷新</button>
                         </div>
                     </div>
                     <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;">
-                        <h3>控制台</h3>
-                        <div id="worldConsole" class="log-console"><span class="log-info">就绪。</span></div>
+                        <h3>控制�?/h3>
+                        <div id="worldConsole" class="log-console"><span class="log-info">就绪�?/span></div>
                     </div>
                 </div>
                 <!-- Main content -->
@@ -527,12 +526,12 @@
                         </div>
                         <div class="glass-select" style="min-width: 140px;" onclick="toggleGlassSelect(event, this)">
                             <div class="glass-select-trigger">
-                                <span class="selected-label" data-i18n="filterAllPlatform">所有平台</span>
-                                <span class="chevron">▼</span>
+                                <span class="selected-label" data-i18n="filterAllPlatform">所有平�?/span>
+                                <span class="chevron">�?/span>
                             </div>
                             <div class="glass-select-options">
-                                <div class="glass-option selected" data-i18n="filterAllPlatform" onclick="selectGlassOption(event, this, 'all', 'filterWorlds')">所有平台</div>
-                                <div class="glass-option" data-i18n="filterPC" onclick="selectGlassOption(event, this, 'pc', 'filterWorlds')">含 PC</div>
+                                <div class="glass-option selected" data-i18n="filterAllPlatform" onclick="selectGlassOption(event, this, 'all', 'filterWorlds')">所有平�?/div>
+                                <div class="glass-option" data-i18n="filterPC" onclick="selectGlassOption(event, this, 'pc', 'filterWorlds')">�?PC</div>
                                 <div class="glass-option" data-i18n="filterQuest" onclick="selectGlassOption(event, this, 'android', 'filterWorlds')">Quest Only</div>
                                 <div class="glass-option" data-i18n="filterApple" onclick="selectGlassOption(event, this, 'ios', 'filterWorlds')">Apple Only</div>
                             </div>
@@ -564,7 +563,7 @@
                 </div>
                 <div class="grid-area" style="padding:20px 24px;overflow-y:auto;" id="groupsContentArea">
                     <h2 style="font-size:1.3rem;font-weight:600;margin-bottom:16px;">🏠 我的群组</h2>
-                    <p style="color:var(--text-muted);font-size:0.85rem;">加载中...</p>
+                    <p style="color:var(--text-muted);font-size:0.85rem;">加载�?..</p>
                 </div>
             </div>
 
@@ -577,15 +576,15 @@
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('balance')" id="cat-assets-balance">👛 钱包余额</button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('store')" id="cat-assets-store">🏪 商店浏览</button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('tx')" id="cat-assets-tx">💸 交易记录</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('sub')" id="cat-assets-sub">⭐ VRC+ 订阅</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('sub')" id="cat-assets-sub">�?VRC+ 订阅</button>
                         </div>
                     </div>
                     <div class="sidebar-section" style="margin-top:12px;">
                         <h3>🧳 库存 (Inventory)</h3>
                         <div class="btn-group">
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('gallery')" id="cat-assets-gallery">🖼️ VRC+ 相册</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('prints')" id="cat-assets-prints">🎞️ 拍立得照片</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('emoji')" id="cat-assets-emoji">😊 表情与贴纸</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('gallery')" id="cat-assets-gallery">🖼�?VRC+ 相册</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('prints')" id="cat-assets-prints">🎞�?拍立得照�?/button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('emoji')" id="cat-assets-emoji">😊 表情与贴�?/button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('inventory')" id="cat-assets-inventory">🎁 库存物品</button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('props')" id="cat-assets-props">🪄 道具 Props</button>
                         </div>
@@ -593,8 +592,8 @@
                 </div>
             <!-- Settings Panel -->
                 <div class="grid-area" style="padding:20px 24px;overflow-y:auto;" id="assetsContentArea">
-                    <h2 style="font-size:1.4rem;font-weight:600;margin-bottom:16px;">💰 资产与经济</h2>
-                    <p style="color:var(--text-muted);font-size:0.85rem;">选择左侧菜单查看你的余额、商店、库存和订阅。</p>
+                    <h2 style="font-size:1.4rem;font-weight:600;margin-bottom:16px;">💰 资产与经�?/h2>
+                    <p style="color:var(--text-muted);font-size:0.85rem;">选择左侧菜单查看你的余额、商店、库存和订阅�?/p>
                 </div>
             </div>
 
@@ -603,7 +602,7 @@
                     <div class="sidebar-section">
                         <h3>⚙️ 高级设置</h3>
                         <div class="btn-group">
-                            <button class="btn btn-secondary btn-block cat-btn active" onclick="switchSettingsPage('cache')" id="setCatCache">🗑️ 缓存管理</button>
+                            <button class="btn btn-secondary btn-block cat-btn active" onclick="switchSettingsPage('cache')" id="setCatCache">🗑�?缓存管理</button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchSettingsPage('join')" id="setCatJoin">🚀 加入偏好</button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchSettingsPage('about')" id="setCatAbout">ℹ️ 关于</button>
                         </div>
@@ -611,18 +610,18 @@
                 </div>
                 <div class="grid-area" style="padding:24px;overflow-y:auto;" id="settingsContentArea">
                     <div id="setPageCache">
-                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">🗑️ 缓存管理</h2>
-                        <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">管理本地 IndexedDB 缓存。清除某类别后，下次访问时数据将从 API 重新拉取。</p>
+                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">🗑�?缓存管理</h2>
+                        <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">管理本地 IndexedDB 缓存。清除某类别后，下次访问时数据将�?API 重新拉取�?/p>
                         <div id="cacheStatsContainer" style="display:flex;flex-direction:column;gap:10px;max-width:540px;">
                             <div style="color:var(--text-muted);font-size:0.85em;padding:20px;text-align:center;">正在读取缓存信息...</div>
                         </div>
                         <div style="margin-top:16px;max-width:540px;">
-                            <button onclick="clearAllCacheNow()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.35);">🗑️ 全部清除（含图片 Blob）</button>
+                            <button onclick="clearAllCacheNow()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.35);">🗑�?全部清除（含图片 Blob�?/button>
                         </div>
                     </div>
                     <div id="setPageJoin" style="display:none;max-width:520px;">
                         <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">🚀 加入偏好</h2>
-                        <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">点击“加入世界”时自动使用以下设置创建实例。</p>
+                        <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">点击“加入世界”时自动使用以下设置创建实例�?/p>
 
                         <div style="display:flex;flex-direction:column;gap:20px;">
                             <!-- Instance Type -->
@@ -630,32 +629,32 @@
                                 <label style="display:block;font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">房间类型</label>
                                 <div class="glass-select" id="instanceTypeSelect">
                                     <div class="glass-select-trigger" onclick="toggleGlassSelect(event,this.parentElement)">
-                                        <span class="selected-label">Friends+ (好友加)</span>
+                                        <span class="selected-label">Friends+ (好友�?</span>
                                         <span style="opacity:0.5;">&#9660;</span>
                                     </div>
                                     <div class="glass-select-options">
-                                        <div class="glass-option" onclick="selectGlassOption(event,this,'hidden','')" data-val="hidden">好友加 (Friends+) — 推荐</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'hidden','')" data-val="hidden">好友�?(Friends+) �?推荐</div>
                                         <div class="glass-option" onclick="selectGlassOption(event,this,'public','')" data-val="public">公开 (Public)</div>
-                                        <div class="glass-option" onclick="selectGlassOption(event,this,'friends','')" data-val="friends">仅好友 (Friends Only)</div>
-                                        <div class="glass-option" onclick="selectGlassOption(event,this,'invite','')" data-val="invite">邀请 (Invite Only)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'friends','')" data-val="friends">仅好�?(Friends Only)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'invite','')" data-val="invite">邀�?(Invite Only)</div>
                                         <div class="glass-option" onclick="selectGlassOption(event,this,'inviteplus','')" data-val="inviteplus">邀请加 (Invite+)</div>
                                     </div>
                                     <input type="hidden" id="settingInstanceType" value="hidden">
                                 </div>
-                                <p style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">Friends+ 表示好友及好友的好友可加入。</p>
+                                <p style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">Friends+ 表示好友及好友的好友可加入�?/p>
                             </div>
 
                             <!-- Region -->
                             <div>
-                                <label style="display:block;font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">服务器地区</label>
+                                <label style="display:block;font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">服务器地�?/label>
                                 <div class="glass-select" id="instanceRegionSelect">
                                     <div class="glass-select-trigger" onclick="toggleGlassSelect(event,this.parentElement)">
                                         <span class="selected-label">🇯🇵 日本 (Japan)</span>
                                         <span style="opacity:0.5;">&#9660;</span>
                                     </div>
                                     <div class="glass-select-options">
-                                        <div class="glass-option" onclick="selectGlassOption(event,this,'use','')" data-val="use">🇺🇸 美国东 (US East)</div>
-                                        <div class="glass-option" onclick="selectGlassOption(event,this,'usw','')" data-val="usw">🇺🇸 美国西 (US West)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'use','')" data-val="use">🇺🇸 美国�?(US East)</div>
+                                        <div class="glass-option" onclick="selectGlassOption(event,this,'usw','')" data-val="usw">🇺🇸 美国�?(US West)</div>
                                         <div class="glass-option" onclick="selectGlassOption(event,this,'eu','')" data-val="eu">🇪🇺 欧洲 (Europe)</div>
                                         <div class="glass-option" onclick="selectGlassOption(event,this,'jp','')" data-val="jp">🇯🇵 日本 (Japan)</div>
                                     </div>
@@ -666,7 +665,7 @@
                             <!-- Save Button -->
                             <div>
                                 <button class="btn btn-primary" onclick="saveJoinPrefs()" style="min-width:120px;">保存设置</button>
-                                <span id="joinPrefsSaveStatus" style="margin-left:12px;font-size:0.82rem;color:var(--success);display:none;">✓ 已保存</span>
+                                <span id="joinPrefsSaveStatus" style="margin-left:12px;font-size:0.82rem;color:var(--success);display:none;">�?已保�?/span>
                             </div>
                         </div>
                     </div>
@@ -694,7 +693,7 @@
             <div style="position:relative;height:130px;overflow:hidden;background:var(--bg-secondary);flex-shrink:0;">
                 <img id="fpBannerBg" style="width:100%;height:100%;object-fit:cover;filter:brightness(0.5);display:block;" src="" alt="">
                 <div style="position:absolute;inset:0;background:linear-gradient(to top,var(--bg-primary) 0%,transparent 70%);"></div>
-                <button onclick="closeFriendProfile()" style="position:absolute;top:10px;right:12px;background:rgba(0,0,0,0.5);border:none;color:#fff;font-size:1.1em;cursor:pointer;border-radius:6px;padding:4px 10px;">✕</button>
+                <button onclick="closeFriendProfile()" style="position:absolute;top:10px;right:12px;background:rgba(0,0,0,0.5);border:none;color:#fff;font-size:1.1em;cursor:pointer;border-radius:6px;padding:4px 10px;">�?/button>
                 <!-- Avatar + current avatar thumb -->
                 <div id="fpAvatarWrap" style="position:absolute;bottom:-24px;left:20px;width:72px;height:72px;border-radius:50%;overflow:hidden;border:3px solid var(--bg-primary);background:var(--bg-card);">
                     <img id="fpAvatar" style="width:100%;height:100%;object-fit:cover;" src="" alt="" onerror="this.parentElement.style.display='none'">
@@ -727,8 +726,8 @@
                     <button class="tab-btn active" id="fpTabInfo" onclick="switchFriendProfileTab('info')">信息</button>
                     <button class="tab-btn" id="fpTabGroups" onclick="switchFriendProfileTab('groups')">群组</button>
                     <button class="tab-btn" id="fpTabMutual" onclick="switchFriendProfileTab('mutual')">共同好友</button>
-                    <button class="tab-btn" id="fpTabWorlds" onclick="switchFriendProfileTab('worlds')">创建的世界</button>
-                    <button class="tab-btn" id="fpTabAvatars" onclick="switchFriendProfileTab('avatars')">创建的模型</button>
+                    <button class="tab-btn" id="fpTabWorlds" onclick="switchFriendProfileTab('worlds')">创建的世�?/button>
+                    <button class="tab-btn" id="fpTabAvatars" onclick="switchFriendProfileTab('avatars')">创建的模�?/button>
                 </div>
             </div>
             <!-- Tab content -->
@@ -742,12 +741,12 @@
                     </div>
                     <!-- Status -->
                     <div id="fpStatusSection" style="margin-bottom:14px;">
-                        <div style="font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px;">状态</div>
+                        <div style="font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px;">状�?/div>
                         <div id="fpStatusDesc" style="font-size:0.82em;color:var(--text-secondary);"></div>
                     </div>
                     <!-- Bio -->
                     <div id="fpBioSection" style="margin-bottom:14px;display:none;">
-                        <div style="font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px;">个人简介</div>
+                        <div style="font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px;">个人简�?/div>
                         <div id="fpBio" style="font-size:0.8em;color:var(--text-secondary);white-space:pre-line;line-height:1.6;max-height:120px;overflow-y:auto;"></div>
                     </div>
                     <!-- Stats grid -->
@@ -788,17 +787,17 @@
         <div class="modal-content world-detail-modal-content" style="max-width:900px;width:100%;padding:0;overflow:hidden;background:var(--bg-primary);border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,0.7);display:flex;flex-direction:column;max-height:92vh;">
             <!-- Premium Header with Breadcrumbs -->
             <div class="world-detail-header" style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;">
-                <button onclick="closeWorldDetail()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.2em;display:flex;align-items:center;">←</button>
+                <button onclick="closeWorldDetail()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.2em;display:flex;align-items:center;">�?/button>
                 <div style="display:flex;align-items:center;gap:8px;font-size:0.85em;color:var(--text-muted);flex:1;min-width:0;overflow:hidden;">
                     <span id="worldDetailBreadcrumbAuthor" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Loading...</span>
-                    <span style="opacity:0.4;flex-shrink:0;">›</span>
+                    <span style="opacity:0.4;flex-shrink:0;">�?/span>
                     <span id="worldDetailBreadcrumbName" style="color:var(--text-primary);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">World Details</span>
                 </div>
                 <div class="world-detail-header-btns" style="display:flex;gap:8px;flex-shrink:0;">
-                    <button id="worldDetailDeleteBtn" class="btn btn-icon" style="display:none;" title="删除世界">🗑️</button>
-                    <button id="worldDetailMainFavBtn" onclick="toggleWorldFavMenu(event)" class="btn btn-icon" title="收藏世界">⭐</button>
-                    <button id="worldDetailJoinBtn" onclick="joinWorldInstance()" class="btn btn-icon" title="加入世界">⚡</button>
-                    <button onclick="closeWorldDetail()" class="btn btn-icon" title="关闭">✕</button>
+                    <button id="worldDetailDeleteBtn" class="btn btn-icon" style="display:none;" title="删除世界">🗑�?/button>
+                    <button id="worldDetailMainFavBtn" onclick="toggleWorldFavMenu(event)" class="btn btn-icon" title="收藏世界">�?/button>
+                    <button id="worldDetailJoinBtn" onclick="joinWorldInstance()" class="btn btn-icon" title="加入世界">�?/button>
+                    <button onclick="closeWorldDetail()" class="btn btn-icon" title="关闭">�?/button>
                 </div>
             </div>
 
@@ -813,7 +812,7 @@
                 <!-- Right: Content area -->
                 <div class="world-detail-info-col" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
                     <div class="world-detail-info-header" style="padding:24px 32px 0;">
-                        <h1 id="worldDetailName" style="margin:0;font-size:1.8em;font-weight:700;color:var(--text-primary);">加载中...</h1>
+                        <h1 id="worldDetailName" style="margin:0;font-size:1.8em;font-weight:700;color:var(--text-primary);">加载�?..</h1>
                         <div id="worldDetailAuthorRow" style="margin-top:4px;font-size:0.95em;color:var(--text-muted);"></div>
                         
                         <!-- Badges Row -->
@@ -847,7 +846,7 @@
                                     <div id="worldDetailId" style="font-size:0.8em;color:var(--text-secondary);font-family:monospace;background:rgba(0,0,0,0.2);padding:4px 8px;border-radius:4px;word-break:break-all;cursor:pointer;" title="点击复制" onclick="copyToClipboard(this.textContent)"></div>
                                 </div>
                                 <div>
-                                    <div style="font-size:0.65em;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px;font-weight:700;">支持的平台 / Platforms</div>
+                                    <div style="font-size:0.65em;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px;font-weight:700;">支持的平�?/ Platforms</div>
                                     <div id="worldDetailPlatformsList" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
                                 </div>
                             </div>
@@ -858,7 +857,7 @@
                                     <div id="worldDetailCreated" style="font-size:0.85em;color:var(--text-secondary);"></div>
                                 </div>
                                 <div>
-                                    <div style="font-size:0.65em;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:4px;font-weight:700;">最后更新</div>
+                                    <div style="font-size:0.65em;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:4px;font-weight:700;">最后更�?/div>
                                     <div id="worldDetailUpdated" style="font-size:0.85em;color:var(--text-secondary);"></div>
                                 </div>
                                 <div>
@@ -884,9 +883,9 @@
             <!-- Mobile-only bottom action bar (matches avatar detail style) -->
             <div class="world-detail-mobile-actions" style="display:none;gap:10px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;">
                 <div style="flex:1;position:relative;">
-                    <button class="btn btn-secondary" style="width:100%;" onclick="toggleWorldFavMenu(event)" id="worldDetailFavBtn">⭐ 收藏</button>
+                    <button class="btn btn-secondary" style="width:100%;" onclick="toggleWorldFavMenu(event)" id="worldDetailFavBtn">�?收藏</button>
                 </div>
-                <button class="btn btn-primary" style="flex:1;" onclick="joinWorldInstance()">⚡ 加入世界</button>
+                <button class="btn btn-primary" style="flex:1;" onclick="joinWorldInstance()">�?加入世界</button>
             </div>
 
             <div id="worldDetailFavStatus" style="padding:10px 24px;font-size:0.8em;background:rgba(0,0,0,0.1);border-top:1px solid var(--border);text-align:center;min-height:38px;color:var(--success);"></div>
@@ -925,7 +924,7 @@
                 <div class="glass-select" style="width:100%;" onclick="toggleGlassSelect(event, this)">
                     <div class="glass-select-trigger">
                         <span class="selected-label" data-i18n="filterPrivate">Private</span>
-                        <span class="chevron">▼</span>
+                        <span class="chevron">�?/span>
                     </div>
                     <div class="glass-select-options">
                         <div class="glass-option selected" data-i18n="filterPrivate" onclick="selectGlassOption(event, this, 'private')">Private</div>
@@ -946,21 +945,21 @@
     </div>
 
 
-    <script src="js/core.js?v=10"></script>
-    <script src="js/images.js?v=10"></script>
-    <script src="js/auth.js?v=10"></script>
-    <script src="js/shell.js?v=10"></script>
-    <script src="js/avatars.js?v=10"></script>
-    <script src="js/upload.js?v=10"></script>
-    <script src="js/search.js?v=10"></script>
-    <script src="js/common.js?v=10"></script>
-    <script src="js/friends.js?v=10"></script>
-    <script src="js/friend-profile.js?v=10"></script>
-    <script src="js/worlds.js?v=10"></script>
-    <script src="js/assets-groups.js?v=10"></script>
-    <script src="js/groups-instance.js?v=10"></script>
-    <script src="js/context-menu.js?v=10"></script>
-    <script src="js/media-profile.js?v=10"></script>
+    <script src="js/core.js?v=13"></script>
+    <script src="js/images.js?v=13"></script>
+    <script src="js/auth.js?v=13"></script>
+    <script src="js/shell.js?v=13"></script>
+    <script src="js/avatars.js?v=13"></script>
+    <script src="js/upload.js?v=13"></script>
+    <script src="js/search.js?v=13"></script>
+    <script src="js/common.js?v=13"></script>
+    <script src="js/friends.js?v=13"></script>
+    <script src="js/friend-profile.js?v=13"></script>
+    <script src="js/worlds.js?v=13"></script>
+    <script src="js/assets-groups.js?v=13"></script>
+    <script src="js/groups-instance.js?v=13"></script>
+    <script src="js/context-menu.js?v=13"></script>
+    <script src="js/media-profile.js?v=13"></script>
 
     <!-- ── avtrDB Avatar Detail Modal ── -->
     <div id="avtrdbDetailModal" class="modal hidden" onclick="if(event.target===this)closeAvtrdbDetail()">
@@ -975,7 +974,7 @@
                     <div id="avtrdbDetailAuthor" style="font-size:0.82em;color:var(--text-muted);"></div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;" id="avtrdbDetailPlats"></div>
                 </div>
-                <button onclick="closeAvtrdbDetail()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:var(--text-muted);font-size:1.3em;cursor:pointer;line-height:1;padding:4px;" title="关闭">✕</button>
+                <button onclick="closeAvtrdbDetail()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:var(--text-muted);font-size:1.3em;cursor:pointer;line-height:1;padding:4px;" title="关闭">�?/button>
             </div>
             <!-- Detail rows -->
             <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--border);">
@@ -996,7 +995,7 @@
                         <div id="avtrdbDetailCreated" style="font-size:0.75em;color:var(--text-secondary);"></div>
                     </div>
                     <div>
-                        <div style="font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:3px;">最后更新</div>
+                        <div style="font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:3px;">最后更�?/div>
                         <div id="avtrdbDetailUpdated" style="font-size:0.75em;color:var(--text-secondary);"></div>
                     </div>
                 </div>
@@ -1010,9 +1009,9 @@
                     <!-- Favorite button with dropdown -->
                     <div style="flex:1;position:relative;" id="avtrdbFavWrapper">
                         <button id="avtrdbDetailFavBtn" class="btn btn-secondary" style="width:100%;"
-                            onclick="toggleAvtrdbFavMenu(event)">⭐ 收藏</button>
+                            onclick="toggleAvtrdbFavMenu(event)">�?收藏</button>
                     </div>
-                    <button id="avtrdbDetailSwitchBtn" class="btn btn-primary" style="flex:1;">⚡ 切换模型</button>
+                    <button id="avtrdbDetailSwitchBtn" class="btn btn-primary" style="flex:1;">�?切换模型</button>
                 </div>
                 <!-- Favorite status feedback -->
                 <div id="avtrdbFavStatus" style="font-size:0.75em;text-align:center;min-height:18px;"></div>
@@ -1024,14 +1023,14 @@
     <!-- avtrDB Favorite Group Menu -->
     <div id="avtrdbFavMenu" class="hidden"
         style="position:fixed;min-width:180px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;overflow:hidden;z-index:2000;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
-        <div style="padding:6px 10px;font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);border-bottom:1px solid var(--border);">选择模型收藏夹</div>
+        <div style="padding:6px 10px;font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);border-bottom:1px solid var(--border);">选择模型收藏�?/div>
         <div id="avtrdbFavGroupList"></div>
     </div>
 
     <!-- World Favorite Group Menu -->
     <div id="worldFavMenu" class="hidden"
         style="position:fixed;min-width:180px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;overflow:hidden;z-index:2000;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
-        <div style="padding:6px 10px;font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);border-bottom:1px solid var(--border);">选择世界收藏夹</div>
+        <div style="padding:6px 10px;font-size:0.62em;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);border-bottom:1px solid var(--border);">选择世界收藏�?/div>
         <div id="worldFavGroupListMenu"></div>
     </div>
 

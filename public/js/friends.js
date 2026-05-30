@@ -585,7 +585,7 @@ async function openFriendProfileById(userId) {
     const r = await apiCall('/api/vrc/users/' + userId);
     if (r.ok) {
        const u = await r.json();
-       const mockEl = { dataset: { friend: JSON.stringify(u).replace(/"/g,'&quot;') } };
+       const mockEl = { dataset: { friend: escAttrJson(u) } };
        openFriendProfile(mockEl);
     }
   } catch(e) {}
@@ -833,7 +833,7 @@ function friendCardHtml(f) {
   }
   const thumb = proxyImg(f.profilePicOverrideThumbnail||f.userIcon||f.currentAvatarThumbnailImageUrl||'');
   const langs = getLanguages(f.tags||[]).join('');
-  const fJson  = JSON.stringify(f).replace(/\\/g,'\\\\').replace(/"/g,'&quot;');
+  const fJson  = escAttrJson(f);
 
     // ~hidden = Friends+ (joinable). Only ~private is truly unjoinable.
     const isJoinable = f.location && f.location !== 'private' && f.location !== 'offline'
@@ -875,7 +875,7 @@ function resolveWorldNames() {
     const friendCard = el.closest('.friend-card');
     if (!friendCard) return;
     try {
-      const fData = JSON.parse(friendCard.dataset.friend.replace(/&quot;/g,'"').replace(/&amp;/g,'&'));
+      const fData = parseAttrJson(friendCard.dataset.friend);
       if (fData.location && fData.location.startsWith('wrld_')) {
         const txt = await getLocationDisplay(fData.location);
         el.textContent = txt;

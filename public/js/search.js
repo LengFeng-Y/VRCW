@@ -16,6 +16,17 @@ let avtrdbCurrentQuery = "";
 let avtrdbCurrentPlatform = "";
 let avtrdbDebounceTimer = null;
 let avtrdbTotalLoaded = 0;
+// The avatar object currently shown in the detail modal. Set by displayAvatarDetail()
+// so the "save to local" fav-menu button has something to pass to saveToLocalFavorite().
+// (Fixes a ReferenceError: the inline onclick referenced an undefined `currentAvatarDetail`.)
+let _currentDetailAvatar = null;
+// Global wrapper so the inline onclick can reach the (lexically-scoped) module var.
+// NOTE: a top-level `let` is NOT a window property, so inline handlers can't read
+// `_currentDetailAvatar` directly — but a function *declaration* IS global. Route
+// the fav-menu button through this.
+function saveCurrentDetailToLocal() {
+  if (_currentDetailAvatar) saveToLocalFavorite(_currentDetailAvatar);
+}
 
 
 function onSearchCategoryChange() {
@@ -107,7 +118,7 @@ async function vrcdbFetch(cat, query) {
 
     if (cat === 'users') {
       grid.innerHTML = filteredData.map(u => {
-        const fJson = JSON.stringify(u).replace(/\\\\/g,'\\\\\\\\').replace(/"/g,'&quot;');
+        const fJson = escAttrJson(u);
         return `<div class="friend-card" onclick="openFriendProfile(this);" data-friend="${fJson}">
           <div class="friend-avatar-wrap">
             <img src="${escHtml(proxyImg(u.userIcon||u.profilePicOverride||u.currentAvatarThumbnailImageUrl||''))}" onerror="this.style.display=\'none\'">
@@ -429,7 +440,7 @@ async function avtrdbFetch(append, _signal) {
 function displayAvatarDetail(av) {
   const modal = document.getElementById("avtrdbDetailModal");
   if (!modal) return;
-
+  _currentDetailAvatar = av; // remember for the fav-menu "save to local" action
   // 1. Normalize fields (handle both VRChat API and AvtrDB/VRCX formats)
   const id = av.vrc_id || av.id || "";
   let name = av.name || av.avatarName || "";
@@ -507,7 +518,7 @@ function displayAvatarDetail(av) {
      favBtn.onclick = toggleAvtrdbFavMenu;
      const favList = document.getElementById("avtrdbFavGroupList");
      if (favList) {
-        let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(currentAvatarDetail)">📦 保存到本地 (200槽位)</button>`;
+        let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveCurrentDetailToLocal()">📦 保存到本地 (200槽位)</button>`;
         if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
         else html += favoriteGroups.map(g => {
           const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 100; const full = count >= cap;
@@ -608,7 +619,7 @@ function toggleAvtrdbFavMenu(event) {
   toggleFavMenuGeneric(event, menu, btn, () => {
     const idRow = document.getElementById("avtrdbDetailId");
     const id = idRow ? idRow.textContent : "";
-    let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(currentAvatarDetail)">📦 保存到本地 (200槽位)</button>`;
+    let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveCurrentDetailToLocal()">📦 保存到本地 (200槽位)</button>`;
     if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
     else html += favoriteGroups.map(g => {
       const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 100; const full = count >= cap;
