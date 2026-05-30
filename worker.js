@@ -15,6 +15,50 @@ const CORS_HEADERS = {
     "Access-Control-Expose-Headers": "X-VRC-Auth",
 };
 
+/**
+ * SSRF guard — only allow the worker to proxy/fetch known VRChat + community
+ * avatar-database hosts. Without this, /api/proxy, /api/image, /api/download and
+ * /api/resolve-url are open proxies that anyone can abuse to hit arbitrary
+ * (incl. internal) addresses or burn the account's CF bandwidth quota.
+ *
+ * Matching is by exact host or by a registrable-domain suffix (".example.com").
+ */
+const ALLOWED_HOST_SUFFIXES = [
+    ".vrchat.cloud",
+    ".vrchat.com",
+    ".avtrdb.com",
+    ".vrcdb.com",
+    ".avatarrecovery.com",
+    ".cute.bet",
+    ".nekosunevr.co.uk",
+    // S3 / CDN hosts that VRChat file URLs redirect to
+    ".amazonaws.com",
+    ".cloudfront.net",
+];
+const ALLOWED_HOSTS = new Set([
+    "vrchat.cloud",
+    "vrchat.com",
+    "avtrdb.com",
+    "vrcdb.com",
+    "avatarrecovery.com",
+    "cute.bet",
+    "nekosunevr.co.uk",
+]);
+
+function isAllowedTarget(rawUrl) {
+    let parsed;
+    try {
+        parsed = new URL(rawUrl);
+    } catch {
+        return false;
+    }
+    // Only http(s) — blocks file:, data:, gopher:, etc.
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    const host = parsed.hostname.toLowerCase();
+    if (ALLOWED_HOSTS.has(host)) return true;
+    return ALLOWED_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
+
 function jsonResp(data, status = 200, extraHeaders = {}) {
     return new Response(JSON.stringify(data), {
         status,
@@ -157,8 +201,6 @@ export default {
 
             const authEncoded = `${encodeURIComponent(body.username)}:${encodeURIComponent(body.password)}`;
             let vrcResp = await doVrcLogin(authEncoded);
-            let usedAuth = authEncoded;
-            let retryAttempted = false;
 
             let respText = await vrcResp.text();
             let vrcData;
@@ -169,12 +211,11 @@ export default {
             if (vrcResp.status === 401 && errorMsg.includes("invalid")) {
                 const authRaw = `${body.username}:${body.password}`;
                 const altResp = await doVrcLogin(authRaw);
-                if (altResp.status !== 401 || altResp.status === 200) {
+                // Adopt the retry result if it did better than the encoded attempt.
+                if (altResp.status !== 401) {
                     vrcResp = altResp;
                     respText = await altResp.text();
                     try { vrcData = JSON.parse(respText); } catch { vrcData = respText; }
-                    usedAuth = authRaw;
-                    retryAttempted = true;
                 }
             }
 
@@ -191,19 +232,15 @@ export default {
                     vrcResponse: vrcData,
                     vrcStatus: 429,
                     rateLimited: true,
-                    retryAfterSeconds: parseInt(retryAfter),
-                    debugRequest: { usedAuthString: usedAuth, retryAttempted }
+                    retryAfterSeconds: parseInt(retryAfter)
                 }, 200, Object.fromEntries(responseHeaders));
             }
 
+            // NOTE: never echo credentials, raw auth strings, or upstream set-cookie
+            // headers back to the client — they end up in browser consoles and CF logs.
             return jsonResp({
                 vrcResponse: vrcData,
-                vrcStatus: vrcResp.status,
-                debugRequest: {
-                    usedAuthString: usedAuth,
-                    retryAttempted: retryAttempted,
-                    vrcHeaders: Object.fromEntries(vrcResp.headers)
-                }
+                vrcStatus: vrcResp.status
             }, 200, Object.fromEntries(responseHeaders));
         }
 
@@ -236,41 +273,6 @@ export default {
             }
         }
 
-        // GET /api/avatars
-        if (path === "/api/avatars" && request.method === "GET") {
-            // Get current user first
-            const { resp: userResp } = await vrcFetch("/auth/user", {}, auth);
-            if (userResp.status !== 200) {
-                return jsonResp({ error: "Not authenticated" }, 401);
-            }
-
-            const user = await userResp.json();
-            const avatarIds = user.currentAvatarAssetUrl
-                ? [user.currentAvatar, ...(user.fallbackAvatar ? [user.fallbackAvatar] : [])]
-                : [];
-
-            // Fetch all owned avatars
-            let allAvatars = [];
-            let offset = 0;
-            const limit = 100;
-            while (true) {
-                const { resp } = await vrcFetch(
-                    `/avatars?releaseStatus=all&user=me&n=${limit}&offset=${offset}`,
-                    {},
-                    auth
-                );
-                if (resp.status !== 200) break;
-                const batch = await resp.json();
-                if (!batch || batch.length === 0) break;
-                allAvatars = allAvatars.concat(batch);
-                if (batch.length < limit) break;
-                if (offset >= 2000) break; // Security limit to prevent infinite loops
-                offset += limit;
-            }
-
-            return jsonResp(allAvatars, 200);
-        }
-
         // GET /api/image?url=...&auth=...
         // Proxies image requests through the worker, following redirects, to bypass browser CORS / Referer blocks.
         // Uses Cache API for instant hits after batch prefetch.
@@ -282,6 +284,9 @@ export default {
                 try { imgAuth = atob(authParam); } catch { imgAuth = authParam; }
             }
             if (!targetUrl) return new Response("Missing url", { status: 400 });
+            if (!isAllowedTarget(targetUrl)) {
+                return new Response("Target host not allowed", { status: 403, headers: CORS_HEADERS });
+            }
 
             // Check CF Cache API first
             const cacheKey = new Request(new URL(`/api/image?url=${encodeURIComponent(targetUrl)}`, request.url).toString(), { method: "GET" });
@@ -330,6 +335,9 @@ export default {
         if (path === "/api/proxy" && request.method === "GET") {
             const targetUrl = url.searchParams.get("url");
             if (!targetUrl) return jsonResp({ error: "Missing url" }, 400);
+            if (!isAllowedTarget(targetUrl)) {
+                return jsonResp({ error: "Target host not allowed" }, 403);
+            }
 
             try {
                 const proxyResp = await fetch(targetUrl, {
@@ -355,13 +363,13 @@ export default {
         // storing them in CF Cache API so subsequent /api/image requests are instant cache hits.
         if (path === "/api/images/prefetch" && request.method === "POST") {
             const body = await request.json();
-            const urls = body.urls || [];
+            const urls = (body.urls || []).filter(isAllowedTarget);
             if (!urls.length) return jsonResp({ ok: true, cached: 0 });
 
             const cache = caches.default;
             let cachedCount = 0;
             let fetchedCount = 0;
-            const MAX_BATCH = 50; // CF Worker subrequest limit safety
+            const MAX_BATCH = 40; // CF Worker subrequest limit safety (each img = 1 fetch + cache ops)
             const batch = urls.slice(0, MAX_BATCH);
 
             // Fire all fetches concurrently
@@ -459,12 +467,14 @@ export default {
                 try { downloadAuth = atob(authParam); } catch { downloadAuth = authParam; }
             }
             if (!vrcUrl) return jsonResp({ error: "Missing url param" }, 400);
+            if (!isAllowedTarget(vrcUrl)) return jsonResp({ error: "Target host not allowed" }, 403);
 
             // Step 1: Resolve VRChat file URL → S3 CDN URL (follows redirect chain with auth)
             async function resolveRedirects(startUrl, authCookies) {
                 let resolved = startUrl;
                 let currentUrl = startUrl;
                 for (let i = 0; i < 5; i++) {
+                    if (!isAllowedTarget(currentUrl)) return { error: 403 };
                     const step = await fetch(currentUrl, {
                         method: "GET",
                         headers: { "User-Agent": USER_AGENT, ...(authCookies ? { "Cookie": authCookies } : {}) },
@@ -485,6 +495,7 @@ export default {
 
             let resolved = await resolveRedirects(vrcUrl, downloadAuth);
             if (resolved.error === 401) return jsonResp({ error: "VRChat auth expired" }, 401);
+            if (resolved.error === 403) return jsonResp({ error: "Redirect target not allowed" }, 403);
             let cdnUrl = resolved.url;
 
             // Step 2: Fetch from CDN and stream back with Content-Disposition
@@ -497,6 +508,7 @@ export default {
             if (cdnResp.status === 403) {
                 resolved = await resolveRedirects(vrcUrl, downloadAuth);
                 if (resolved.error === 401) return jsonResp({ error: "VRChat auth expired" }, 401);
+                if (resolved.error === 403) return jsonResp({ error: "Redirect target not allowed" }, 403);
                 cdnUrl = resolved.url;
                 cdnResp = await fetch(cdnUrl, {
                     method: "GET",
@@ -514,14 +526,19 @@ export default {
             }
 
             const safeFilename = encodeURIComponent(filename);
+            const downloadHeaders = {
+                "Content-Type": "application/octet-stream",
+                "Content-Disposition": `attachment; filename="${filename}"; filename*=UTF-8''${safeFilename}`,
+                ...CORS_HEADERS,
+            };
+            // Only set Content-Length when the CDN actually reported one — an empty
+            // header value is rejected by some runtimes/clients.
+            const cdnLen = cdnResp.headers.get("Content-Length");
+            if (cdnLen) downloadHeaders["Content-Length"] = cdnLen;
+
             return new Response(cdnResp.body, {
                 status: 200,
-                headers: {
-                    "Content-Type": "application/octet-stream",
-                    "Content-Disposition": `attachment; filename="${filename}"; filename*=UTF-8''${safeFilename}`,
-                    "Content-Length": cdnResp.headers.get("Content-Length") || "",
-                    ...CORS_HEADERS,
-                },
+                headers: downloadHeaders,
             });
         }
 
@@ -530,6 +547,7 @@ export default {
             const body = await request.json();
             const vrcUrl = body.url;
             if (!vrcUrl) return jsonResp({ error: "Missing url" }, 400);
+            if (!isAllowedTarget(vrcUrl)) return jsonResp({ error: "Target host not allowed" }, 403);
 
             // Fetch with auth cookies; VRChat /file/.../file returns 302 -> S3 presigned URL
             const resp = await fetch(vrcUrl, {

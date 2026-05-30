@@ -4,7 +4,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#111827">
+    <meta name="theme-color" content="#0d0d0f">
+    <!--
+      Content Security Policy (defense-in-depth alongside output escaping).
+      'unsafe-inline' for script/style is required because the UI uses inline
+      on* handlers and inline styles throughout; the directives below still block
+      the highest-value injection vectors: external script origins, <base> hijack,
+      plugin/object embeds, and clickjacking via framing.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: blob:;
+      connect-src 'self' blob:;
+      object-src 'none';
+      base-uri 'self';
+      frame-ancestors 'none';
+      form-action 'self';">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon.png">
     <title>VRCW — Avatar Manager</title>
@@ -354,8 +372,16 @@
                             </button>
                         </div>
                     </div>
-                    <!-- Stats -->
-                    <div id="avtrdbStats" style="padding:8px 24px;font-size:0.8em;color:rgba(255,255,255,0.4);"></div>
+                    <!-- Stats + Sort -->
+                    <div style="display:flex;align-items:center;gap:12px;padding:8px 24px;flex-wrap:wrap;">
+                        <div id="avtrdbStats" style="font-size:0.8em;color:rgba(255,255,255,0.4);flex:1;min-width:120px;"></div>
+                        <div id="avtrdbSortBtns" class="sort-chips">
+                            <span style="font-size:0.72em;color:var(--text-muted);margin-right:2px;">排序</span>
+                            <button class="sort-chip active" data-sort="relevance" onclick="setAvtrdbSort('relevance')">相关度</button>
+                            <button class="sort-chip" data-sort="newest" onclick="setAvtrdbSort('newest')">最新</button>
+                            <button class="sort-chip" data-sort="name" onclick="setAvtrdbSort('name')">名称</button>
+                        </div>
+                    </div>
                     <!-- Results grid -->
                     <div id="avtrdbGrid" class="avatar-grid" style="flex:1;overflow-y:auto;padding:0 16px 16px;"></div>
                     <!-- Load more -->
@@ -368,7 +394,7 @@
             </div>
 
             <!-- ── Friends Panel ── -->
-            <div id="friendsPanel" class="download-panel upload-panel">
+            <div id="friendsPanel" class="download-panel">
                 <!-- Sidebar -->
                 <div class="sidebar">
                     <div class="sidebar-section">
@@ -461,7 +487,7 @@
             </div>
 
             <!-- ── Worlds Panel ── -->
-            <div id="worldsPanel" class="download-panel upload-panel">
+            <div id="worldsPanel" class="download-panel">
                 <!-- Sidebar -->
                 <div class="sidebar">
                     <div class="sidebar-section">
@@ -520,7 +546,7 @@
             </div>
 
             <!-- ── Groups Panel ── -->
-            <div id="groupsPanel" class="download-panel upload-panel">
+            <div id="groupsPanel" class="download-panel">
                 <div class="sidebar">
                     <div class="sidebar-section">
                         <h3>群组 (Groups)</h3>
@@ -543,7 +569,7 @@
             </div>
 
             <!-- ── Assets & Economy Panel ── -->
-            <div id="assetsPanel" class="download-panel upload-panel">
+            <div id="assetsPanel" class="download-panel">
                 <div class="sidebar">
                     <div class="sidebar-section">
                         <h3>💰 经济 (Economy)</h3>
@@ -560,6 +586,8 @@
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('gallery')" id="cat-assets-gallery">🖼️ VRC+ 相册</button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('prints')" id="cat-assets-prints">🎞️ 拍立得照片</button>
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('emoji')" id="cat-assets-emoji">😊 表情与贴纸</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('inventory')" id="cat-assets-inventory">🎁 库存物品</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('props')" id="cat-assets-props">🪄 道具 Props</button>
                         </div>
                     </div>
                 </div>
@@ -570,7 +598,7 @@
                 </div>
             </div>
 
-            <div id="settingsPanel" class="download-panel upload-panel hidden">
+            <div id="settingsPanel" class="download-panel hidden">
                 <div class="sidebar">
                     <div class="sidebar-section">
                         <h3>⚙️ 高级设置</h3>
@@ -680,7 +708,7 @@
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
                     <span id="fpStatusDot" class="friend-status-dot" style="position:static;width:11px;height:11px;flex-shrink:0;"></span>
                     <span id="fpName" style="font-size:1.15em;font-weight:700;color:var(--text-primary);"></span>
-                    <span id="fpVrcPlus" style="font-size:0.68em;background:rgba(167,139,250,0.2);color:#a78bfa;border:1px solid rgba(167,139,250,0.4);padding:2px 8px;border-radius:99px;font-weight:600;display:none;">VRC+</span>
+                    <span id="fpVrcPlus" style="font-size:0.68em;background:rgba(255, 255, 255, 0.2);color:#d4d4d8;border:1px solid rgba(255, 255, 255, 0.4);padding:2px 8px;border-radius:99px;font-weight:600;display:none;">VRC+</span>
                     <span id="fpPronounsEl" style="font-size:0.72em;color:var(--text-muted);"></span>
                     <span id="fpLangsEl" style="font-size:0.7em;color:var(--text-muted);margin-left:auto;"></span>
                 </div>
@@ -688,7 +716,7 @@
                 <!-- Trust + badges row -->
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
                     <span id="fpTrustBadge" style="font-size:0.68em;font-weight:600;padding:3px 10px;border-radius:99px;"></span>
-                    <span id="fpAgeBadge" style="display:none;font-size:0.68em;background:rgba(99,102,241,0.2);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);padding:3px 10px;border-radius:99px;">18+</span>
+                    <span id="fpAgeBadge" style="display:none;font-size:0.68em;background:rgba(255, 255, 255, 0.2);color:#d4d4d8;border:1px solid rgba(255, 255, 255, 0.3);padding:3px 10px;border-radius:99px;">18+</span>
                     <span id="fpModBadge" style="display:none;font-size:0.68em;font-weight:600;padding:3px 10px;border-radius:99px;"></span>
                     <span id="fpPlatformBadge" style="font-size:0.75em;color:var(--text-muted);"></span>
                 </div>
@@ -918,7 +946,21 @@
     </div>
 
 
-    <script src="app.js?v=5"></script>
+    <script src="js/core.js?v=10"></script>
+    <script src="js/images.js?v=10"></script>
+    <script src="js/auth.js?v=10"></script>
+    <script src="js/shell.js?v=10"></script>
+    <script src="js/avatars.js?v=10"></script>
+    <script src="js/upload.js?v=10"></script>
+    <script src="js/search.js?v=10"></script>
+    <script src="js/common.js?v=10"></script>
+    <script src="js/friends.js?v=10"></script>
+    <script src="js/friend-profile.js?v=10"></script>
+    <script src="js/worlds.js?v=10"></script>
+    <script src="js/assets-groups.js?v=10"></script>
+    <script src="js/groups-instance.js?v=10"></script>
+    <script src="js/context-menu.js?v=10"></script>
+    <script src="js/media-profile.js?v=10"></script>
 
     <!-- ── avtrDB Avatar Detail Modal ── -->
     <div id="avtrdbDetailModal" class="modal hidden" onclick="if(event.target===this)closeAvtrdbDetail()">

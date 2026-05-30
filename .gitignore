@@ -5,3 +5,7 @@ node_modules/
 .dev.vars
 dist/
 .DS_Store
+
+# Local-only files (not part of the published source)
+public/app.monolith.bak.js
+public/gifuct.esm.js

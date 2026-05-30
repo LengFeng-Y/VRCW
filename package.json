@@ -1,0 +1,15 @@
+{
+  "name": "vrcw",
+  "version": "1.0.0",
+  "description": "VRCW — VRChat Web Companion. A VRChat avatar/world/group/friend management client running on Cloudflare Workers.",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

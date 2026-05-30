@@ -7,21 +7,22 @@
 }
 
 :root {
-  --bg-primary: #0a0e17;
-  --bg-secondary: #111827;
-  --bg-card: rgba(17, 24, 39, 0.7);
+  /* Monochrome / VRCX-like neutral dark theme (grayscale + restrained highlight) */
+  --bg-primary: #0d0d0f;            /* neutral near-black (no blue tint) */
+  --bg-secondary: #18181b;          /* zinc-900 */
+  --bg-card: rgba(24, 24, 27, 0.72);
   --bg-glass: rgba(255, 255, 255, 0.04);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(99, 102, 241, 0.5);
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --accent: #6366f1;
-  --accent-light: #818cf8;
-  --success: #22c55e;
+  --border: rgba(255, 255, 255, 0.10);
+  --border-hover: rgba(255, 255, 255, 0.32);
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --accent: #52525b;                /* zinc-600 — primary surfaces (white text reads) */
+  --accent-light: #d4d4d8;          /* zinc-300 — accent TEXT / highlight on dark */
+  --success: #4ade80;               /* status colors kept for meaning (online/etc.) */
   --warning: #f59e0b;
   --error: #ef4444;
-  --downloading: #a855f7;
+  --downloading: #a1a1aa;           /* neutralized (was purple) */
   --radius: 12px;
   --transition: 0.2s ease;
 }
@@ -42,10 +43,7 @@ body {
   font-size: 1.15rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--accent-light), #c084fc);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-primary);
 }
 
 .app-version {
@@ -171,8 +169,8 @@ body {
 }
 
 .glass-select.active .glass-select-trigger {
-  border-color: rgba(167, 139, 250, 0.5);
-  box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
 }
 
 .glass-select-trigger .chevron {
@@ -220,12 +218,12 @@ body {
 }
 
 .glass-option:hover {
-  background: rgba(99, 102, 241, 0.2);
+  background: rgba(255, 255, 255, 0.2);
   color: white;
 }
 
 .glass-option.selected {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(168, 85, 247, 0.3));
+  background: rgba(255, 255, 255, 0.10);
   color: white;
   font-weight: 600;
 }
@@ -255,8 +253,8 @@ body {
 
 .search-box-glass:focus-within {
   background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(99, 102, 241, 0.4);
-  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 32px rgba(255, 255, 255, 0.15);
 }
 
 .search-box-glass .glass-select-trigger {
@@ -310,20 +308,20 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(135deg, #6366f1, #a855f7);
-  border: none;
+  background: var(--accent);
+  border: 1px solid var(--border);
   border-radius: 100px;
   padding: 10px 24px;
   color: white;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
 }
 
 .search-btn-premium:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.5);
   filter: brightness(1.1);
 }
 
@@ -404,12 +402,12 @@ body {
 .avatar-card:hover {
   border-color: var(--border-hover);
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 8px 20px rgba(255, 255, 255, 0.1);
 }
 
 .avatar-card.selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 4px 15px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 1px var(--accent), 0 4px 15px rgba(255, 255, 255, 0.15);
 }
 
 .avatar-checkbox {
@@ -452,7 +450,7 @@ body {
 
 .avatar-card.downloading {
   border-color: var(--downloading);
-  box-shadow: 0 0 0 1px var(--downloading), 0 0 15px rgba(168, 85, 247, 0.2);
+  box-shadow: 0 0 0 1px var(--downloading), 0 0 15px rgba(255, 255, 255, 0.2);
 }
 
 .avatar-card.downloading::before {
@@ -515,7 +513,7 @@ body {
 
 /* State 1 & 2: Actively loading or waiting in queue — subtle pulse bg on image + spinning ring on wrapper */
 .avatar-thumb.loading {
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(99, 102, 241, 0.08) 50%, var(--bg-secondary) 100%);
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(255, 255, 255, 0.08) 50%, var(--bg-secondary) 100%);
   background-size: 200% 200%;
   animation: loadpulse 2s ease-in-out infinite;
   color: transparent;
@@ -541,7 +539,7 @@ body {
   width: 24px;
   height: 24px;
   margin: -12px 0 0 -12px;
-  border: 2px solid rgba(99, 102, 241, 0.15);
+  border: 2px solid rgba(255, 255, 255, 0.15);
   border-top-color: var(--accent-light);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -707,7 +705,7 @@ select.input-field {
 }
 
 .btn-primary:hover {
-  background: var(--accent-light);
+  background: #71717a;
 }
 
 .btn-primary:disabled {
@@ -866,10 +864,7 @@ select.input-field {
   font-weight: 600;
   text-align: center;
   margin-bottom: 6px;
-  background: linear-gradient(135deg, var(--accent-light), #c084fc);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-primary);
 }
 
 .login-card .subtitle {
@@ -993,7 +988,7 @@ select.input-field {
 .radio-option input:checked+label {
   border-color: var(--accent);
   color: var(--accent-light);
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .file-drop-zone {
@@ -1009,7 +1004,7 @@ select.input-field {
 .file-drop-zone:hover,
 .file-drop-zone.dragover {
   border-color: var(--accent);
-  background: rgba(99, 102, 241, 0.05);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .file-drop-zone svg {
@@ -1082,7 +1077,7 @@ select.input-field {
 }
 
 .file-list-item.uploading {
-  background: rgba(168, 85, 247, 0.05);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .file-list-item.done {
@@ -1155,7 +1150,7 @@ select.input-field {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 24px;
-  min-width: 360px;
+  min-width: min(360px, 92vw);
   width: 100%;
   max-width: 480px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
@@ -1265,15 +1260,42 @@ select.input-field {
   border-color: var(--error);
 }
 
+/* ── Search sort chips ── */
+.sort-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sort-chip {
+  font-size: 0.74em;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.sort-chip:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+.sort-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
 /* ── avtrDB platform badges ── */
 .avtrdb-badge {
   display: inline-block;
   font-size: 0.65em;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(99, 102, 241, 0.2);
-  color: rgba(165, 180, 252, 0.9);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(212, 212, 216, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 /* ── avtrDB favorite group dropdown buttons ── */
@@ -1297,7 +1319,7 @@ select.input-field {
 }
 
 .avtrdb-fav-group-btn:hover {
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(255, 255, 255, 0.12);
   color: var(--accent-light);
 }
 
@@ -1426,7 +1448,7 @@ select.input-field {
   position: absolute;
   top: 6px;
   right: 6px;
-  background: rgba(99, 102, 241, 0.85);
+  background: rgba(255, 255, 255, 0.85);
   color: #fff;
   font-size: 0.65rem;
   font-weight: 600;
@@ -1653,7 +1675,7 @@ select.input-field {
 }
 
 .nav-item.active {
-  background: rgba(99, 102, 241, 0.18);
+  background: rgba(255, 255, 255, 0.18);
   color: var(--accent-light);
 }
 
@@ -1689,7 +1711,7 @@ select.input-field {
 }
 
 .nav-item-icon.active {
-  background: rgba(99, 102, 241, 0.18);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .global-nav-footer {
@@ -1730,7 +1752,7 @@ select.input-field {
 .vrc-upload-zone:hover,
 .vrc-upload-zone.dragover {
   border-color: var(--accent);
-  background: rgba(99, 102, 241, 0.07);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .vrc-upload-zone input[type="file"] {
@@ -1800,7 +1822,7 @@ select.input-field {
 }
 
 .vrc-upload-btn {
-  background: linear-gradient(135deg, var(--accent), #7c3aed);
+  background: linear-gradient(135deg, var(--accent), var(--accent));
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -1920,7 +1942,7 @@ select.input-field {
 }
 
 .sidebar-mini-profile:hover {
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(255, 255, 255, 0.12);
   border-color: var(--accent);
 }
 
@@ -1973,8 +1995,8 @@ select.input-field {
 
 .glass-search-input-pill:focus-within {
   background: rgba(255, 255, 255, 0.07) !important;
-  border-color: rgba(167, 139, 250, 0.5) !important;
-  box-shadow: 0 0 15px rgba(139, 92, 246, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2) !important;
 }
 
 .glass-search-input-pill .input-field {
@@ -2090,7 +2112,7 @@ select.input-field {
   .mobile-top-title {
     font-size: 1.15rem;
     font-weight: 600;
-    background: linear-gradient(135deg, var(--accent-light), #c084fc);
+    background: var(--text-primary);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -2498,7 +2520,7 @@ select.input-field {
 
 .group-member-card:hover {
   background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(99, 102, 241, 0.3);
+  border-color: rgba(255, 255, 255, 0.3);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
@@ -2572,7 +2594,7 @@ select.input-field {
   font-size: 0.75rem;
   color: var(--accent-light);
   font-weight: 600;
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(255, 255, 255, 0.1);
   padding: 2px 8px;
   border-radius: 99px;
 }

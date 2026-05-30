@@ -1,0 +1,194 @@
+/*
+ * VRCW — images.js
+ * 图片懒加载/视口取消/批量预取
+ *
+ * 注意：本项目为「经典脚本」(非 ES module)，全部按顺序加载、共享全局作用域。
+ * 函数声明会提升为全局，跨文件调用没问题；请勿改为 type="module"。
+ */
+// ── Smart Image Loading with Viewport Cancellation ──
+// - Entering viewport  → start load (AbortController attached)
+// - Leaving viewport   → abort fetch if incomplete, restore data-src for retry
+// - Load complete      → unobserve, cleanup
+const imageQueue = [];
+let runningLoads = 0;
+const MAX_CONCURRENT_IMAGES = 6;
+const loadedImageUrls = new Set();
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+function processImageQueue() {
+  while (runningLoads < MAX_CONCURRENT_IMAGES && imageQueue.length > 0) {
+    runningLoads++;
+    const { img, src } = imageQueue.shift();
+
+    // Skip if cancelled while waiting in queue
+    if (img.dataset.cancelled) {
+      delete img.dataset.loading;
+      delete img.dataset.cancelled;
+      runningLoads--;
+      continue;
+    }
+
+    const wrapper = img.parentElement;
+    const cacheKey = src.includes('url=') ? decodeURIComponent(src.split('url=')[1].split('&')[0]) : src;
+
+    // Called on successful load or permanent failure
+    const finishLoad = (success) => {
+      img.onload = img.onerror = null;
+      delete img._abortCtrl;
+      img.classList.remove('loading');
+      if (wrapper) wrapper.classList.remove('img-loading');
+      runningLoads--;
+      if (success) {
+        img.removeAttribute('data-src');
+        delete img.dataset.loading;
+        avatarObserver.unobserve(img);
+      }
+      processImageQueue();
+    };
+
+    // Called when fetch is aborted (scrolled out) — restore state for retry
+    const cancelLoad = () => {
+      img.onload = img.onerror = null;
+      delete img._abortCtrl;
+      delete img.dataset.cancelled;
+      delete img.dataset.loading; // Allow re-queuing on next intersection
+      img.classList.remove('loading');
+      if (wrapper) wrapper.classList.remove('img-loading');
+      // Don't unobserve — observer will retrigger when image re-enters viewport
+      runningLoads--;
+      processImageQueue();
+    };
+
+    img.onload = () => { loadedImageUrls.add(src); finishLoad(true); };
+    img.onerror = () => {
+      const retryCount = parseInt(img.dataset.retry || '0');
+      if (retryCount < 2 && !img.dataset.cancelled) {
+        img.dataset.retry = retryCount + 1;
+        imageQueue.push({ img, src });
+        finishLoad(false);
+      } else {
+        img.classList.add('failed');
+        if (wrapper) wrapper.classList.add('img-failed');
+        img.removeAttribute('data-src');
+        delete img.dataset.loading;
+        avatarObserver.unobserve(img);
+        finishLoad(false);
+      }
+    };
+
+    img.classList.add('loading');
+    if (wrapper) wrapper.classList.add('img-loading');
+
+    // Check IDB cache first (instant, no network)
+    idb.getImage(cacheKey).then(blob => {
+      if (img.dataset.cancelled) { cancelLoad(); return; }
+
+      if (blob) {
+        img.src = URL.createObjectURL(blob);
+        // onload fires → finishLoad(true)
+      } else {
+        // Yield to priority tasks (tab switches etc.)
+        if (isPriorityTaskRunning) {
+          imageQueue.unshift({ img, src });
+          runningLoads--;
+          setTimeout(processImageQueue, 500);
+          return;
+        }
+
+        // Fetch with AbortController so we can cancel mid-flight
+        const ctrl = new AbortController();
+        img._abortCtrl = ctrl;
+
+        fetch(src, { signal: ctrl.signal })
+          .then(r => r.blob())
+          .then(blob => {
+            delete img._abortCtrl;
+            if (img.dataset.cancelled) { cancelLoad(); return; }
+            if (blob && blob.type.startsWith('image/')) {
+              idb.setImage(cacheKey, blob);
+              img.src = URL.createObjectURL(blob);
+              // onload fires → finishLoad(true)
+            } else {
+              img.src = src; // Fallback direct URL
+            }
+          })
+          .catch(e => {
+            delete img._abortCtrl;
+            if (e.name === 'AbortError') {
+              cancelLoad(); // Clean cancel — restore for retry
+            } else {
+              img.src = src; // Network error fallback
+            }
+          });
+      }
+    }).catch(() => { finishLoad(false); });
+  }
+}
+
+const avatarObserver = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((entry) => {
+      const img = entry.target;
+      if (entry.isIntersecting) {
+        // Entering viewport: clear cancel flag, queue for load
+        delete img.dataset.cancelled;
+        const src = img.getAttribute('data-src');
+        if (src && !img.dataset.loading) {
+          img.dataset.loading = '1';
+          imageQueue.push({ img, src });
+          processImageQueue();
+        }
+      } else {
+        // Leaving viewport: cancel if load is in progress
+        if (img.dataset.loading) {
+          img.dataset.cancelled = '1';
+          // Abort active network fetch
+          if (img._abortCtrl) {
+            img._abortCtrl.abort();
+            // AbortError catch → cancelLoad() will clean up
+          }
+          // Remove from pending queue if not yet started
+          const idx = imageQueue.findIndex(item => item.img === img);
+          if (idx !== -1) {
+            imageQueue.splice(idx, 1);
+            delete img.dataset.loading;
+            delete img.dataset.cancelled; // Already removed, no need to propagate
+          }
+        }
+      }
+    });
+  },
+  { rootMargin: '200px' } // Pre-load 200px ahead; cancel sooner than 300px to save requests
+);
+
+// ── Batch Image Prefetch ──
+// Sends thumbnail URLs to the Worker's batch endpoint so it can
+// download them from VRC's servers at edge speed and cache them.
+function prefetchThumbnails(avatarList) {
+  const rawUrls = avatarList
+    .map(av => av.thumbnailImageUrl || av.imageUrl || "")
+    .filter(u => u && (u.includes("api.vrchat.cloud") || u.includes("files.vrchat.cloud")));
+
+  // Skip URLs already in the browser's memory cache
+  const proxyUrls = rawUrls.map(u =>
+    `${API_BASE}/api/image?url=${encodeURIComponent(u)}&auth=${encodeURIComponent(vrcAuth || "")}`
+  );
+  const uncached = rawUrls.filter((_, i) => !loadedImageUrls.has(proxyUrls[i]));
+  if (!uncached.length) return;
+
+  // Chunk into batches of 40 (CF Worker subrequest limit; keep headroom for cache ops)
+  const BATCH_SIZE = 40;
+  for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
+    const batch = uncached.slice(i, i + BATCH_SIZE);
+    apiCall("/api/images/prefetch", {
+      method: "POST",
+      json: { urls: batch },
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.fetched > 0) logMsg(`⚡ Prefetched ${d.fetched} thumbnails at edge`, "info");
+      })
+      .catch(() => {}); // Silent fail
+  }
+}
+
