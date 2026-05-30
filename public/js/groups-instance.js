@@ -53,9 +53,13 @@ function groupCardHtml(g, myId) {
 }
 
 async function openGroupDetail(groupId) {
-  // Force update if old structure exists (legacy cached DOM)
+  // Stale-DOM guard: the icon's border was --bg-card (translucent) in the old
+  // structure that bled banner art into the name area. New structure uses
+  // --bg-primary (solid). If we find old DOM, force a rebuild.
   const existing = document.getElementById('groupDetailModal');
-  if (existing && existing.querySelector('#gdBanner')?.style.height !== '120px') {
+  const iconEl = existing?.querySelector('#gdIcon');
+  const oldStyle = iconEl?.parentElement?.getAttribute('style') || '';
+  if (existing && !oldStyle.includes('--bg-primary')) {
     existing.remove();
   }
 
@@ -64,16 +68,19 @@ async function openGroupDetail(groupId) {
     const html = `<div id="groupDetailModal" class="modal hidden" onclick="if(event.target===this)closeGroupDetail()">
       <div class="modal-content" style="max-width:560px;padding:0;overflow:hidden;">
         <div id="gdBanner" style="height:120px;background:var(--bg-secondary);background-size:cover;background-position:center;position:relative;flex-shrink:0;">
-          <div style="position:absolute;inset:0;background:linear-gradient(to top,var(--bg-card) 0%,rgba(0,0,0,0.35) 50%,rgba(0,0,0,0.15) 100%);pointer-events:none;"></div>
+          <!-- Stronger gradient: fully opaque (--bg-primary, no alpha) at the bottom 35%
+               so the icon+name strip never has banner art bleeding through. The previous
+               gradient ended in --bg-card (rgba 0.72) which was translucent → name unreadable. -->
+          <div style="position:absolute;inset:0;background:linear-gradient(to top,var(--bg-primary) 0%,var(--bg-primary) 35%,rgba(0,0,0,0.5) 70%,rgba(0,0,0,0.15) 100%);pointer-events:none;"></div>
           <button onclick="closeGroupDetail()" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.55);border:none;color:#fff;border-radius:99px;width:30px;height:30px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;z-index:3;">\u00d7</button>
         </div>
         <div style="padding:0 24px 24px; overflow-y:auto; max-height:calc(100vh - 180px);">
-          <div style="display:flex;gap:16px;align-items:flex-end;margin-top:-32px;margin-bottom:12px;position:relative;z-index:2;">
-            <div style="width:64px;height:64px;border-radius:14px;overflow:hidden;border:3px solid var(--bg-card);background:var(--bg-secondary);flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.5);">
+          <div style="display:flex;gap:16px;align-items:flex-end;margin-top:-24px;margin-bottom:12px;position:relative;z-index:2;">
+            <div style="width:64px;height:64px;border-radius:14px;overflow:hidden;border:3px solid var(--bg-primary);background:var(--bg-secondary);flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.5);">
               <img id="gdIcon" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">
             </div>
             <div style="flex:1;padding-bottom:4px;min-width:0;">
-              <div id="gdName" style="font-size:1.15rem;font-weight:700;color:var(--text-primary);text-shadow:0 1px 4px rgba(0,0,0,0.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+              <div id="gdName" style="font-size:1.15rem;font-weight:700;color:var(--text-primary);text-shadow:0 2px 6px rgba(0,0,0,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
               <div id="gdShortCode" style="font-size:0.75em;color:var(--text-muted);"></div>
             </div>
           </div>
