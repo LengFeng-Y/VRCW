@@ -1450,12 +1450,17 @@ select.input-field {
   position: absolute;
   top: 6px;
   right: 6px;
-  background: rgba(255, 255, 255, 0.85);
+  /* Was rgba(255,255,255,0.85) + color:#fff — white-on-white made the count
+     unreadable on light/blurry world thumbnails. Switched to a dark glass pill
+     to match the same dark-on-light aesthetic the avatar/world overlays use. */
+  background: rgba(0, 0, 0, 0.55);
   color: #fff;
   font-size: 0.65rem;
   font-weight: 600;
   padding: 2px 7px;
   border-radius: 99px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
   z-index: 2;
   backdrop-filter: blur(4px);
 }
