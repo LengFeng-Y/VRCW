@@ -53,13 +53,11 @@ function groupCardHtml(g, myId) {
 }
 
 async function openGroupDetail(groupId) {
-  // Stale-DOM guard: the icon's border was --bg-card (translucent) in the old
-  // structure that bled banner art into the name area. New structure uses
-  // --bg-primary (solid). If we find old DOM, force a rebuild.
+  // Stale-DOM guard: detect old structure missing the new gdIconBox container
+  // (added when icon was upgraded to 80px + fallback letter). If old DOM exists,
+  // force a rebuild so users don't see the broken old icon.
   const existing = document.getElementById('groupDetailModal');
-  const iconEl = existing?.querySelector('#gdIcon');
-  const oldStyle = iconEl?.parentElement?.getAttribute('style') || '';
-  if (existing && !oldStyle.includes('--bg-primary')) {
+  if (existing && !existing.querySelector('#gdIconBox')) {
     existing.remove();
   }
 
@@ -75,9 +73,16 @@ async function openGroupDetail(groupId) {
           <button onclick="closeGroupDetail()" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.55);border:none;color:#fff;border-radius:99px;width:30px;height:30px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;z-index:3;">\u00d7</button>
         </div>
         <div style="padding:0 24px 24px; overflow-y:auto; max-height:calc(100vh - 180px);">
-          <div style="display:flex;gap:16px;align-items:flex-end;margin-top:-24px;margin-bottom:12px;position:relative;z-index:2;">
-            <div style="width:64px;height:64px;border-radius:14px;overflow:hidden;border:3px solid var(--bg-primary);background:var(--bg-secondary);flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.5);">
-              <img id="gdIcon" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">
+          <!-- Icon overlaps banner by 40px (out of 80px icon height) so it visually
+               pops on the boundary, VRCX-style. z-index:2 keeps it above the gradient. -->
+          <div style="display:flex;gap:16px;align-items:flex-end;margin-top:-40px;margin-bottom:12px;position:relative;z-index:2;">
+            <!-- gdIconBox: always shows the first letter of group name as fallback when
+                 iconUrl is null (VRChat groups frequently have no iconUrl). The <img> is
+                 absolutely positioned over it; on load failure the img hides itself and
+                 the letter shows through. -->
+            <div id="gdIconBox" style="position:relative;width:80px;height:80px;border-radius:16px;overflow:hidden;border:3px solid var(--bg-primary);background:linear-gradient(135deg,#3f3f46,#27272a);flex-shrink:0;box-shadow:0 6px 16px rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:2em;font-weight:700;">
+              <span id="gdIconFallback" style="user-select:none;text-shadow:0 2px 4px rgba(0,0,0,0.5);"></span>
+              <img id="gdIcon" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" onload="this.style.display='block'" onerror="this.style.display='none'">
             </div>
             <div style="flex:1;padding-bottom:4px;min-width:0;">
               <div id="gdName" style="font-size:1.15rem;font-weight:700;color:var(--text-primary);text-shadow:0 2px 6px rgba(0,0,0,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
@@ -112,14 +117,26 @@ async function openGroupDetail(groupId) {
   document.getElementById('gdDesc').textContent = '';
   document.getElementById('gdStats').innerHTML = '';
   document.getElementById('gdBanner').style.backgroundImage = '';
-  document.getElementById('gdIcon').src = '';
+  // Reset icon: hide img, clear fallback letter; populated once group data arrives.
+  const _gdIconImg = document.getElementById('gdIcon');
+  const _gdIconFallback = document.getElementById('gdIconFallback');
+  _gdIconImg.style.display = 'none';
+  _gdIconImg.removeAttribute('src');
+  _gdIconFallback.textContent = '';
   document.getElementById('gdShortCode').textContent = '';
   try {
     const r = await apiCall('/api/vrc/groups/' + groupId);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const g = await r.json();
     document.getElementById('gdBanner').style.backgroundImage = g.bannerUrl ? 'url(' + proxyImg(g.bannerUrl) + ')' : '';
-    document.getElementById('gdIcon').src = proxyImg(g.iconUrl || '');
+    // Group icons are nullable in VRChat API. Try iconUrl, then bannerUrl, then fall
+    // back to a letter avatar (first character of group name). The <img> only shows
+    // on successful load; the fallback letter sits underneath it.
+    const _iconSrc = g.iconUrl || g.bannerUrl || '';
+    if (_iconSrc) {
+      _gdIconImg.src = proxyImg(_iconSrc);
+    }
+    _gdIconFallback.textContent = (g.name || '?').trim().charAt(0).toUpperCase();
     document.getElementById('gdName').textContent = g.name || '';
     document.getElementById('gdShortCode').textContent = '.' + (g.shortCode || '');
     document.getElementById('gdDesc').textContent = g.description || '暂无简介';
