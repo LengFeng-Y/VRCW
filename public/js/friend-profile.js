@@ -373,53 +373,6 @@ function updateAvatarNameInUI(listEl, avId, newName) {
   });
 }
 
-// Build a global map of ID -> Name from all locally cached favorites
-async function initLocalNameMap() {
-  const map = window._localNameMap;
-  try {
-    // 1. Load the shared persistent cache first (fastest)
-    const shared = await idb.get('persistent_avatar_names');
-    if (shared && typeof shared === 'object') {
-       Object.entries(shared).forEach(([id, name]) => map.set(id, name));
-    }
-
-    // 2. Scan favorites as backup/override
-    const keys = await idb.keys();
-    const favKeys = keys.filter(k => typeof k === 'string' && k.startsWith('avatars_avatars'));
-    const lists = await Promise.all(favKeys.map(k => idb.get(k)));
-    lists.forEach(list => {
-      if (Array.isArray(list)) {
-        list.forEach(av => {
-          if (av.id && av.name && av.name !== 'Unknown') {
-            map.set(av.id, av.name);
-          }
-        });
-      }
-    });
-  } catch (e) { console.warn('initLocalNameMap failed', e); }
-}
-
-let namePersistenceTimeout = null;
-async function persistName(id, name) {
-   if (!id || !name || name === 'Unknown' || name.startsWith('Model ')) return;
-   window._localNameMap.set(id, name);
-   
-   // Throttle IDB writes to once every 2 seconds
-   if (namePersistenceTimeout) return;
-   namePersistenceTimeout = setTimeout(async () => {
-      try {
-         const current = await idb.get('persistent_avatar_names') || {};
-         // Take all current contents of window._localNameMap and save
-         const exportMap = {};
-         window._localNameMap.forEach((v, k) => {
-            if (v && v !== 'Unknown' && !v.startsWith('Model ')) exportMap[k] = v;
-         });
-         await idb.set('persistent_avatar_names', exportMap);
-      } catch(e) {}
-      namePersistenceTimeout = null;
-   }, 2000);
-}
-
 async function buildLocalFavoriteNameMap() {
   const map = new Map();
   try {

@@ -64,9 +64,24 @@ async function fetchAvatars(forceRefresh = false) {
     let allFetched = [];
 
     if (currentCategory === "mine") {
-      const resp = await apiCall("/api/avatars");
-      if (!resp.ok) throw new Error("Failed to fetch avatars");
-      allFetched = await resp.json();
+      // VRChat caps `n` at 100 — paginate for users with more avatars.
+      // (Worker exposes `/api/vrc/*` as a passthrough; the legacy `/api/avatars`
+      //  was removed from the worker, which made this fetch 404 → black-screen on login.)
+      let offset = 0;
+      while (true) {
+        if (seq !== currentGlobalFetchSeq) return;
+        const resp = await apiCall(`/api/vrc/avatars?user=me&releaseStatus=all&n=100&offset=${offset}`);
+        if (!resp.ok) {
+          if (offset === 0) throw new Error("Failed to fetch avatars: HTTP " + resp.status);
+          break; // partial result is fine
+        }
+        const batch = await resp.json();
+        if (!Array.isArray(batch) || batch.length === 0) break;
+        allFetched = allFetched.concat(batch);
+        if (batch.length < 100) break;
+        offset += 100;
+        if (offset >= 1000) break; // safety ceiling
+      }
     } else if (currentCategory === "local") {
       allFetched = localAvatarFavs;
     } else {
