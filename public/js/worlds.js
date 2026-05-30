@@ -751,6 +751,7 @@ async function openWorldDetail(worldId, worldObj = null) {
       favBtn.className  = isFaved ? 'btn btn-warning' : 'btn btn-secondary';
     }
   } catch(e) {
+    if (isAbortError(e)) return;
     document.getElementById('worldDetailName').textContent = '加载失败';
     document.getElementById('worldDetailInstances').innerHTML = `<div style="color:var(--error);padding:8px;">${escHtml(e.message)}</div>`;
   }

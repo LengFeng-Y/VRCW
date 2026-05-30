@@ -34,6 +34,7 @@ async function loadMyGroups() {
     el.innerHTML = html;
     document.getElementById('friendStats').textContent = '共 ' + groups.length + ' 个群组';
   } catch(e) {
+    if (isAbortError(e)) return;
     if (el) el.innerHTML = '<div style="color:var(--error);padding:20px;">加载失败: ' + e.message + '</div>';
   }
 }

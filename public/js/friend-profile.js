@@ -552,6 +552,7 @@ async function fetchFriendAvatars(userId) {
     });
     
   } catch(e) { 
+    if (isAbortError(e)) return;
     console.error('fetchFriendAvatars error:', e);
     el.innerHTML = `<div style="grid-column:1/-1;padding:20px;color:var(--text-muted);font-size:0.85em;text-align:center;">读取列表时出错: ${escHtml(e.message)}</div>`; 
   } finally {

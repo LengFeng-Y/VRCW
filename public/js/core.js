@@ -457,6 +457,17 @@ function escJsAttr(str) {
     .replace(/"/g, "&quot;");
 }
 
+// ── Abort detection helper ──
+// When the user switches tabs, the previous tab's in-flight requests are aborted
+// via AbortController. This is normal internal behavior — NOT a user-facing error.
+// Use this in catch blocks to suppress "加载失败: The user aborted a request."
+function isAbortError(e) {
+  if (!e) return false;
+  if (e.name === 'AbortError') return true;
+  const m = (e.message || '').toLowerCase();
+  return m.includes('abort') || m.includes('http 499');
+}
+
 // ── JSON-in-attribute helpers (for data-friend="..." round-trips) ──
 // Cards stash a whole object in a double-quoted attribute, then openFriendProfile
 // reads it back. The only chars that can break a double-quoted attribute are " and

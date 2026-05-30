@@ -156,6 +156,7 @@ async function loadGroupsPage(cat) {
       }).join('') +
     '</div>';
   } catch(e) {
+    if (isAbortError(e)) return;
     area.innerHTML = '<div style="color:var(--error);padding:20px;">加载失败: ' + e.message + '</div>';
   }
 }

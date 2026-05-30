@@ -126,6 +126,7 @@ async function fetchMyProfile(forceRefresh = false) {
     renderSidebarMiniProfile(u);
     fetchMyModerations();
   } catch(e) {
+    if (isAbortError(e)) return;
     if (myView) myView.innerHTML = `<div style="text-align:center;padding:60px;color:var(--error);">加载失败: ${escHtml(e.message)}</div>`;
   }
 }
@@ -525,6 +526,7 @@ async function fetchNotifications() {
       </div>`;
     }).join('');
   } catch(e) {
+    if (isAbortError(e)) return;
     el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--error);">加载失败: ' + escHtml(e.message) + '</div>';
   }
 }
