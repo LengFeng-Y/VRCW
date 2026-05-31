@@ -34,6 +34,65 @@ body {
   min-height: 100vh;
 }
 
+/* ── Scrollbars (global) ──────────────────────────────────────────────────
+   Replaces the chunky native scrollbars (especially obvious on Windows) with
+   a thin, dark, theme-matched style. Applies everywhere by default; opt-out
+   selectors below for areas that should hide the scrollbar entirely.
+
+   - Firefox:  scrollbar-width / scrollbar-color
+   - WebKit:   ::-webkit-scrollbar pseudo-elements
+   Track is transparent so it blends with any background. Thumb gets a touch
+   of contrast on hover. Width tightened from the default ~17px to 8px.
+*/
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  /* Inset border keeps a small gap between thumb and edge for a "floating" feel */
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background 0.15s ease;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.46);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Hide the page-level body scrollbar entirely (background looks cleaner;
+   internal panels still get their thin scrollbars). The mobile sidebar nav
+   and horizontal tab strips also hide scrollbars via the `.no-scrollbar`
+   utility below. */
+html, body {
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar, body::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 .hidden {
   display: none !important;
 }
