@@ -37,7 +37,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=27">
+    <link rel="stylesheet" href="style.css?v=28">
     <script src="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js" defer></script>
     <script>
       // Register Service Worker for image caching — eliminates repeat Cloudflare image requests
@@ -55,24 +55,35 @@
         <div class="login-card">
             <h2>VRCW</h2>
             <p class="subtitle" data-i18n="loginSubtitle">Sign in with your VRChat account</p>
+            <!--
+              Wrap inputs in a <form> so the browser/password-manager treats this
+              as a real login surface (saves credentials, autofills next time,
+              respects Enter even if our JS is mid-loading). Buttons inside use
+              type="button" so they don't trigger native form submission — login
+              is always handled by JS via apiCall().
+            -->
+            <form onsubmit="event.preventDefault();doLogin();" autocomplete="on">
             <div class="form-group">
-                <label data-i18n="labelUser">Username or Email</label>
-                <input type="text" id="username" class="input-field" placeholder="Enter your username" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('password').focus()">
+                <label for="username" data-i18n="labelUser">Username or Email</label>
+                <input type="text" id="username" name="username" class="input-field" placeholder="Enter your username" autocomplete="username">
             </div>
             <div class="form-group">
-                <label data-i18n="labelPass">Password</label>
-                <input type="password" id="password" class="input-field" placeholder="Enter your password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+                <label for="password" data-i18n="labelPass">Password</label>
+                <input type="password" id="password" name="password" class="input-field" placeholder="Enter your password" autocomplete="current-password">
             </div>
-            <button onclick="doLogin()" id="btnLogin" class="btn btn-primary btn-block" data-i18n="btnSignIn">Sign In</button>
+            <button type="submit" id="btnLogin" class="btn btn-primary btn-block" data-i18n="btnSignIn">Sign In</button>
+            </form>
             <div id="savedAccountsContainer" class="saved-accounts"></div>
-            <div id="login-error" class="login-error"></div>
+            <div id="login-error" class="login-error" role="alert" aria-live="polite"></div>
             <div id="tfa-section" class="tfa-section">
                 <p data-i18n="tfa2faRequired">Two-factor authentication required</p>
+                <form onsubmit="event.preventDefault();doVerify2FA();" autocomplete="on">
                 <div class="form-group">
-                    <label data-i18n="labelCode">Verification Code</label>
-                    <input type="text" id="tfaCode" class="input-field" placeholder="Enter 2FA code" inputmode="numeric" autocomplete="one-time-code" onkeydown="if(event.key==='Enter')doVerify2FA()">
+                    <label for="tfaCode" data-i18n="labelCode">Verification Code</label>
+                    <input type="text" id="tfaCode" name="otp" class="input-field" placeholder="Enter 2FA code" inputmode="numeric" autocomplete="one-time-code">
                 </div>
-                <button onclick="doVerify2FA()" class="btn btn-primary btn-block" data-i18n="btnVerify">Verify</button>
+                <button type="submit" class="btn btn-primary btn-block" data-i18n="btnVerify">Verify</button>
+                </form>
             </div>
             <div id="loginplace-section" style="display:none;margin-top:16px;padding:16px;background:rgba(255,200,0,0.1);border:1px solid rgba(255,200,0,0.4);border-radius:12px;text-align:center;">
                 <div style="font-size:1.5em;margin-bottom:8px;">📧</div>
@@ -954,21 +965,21 @@
     </div>
 
 
-    <script src="js/core.js?v=27"></script>
-    <script src="js/images.js?v=27"></script>
-    <script src="js/auth.js?v=27"></script>
-    <script src="js/shell.js?v=27"></script>
-    <script src="js/avatars.js?v=27"></script>
-    <script src="js/upload.js?v=27"></script>
-    <script src="js/search.js?v=27"></script>
-    <script src="js/common.js?v=27"></script>
-    <script src="js/friends.js?v=27"></script>
-    <script src="js/friend-profile.js?v=27"></script>
-    <script src="js/worlds.js?v=27"></script>
-    <script src="js/assets-groups.js?v=27"></script>
-    <script src="js/groups-instance.js?v=27"></script>
-    <script src="js/context-menu.js?v=27"></script>
-    <script src="js/media-profile.js?v=27"></script>
+    <script src="js/core.js?v=28"></script>
+    <script src="js/images.js?v=28"></script>
+    <script src="js/auth.js?v=28"></script>
+    <script src="js/shell.js?v=28"></script>
+    <script src="js/avatars.js?v=28"></script>
+    <script src="js/upload.js?v=28"></script>
+    <script src="js/search.js?v=28"></script>
+    <script src="js/common.js?v=28"></script>
+    <script src="js/friends.js?v=28"></script>
+    <script src="js/friend-profile.js?v=28"></script>
+    <script src="js/worlds.js?v=28"></script>
+    <script src="js/assets-groups.js?v=28"></script>
+    <script src="js/groups-instance.js?v=28"></script>
+    <script src="js/context-menu.js?v=28"></script>
+    <script src="js/media-profile.js?v=28"></script>
 
     <!-- ── avtrDB Avatar Detail Modal ── -->
     <div id="avtrdbDetailModal" class="modal hidden" onclick="if(event.target===this)closeAvtrdbDetail()">

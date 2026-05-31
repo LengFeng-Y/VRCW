@@ -546,6 +546,13 @@ function showToast(msg, type = "info", duration) {
   if (!el) {
     el = document.createElement("div");
     el.id = "_vrcwToast";
+    // role=status + aria-live=polite makes screen readers announce success/info
+    // toasts; aria-atomic ensures the *whole* new message is read (not just the
+    // diff). Errors get role=alert (more assertive) by upgrading later when type
+    // changes.
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.setAttribute('aria-atomic', 'true');
     el.style.cssText =
       "position:fixed;left:50%;bottom:32px;transform:translateX(-50%);z-index:99999;" +
       "padding:10px 18px;border-radius:10px;font-size:0.85em;font-weight:500;color:#fff;" +
@@ -554,6 +561,9 @@ function showToast(msg, type = "info", duration) {
     el.addEventListener('click', () => { el.style.opacity = '0'; clearTimeout(_toastTimer); });
     document.body.appendChild(el);
   }
+  // Errors get more urgent ARIA semantics so assistive tech reads them first.
+  el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  el.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
   const bg = { info: "rgba(30,30,46,0.96)", success: "rgba(22,101,52,0.96)", error: "rgba(153,27,27,0.96)" }[type] || "rgba(30,30,46,0.96)";
   el.style.background = bg;
   el.textContent = msg;

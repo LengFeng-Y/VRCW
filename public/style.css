@@ -841,6 +841,30 @@ select.input-field {
   transition-duration: 60ms;
 }
 
+/* Respect prefers-reduced-motion: turn off non-essential animations for users
+   with vestibular sensitivities. We can't disable everything (loading spinners
+   communicate state), but transforms and shimmer effects get neutralized. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Cards no longer translate on hover (the lift effect can be jarring) */
+  .avatar-card:hover {
+    transform: none;
+  }
+  /* Buttons don't squeeze on press */
+  .btn:active:not(:disabled),
+  .cat-btn:active:not(:disabled),
+  .btn-action:active {
+    transform: none;
+  }
+}
+
 .btn-group {
   display: flex;
   flex-direction: column;
