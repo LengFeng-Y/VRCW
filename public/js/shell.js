@@ -179,7 +179,10 @@ function renderFavoriteGroupButtons() {
 async function runPriorityTask(taskFn) {
   currentGlobalFetchSeq++; 
   isPriorityTaskRunning = true;
-  imageQueue.length = 0; // Clear image queue to favor current JSON
+  // NOTE: Don't clear imageQueue here. Previously this was done to "favor current
+  // JSON" but it caused thumbnails on the destination tab to need re-queueing,
+  // making revisits feel slower. IntersectionObserver naturally pauses off-screen
+  // image loads (cancelLoad()), so leaving the queue alone is fine.
   
   try {
     await taskFn();
@@ -205,36 +208,44 @@ async function processBackgroundQueue() {
 
 // ── Tabs ──
 function switchTab(tab) {
+  // No-op when already on this tab. Re-clicking the active nav item used to
+  // re-trigger a full refresh, abort the in-flight requests for the current
+  // tab, and visibly wipe the grid — making cached content disappear and reload.
+  const isSameTab = currentTab === tab;
   currentTab = tab;
   if (window.innerWidth <= 768) toggleSidebar(false);
-  
+
+  // UI Updates run regardless (so re-clicking a nav still gives visual feedback)
+  document.querySelectorAll(".nav-item, .nav-item-icon, .tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(`[onclick*="'${tab}'"]`).forEach(b => b.classList.add("active"));
+
+  const panels = { download:'downloadPanel', upload:'uploadPanel', search:'searchPanel', friends:'friendsPanel', worlds:'worldsPanel', groups:'groupsPanel', assets:'assetsPanel', settings:'settingsPanel' };
+  Object.entries(panels).forEach(([key, id]) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('active', tab === key);
+  });
+  const sp = document.getElementById('settingsPanel');
+  if (sp) sp.classList.toggle('hidden', tab !== 'settings');
+
+  // If already on this tab, skip the abort+reload dance entirely
+  if (isSameTab) return;
+
   runPriorityTask(async () => {
     if (currentTabAbortController) currentTabAbortController.abort();
     currentTabAbortController = new AbortController();
-    
-    // UI Updates
-    document.querySelectorAll(".nav-item, .nav-item-icon, .tab-btn").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(`[onclick*="'${tab}'"]`).forEach(b => b.classList.add("active"));
 
-    const panels = { download:'downloadPanel', upload:'uploadPanel', search:'searchPanel', friends:'friendsPanel', worlds:'worldsPanel', groups:'groupsPanel', assets:'assetsPanel', settings:'settingsPanel' };
-    Object.entries(panels).forEach(([key, id]) => {
-        const el = document.getElementById(id);
-        if (el) el.classList.toggle('active', tab === key);
-    });
-    // Also toggle hidden for non-active panels (settings panel uses hidden not active)
-    const sp = document.getElementById('settingsPanel');
-    if (sp) sp.classList.toggle('hidden', tab !== 'settings');
-
+    // forceRefresh=false: render cache immediately, then silently re-fetch in
+    // background. The dedicated 🔄 refresh buttons inside each tab pass true.
     if (tab === "friends") {
       if (!friendsLoaded) initFriendsTab();
-      else fetchCurrentFriendCategory(true);
+      else fetchCurrentFriendCategory(false);
     }
     if (tab === "worlds") {
       if (!worldsLoaded) initWorldsTab();
-      else fetchWorlds(currentWorldCategory, true);
+      else fetchWorlds(currentWorldCategory, false);
     }
     if (tab === "groups") loadGroupsPage('mine');
-    if (tab === "download") fetchAvatars(true);
+    if (tab === "download") fetchAvatars(false);
     if (tab === 'assets') initAssetsTab?.();
     if (tab === 'settings') loadCacheStats();
   });

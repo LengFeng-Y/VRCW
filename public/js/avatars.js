@@ -42,20 +42,35 @@ function updateSelectedCount() {
 
 // ── Avatars ──
 let fetchSeq = 0; // Track latest fetch to avoid stale renders
+// TTL: skip the API refresh entirely when basics cache is younger than this.
+// Tab switches pass forceRefresh=false → fast path; the 🔄 button passes true.
+const AVATARS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 async function fetchAvatars(forceRefresh = false) {
   const seq = ++currentGlobalFetchSeq;
   fetchSeq = seq; 
   const grid = document.getElementById("avatarGrid");
 
-  // ── Step 1: Load basics from cache immediately ──────────────────────────
+  // ── Step 1: Always render basics from cache immediately (if available) ──
+  // forceRefresh now ONLY means "also re-hit the API after rendering cache" —
+  // it no longer trashes the cached UI. Previously force=true wiped the grid to
+  // a "加载中..." spinner, so switching tabs (which always passes force=true)
+  // visibly nuked already-rendered cards. Reserve the wipe for genuinely empty
+  // states.
+  let renderedFromCache = false;
+  let cacheIsFresh = false;
   try {
     const cachedBasics = await idb.get('avatar_basics_' + currentCategory) || [];
-    if (cachedBasics.length > 0 && !forceRefresh) {
+    const cacheAge = await idb.get('avatar_basics_age_' + currentCategory) || 0;
+    cacheIsFresh = cachedBasics.length > 0 && !forceRefresh && (Date.now() - cacheAge) < AVATARS_CACHE_TTL;
+    if (cachedBasics.length > 0) {
       avatars = cachedBasics;
       applyFilters();
-      logMsg(`Loaded ${avatars.length} cached avatars...`, "info");
-    } else {
-      if (grid) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.4);">加载中...</div>`;
+      renderedFromCache = true;
+      if (!forceRefresh) logMsg(`Loaded ${avatars.length} cached avatars${cacheIsFresh ? '（缓存有效跳过 API）' : ''}`, "info");
+      // Cache fresh enough — skip the API loop
+      if (cacheIsFresh) return;
+    } else if (grid) {
+      grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.4);">加载中...</div>`;
     }
   } catch(e) {}
 
@@ -124,6 +139,7 @@ async function fetchAvatars(forceRefresh = false) {
       tags: a.tags
     }));
     idb.set("avatar_basics_" + currentCategory, basics).catch(()=>{});
+    idb.set("avatar_basics_age_" + currentCategory, Date.now()).catch(()=>{});
     logMsg(`✅ Sync complete: ${avatars.length} avatars`, "success");
 
     // Optimized: Disable background prefetch to save Cloudflare Worker requests
@@ -185,6 +201,7 @@ async function fetchAvatars(forceRefresh = false) {
           releaseStatus: a.releaseStatus, authorId: a.authorId, tags: a.tags
         }));
         idb.set("avatar_basics_" + currentCategory, freshBasics).catch(()=>{});
+        idb.set("avatar_basics_age_" + currentCategory, Date.now()).catch(()=>{});
       }
     }
 

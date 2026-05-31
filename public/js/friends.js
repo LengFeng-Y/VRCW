@@ -311,6 +311,10 @@ function renderMyProfile(u) {
 
 // Bug#2 fix: favorites endpoint returns {favoriteId: "usr_xxx", ...} NOT user objects
 // Need to batch-fetch actual user profiles
+// Friends list cache TTL: skip the (expensive) full re-fetch when cache is this
+// fresh. Tab switches pass forceRefresh=false so they hit this fast path; the
+// 🔄 refresh button passes true to bypass it.
+const FRIENDS_CACHE_TTL = 60 * 1000; // 60s
 async function fetchCurrentFriendCategory(forceRefresh = false) {
   const seq = ++currentGlobalFetchSeq;
   const cat = currentFriendCategory;
@@ -322,21 +326,26 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
   const friendMap = new Map();
 
   // ── Step 1: Load basics from cache immediately ──────────────────────────
-  let isLoadingFromCache = false;
+  let cacheIsFresh = false;
   try {
     const cachedBasics = await idb.get('friend_basics') || [];
+    const cacheAge = await idb.get('friend_basics_age') || 0;
+    cacheIsFresh = cachedBasics.length > 0 && !forceRefresh && (Date.now() - cacheAge) < FRIENDS_CACHE_TTL;
+
     if (cachedBasics.length > 0) {
       // Keep last known status from cache — don't force offline, that causes filter flash
       allFriends = cachedBasics.map(b => ({
         ...b,
-        // Only use cached status if it's stored, otherwise default to unknown
         status: b.status || 'unknown',
         location: b.location || '',
         state: b.state || 'unknown'
       }));
-      isLoadingFromCache = true;
       filterFriends();
-      if (statsEl) statsEl.textContent = `加载中... (${allFriends.length} 名缓存)`;
+      const freshLabel = cacheIsFresh ? '缓存' : `刷新中 · ${allFriends.length} 名`;
+      if (statsEl) statsEl.textContent = freshLabel;
+      // Cache fresh enough — skip the big API loop entirely. Saves ~10-100
+      // requests per tab switch when ping-ponging between tabs.
+      if (cacheIsFresh) return;
     } else {
       listEl.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">正在连接 VRChat...</div>';
     }
@@ -380,6 +389,7 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
       state: f.state
     }));
     idb.set('friend_basics', basics).catch(()=>{});
+    idb.set('friend_basics_age', Date.now()).catch(()=>{});
   };
 
   try {
