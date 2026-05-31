@@ -66,29 +66,23 @@ async function openGroupDetail(groupId) {
     const html = `<div id="groupDetailModal" class="modal hidden" onclick="if(event.target===this)closeGroupDetail()">
       <div class="modal-content" style="max-width:560px;padding:0;overflow:hidden;">
         <div id="gdBanner" style="height:120px;background:var(--bg-secondary);background-size:cover;background-position:center;position:relative;flex-shrink:0;">
-          <!-- Stronger gradient: fully opaque (--bg-primary, no alpha) at the bottom 35%
-               so the icon+name strip never has banner art bleeding through. The previous
-               gradient ended in --bg-card (rgba 0.72) which was translucent → name unreadable. -->
-          <div style="position:absolute;inset:0;background:linear-gradient(to top,var(--bg-primary) 0%,var(--bg-primary) 35%,rgba(0,0,0,0.5) 70%,rgba(0,0,0,0.15) 100%);pointer-events:none;"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(to top,var(--bg-primary) 0%,var(--bg-primary) 20%,rgba(0,0,0,0.5) 60%,rgba(0,0,0,0.15) 100%);pointer-events:none;"></div>
           <button onclick="closeGroupDetail()" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.55);border:none;color:#fff;border-radius:99px;width:30px;height:30px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;z-index:3;">\u00d7</button>
         </div>
-        <div style="padding:0 24px 24px; overflow-y:auto; max-height:calc(100vh - 180px);">
-          <!-- Icon overlaps banner by 40px (out of 80px icon height) so it visually
-               pops on the boundary, VRCX-style. z-index:2 keeps it above the gradient. -->
-          <div style="display:flex;gap:16px;align-items:flex-end;margin-top:-40px;margin-bottom:12px;position:relative;z-index:2;">
-            <!-- gdIconBox: always shows the first letter of group name as fallback when
-                 iconUrl is null (VRChat groups frequently have no iconUrl). The <img> is
-                 absolutely positioned over it; on load failure the img hides itself and
-                 the letter shows through. -->
-            <div id="gdIconBox" style="position:relative;width:80px;height:80px;border-radius:16px;overflow:hidden;border:3px solid var(--bg-primary);background:linear-gradient(135deg,#3f3f46,#27272a);flex-shrink:0;box-shadow:0 6px 16px rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:2em;font-weight:700;">
-              <span id="gdIconFallback" style="user-select:none;text-shadow:0 2px 4px rgba(0,0,0,0.5);"></span>
-              <img id="gdIcon" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" onload="this.style.display='block'" onerror="this.style.display='none'">
-            </div>
-            <div style="flex:1;padding-bottom:4px;min-width:0;">
-              <div id="gdName" style="font-size:1.15rem;font-weight:700;color:var(--text-primary);text-shadow:0 2px 6px rgba(0,0,0,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
-              <div id="gdShortCode" style="font-size:0.75em;color:var(--text-muted);"></div>
-            </div>
+        <!-- Icon row: MUST be a sibling of gdBanner (not nested inside the scroll
+             container) so its z-index:3 actually stacks above the banner's
+             position:relative layer. margin-top:-40px pulls it up into the banner. -->
+        <div style="display:flex;gap:16px;align-items:flex-end;margin-top:-40px;margin-bottom:0;padding:0 24px;position:relative;z-index:3;">
+          <div id="gdIconBox" style="position:relative;width:80px;height:80px;border-radius:16px;overflow:hidden;border:3px solid var(--bg-primary);background:linear-gradient(135deg,#3f3f46,#27272a);flex-shrink:0;box-shadow:0 6px 16px rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:2em;font-weight:700;">
+            <span id="gdIconFallback" style="user-select:none;text-shadow:0 2px 4px rgba(0,0,0,0.5);"></span>
+            <img id="gdIcon" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" onload="this.style.display='block'" onerror="this.style.display='none'">
           </div>
+          <div style="flex:1;padding-bottom:4px;min-width:0;">
+            <div id="gdName" style="font-size:1.15rem;font-weight:700;color:var(--text-primary);text-shadow:0 2px 6px rgba(0,0,0,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+            <div id="gdShortCode" style="font-size:0.75em;color:var(--text-muted);"></div>
+          </div>
+        </div>
+        <div style="padding:12px 24px 24px; overflow-y:auto; max-height:calc(100vh - 220px);">
           <div id="gdStats" style="display:flex;gap:8px;flex-wrap:wrap;font-size:0.8em;color:var(--text-secondary);margin-bottom:10px;"></div>
           <div id="gdActions" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
           <div id="gdDesc" style="font-size:0.85em;color:var(--text-secondary);line-height:1.6;max-height:180px;overflow-y:auto;white-space:pre-line;margin-bottom:16px;"></div>
