@@ -532,6 +532,32 @@ function fallbackCopy(value, onOk) {
   }
 }
 
+// ── Lightweight debounce for input-driven filters ─────────────────────────
+// applyFilters/filterFriends/filterWorlds rebuild their entire grids and re-
+// observe images. Calling them on every keystroke (the previous behavior with
+// `oninput="applyFilters()"`) lags noticeably with 100+ items. The wrappers
+// below coalesce successive keystrokes inside a single ~120ms window so the
+// UI only re-renders once the user pauses.
+//
+// 120ms is short enough to feel instant but long enough to absorb a normal
+// typing burst (most people peak around 5-6 keys/sec = 167ms gap).
+const _filterDebounceTimers = {};
+function _debounceFilter(name, ms = 120) {
+  return function () {
+    clearTimeout(_filterDebounceTimers[name]);
+    _filterDebounceTimers[name] = setTimeout(() => {
+      const fn = window[name];
+      if (typeof fn === 'function') fn();
+    }, ms);
+  };
+}
+// Globals exposed to inline oninput handlers — these MUST be function declarations
+// (or window-attached) because top-level let/const aren't accessible from inline
+// HTML attributes (see BUG-9 in §5).
+window.applyFiltersDebounced = _debounceFilter('applyFilters');
+window.filterFriendsDebounced = _debounceFilter('filterFriends');
+window.filterWorldsDebounced = _debounceFilter('filterWorlds');
+
 // ── Lightweight toast (non-blocking feedback for actions) ──
 // Replaces native `alert()` for the common "operation succeeded/failed"
 // message. alert() blocks the entire page and forces a click — a death by

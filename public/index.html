@@ -37,7 +37,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=29">
+    <link rel="stylesheet" href="style.css?v=30">
     <script src="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js" defer></script>
     <script>
       // Register Service Worker for image caching — eliminates repeat Cloudflare image requests
@@ -225,7 +225,7 @@
                     <div class="filter-bar avatar-filter-bar" style="display: flex; gap: 10px; padding: 16px 24px 0 24px; flex-shrink: 0;">
                         <div class="glass-search-input-pill" style="flex: 1;">
                             <span style="opacity: 0.5; font-size: 0.9em;">🔍</span>
-                            <input type="text" id="searchInput" class="input-field" data-i18n-placeholder="searchPlaceholder" placeholder="Search name, desc, tags..." oninput="applyFilters()">
+                            <input type="text" id="searchInput" class="input-field" data-i18n-placeholder="searchPlaceholder" placeholder="Search name, desc, tags..." oninput="applyFiltersDebounced()">
                         </div>
                         <div class="glass-select" style="min-width: 130px;" onclick="toggleGlassSelect(event, this)">
                             <div class="glass-select-trigger">
@@ -463,7 +463,7 @@
                             <div class="glass-search-input-pill" style="flex:1; min-width:140px;">
                                 <span style="opacity: 0.5; font-size: 0.9em;">🔍</span>
                                 <input type="text" id="friendSearch" class="input-field"
-                                    placeholder="搜索好友 / Search..." oninput="filterFriends()">
+                                    placeholder="搜索好友 / Search..." oninput="filterFriendsDebounced()">
                             </div>
                             <div class="glass-select" style="min-width: 130px;" onclick="toggleGlassSelect(event, this)">
                                 <div class="glass-select-trigger">
@@ -542,7 +542,7 @@
                         <div class="glass-search-input-pill" style="flex:1; min-width:160px;">
                             <span style="opacity: 0.5; font-size: 0.9em;">🔍</span>
                             <input type="text" id="worldSearch" class="input-field"
-                                placeholder="搜索世界 / Search worlds..." oninput="filterWorlds()">
+                                placeholder="搜索世界 / Search worlds..." oninput="filterWorldsDebounced()">
                         </div>
                         <div class="glass-select" style="min-width: 140px;" onclick="toggleGlassSelect(event, this)">
                             <div class="glass-select-trigger">
@@ -669,16 +669,16 @@
                                 <label style="display:block;font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">服务器地区</label>
                                 <div class="glass-select" id="instanceRegionSelect">
                                     <div class="glass-select-trigger" onclick="toggleGlassSelect(event,this.parentElement)">
-                                        <span class="selected-label">🇯🇵 日本 (Japan)</span>
+                                        <span class="selected-label">🇺🇸 美国东 (US East)</span>
                                         <span style="opacity:0.5;">&#9660;</span>
                                     </div>
                                     <div class="glass-select-options">
-                                        <div class="glass-option" onclick="selectGlassOption(event,this,'use','')" data-val="use">🇺🇸 美国东 (US East)</div>
+                                        <div class="glass-option selected" onclick="selectGlassOption(event,this,'use','')" data-val="use">🇺🇸 美国东 (US East)</div>
                                         <div class="glass-option" onclick="selectGlassOption(event,this,'usw','')" data-val="usw">🇺🇸 美国西 (US West)</div>
                                         <div class="glass-option" onclick="selectGlassOption(event,this,'eu','')" data-val="eu">🇪🇺 欧洲 (Europe)</div>
                                         <div class="glass-option" onclick="selectGlassOption(event,this,'jp','')" data-val="jp">🇯🇵 日本 (Japan)</div>
                                     </div>
-                                    <input type="hidden" id="settingRegion" value="jp">
+                                    <input type="hidden" id="settingRegion" value="use">
                                 </div>
                             </div>
 
@@ -965,21 +965,21 @@
     </div>
 
 
-    <script src="js/core.js?v=29"></script>
-    <script src="js/images.js?v=29"></script>
-    <script src="js/auth.js?v=29"></script>
-    <script src="js/shell.js?v=29"></script>
-    <script src="js/avatars.js?v=29"></script>
-    <script src="js/upload.js?v=29"></script>
-    <script src="js/search.js?v=29"></script>
-    <script src="js/common.js?v=29"></script>
-    <script src="js/friends.js?v=29"></script>
-    <script src="js/friend-profile.js?v=29"></script>
-    <script src="js/worlds.js?v=29"></script>
-    <script src="js/assets-groups.js?v=29"></script>
-    <script src="js/groups-instance.js?v=29"></script>
-    <script src="js/context-menu.js?v=29"></script>
-    <script src="js/media-profile.js?v=29"></script>
+    <script src="js/core.js?v=30"></script>
+    <script src="js/images.js?v=30"></script>
+    <script src="js/auth.js?v=30"></script>
+    <script src="js/shell.js?v=30"></script>
+    <script src="js/avatars.js?v=30"></script>
+    <script src="js/upload.js?v=30"></script>
+    <script src="js/search.js?v=30"></script>
+    <script src="js/common.js?v=30"></script>
+    <script src="js/friends.js?v=30"></script>
+    <script src="js/friend-profile.js?v=30"></script>
+    <script src="js/worlds.js?v=30"></script>
+    <script src="js/assets-groups.js?v=30"></script>
+    <script src="js/groups-instance.js?v=30"></script>
+    <script src="js/context-menu.js?v=30"></script>
+    <script src="js/media-profile.js?v=30"></script>
 
     <!-- ── avtrDB Avatar Detail Modal ── -->
     <div id="avtrdbDetailModal" class="modal hidden" onclick="if(event.target===this)closeAvtrdbDetail()">
