@@ -213,10 +213,11 @@ async function uploadToVRCStyled(inputId, tag, refreshPage) {
   }
 }
 
-async function fetchGalleryOnly(container) {
+async function fetchGalleryOnly(container, gen) {
   try {
     container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载中...</div>';
     const r = await apiCall('/api/vrc/files?tag=gallery&n=60');
+    if (gen != null && _assetsGen !== gen) return;
     const files = r.ok ? await r.json() : [];
     container.innerHTML = '<h2 style="margin-bottom:16px;">🖼️ VRC+ 相册</h2>';
     container.innerHTML += '<div class="vrc-upload-row">' + makeUploadCard({
@@ -244,11 +245,13 @@ async function fetchGalleryOnly(container) {
 // ═══════════════════════════════════════════════════════════
 // PRINTS (拍立得照片) - separate page
 // ═══════════════════════════════════════════════════════════
-async function fetchPrints(container) {
+async function fetchPrints(container, gen) {
   try {
     container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载中...</div>';
     const me = await (await apiCall('/api/vrc/auth/user')).json();
+    if (gen != null && _assetsGen !== gen) return;
     const r = await apiCall('/api/vrc/prints/user/' + me.id + '?n=100&offset=0');
+    if (gen != null && _assetsGen !== gen) return;
     const prints = r.ok ? await r.json() : [];
     const printUploadId = 'printUpl_' + Date.now();
     container.innerHTML = '<h2 style="margin-bottom:12px;">🎞️ 拍立得照片</h2>' +
@@ -473,11 +476,10 @@ async function fetchMyModerations() {
     const r = await apiCall('/api/vrc/auth/user/playermoderations');
     if (r.ok) {
       myModerations = await r.json();
-      // Auto-refresh current profile UI if open
-      const modal = document.getElementById('friendProfileModal');
-      if (currentFriendProfile && modal && !modal.classList.contains('hidden')) {
-        _renderFriendProfileUI(currentFriendProfile, modal);
-      }
+      // Don't re-render the friend modal here. The previous code rebuilt the
+      // entire friend profile UI (including snapping back to the info tab),
+      // breaking the user's flow if they were reading another sub-tab. The
+      // moderations data is read on next user interaction.
     }
   } catch(e) { console.error('fetchMyModerations error:', e); }
 }

@@ -9,6 +9,13 @@ function openFriendProfile(el) {
   window._fpIsSelf = false;
   const f = parseAttrJson(el.dataset.friend);
   currentFriendProfile = f;
+  // Race-condition token: bumped on every modal-open/refresh. Async tail fetches
+  // (profile enrich, avatars/groups/worlds tab loaders) capture this and bail if
+  // the user has since opened a different friend. Without it, "I clicked B but
+  // got A's data" happens because A's slower /users/{id} resolves last and writes
+  // into currentFriendProfile, then B's tab loaders read the wrong global.
+  const fpSeq = (window._fpSeq = (window._fpSeq || 0) + 1);
+  window._fpCurrentSeq = fpSeq;
   const modal = document.getElementById('friendProfileModal');
   if (!modal) return;
 
@@ -20,8 +27,9 @@ function openFriendProfile(el) {
   // Fetch full profile if date_joined or tags are missing (friends list returns LimitedUser)
   if (f.id && (!f.date_joined || !f.tags)) {
     apiCall('/api/vrc/users/' + f.id).then(r => r.ok ? r.json() : null).then(full => {
+      // Skip if user opened a different friend in the meantime.
+      if (window._fpCurrentSeq !== fpSeq) return;
       if (full && full.id) {
-        // Merge: keep existing data, overlay the richer API response
         currentFriendProfile = Object.assign({}, f, full);
         _renderFriendProfileUI(currentFriendProfile, modal);
       }
@@ -271,20 +279,24 @@ function switchFriendProfileTab(tab) {
   });
   const f = currentFriendProfile;
   if (!f) return;
-  if (tab === 'groups')  fetchFriendGroups(f.id);
-  if (tab === 'mutual')  fetchMutualFriends(f.id, 'fpMutualList');
-  if (tab === 'worlds')  fetchFriendWorlds(f.id);
-  if (tab === 'avatars') fetchFriendAvatars(f.id);
+  // Capture the open-modal seq token; tab loaders bail if user opened another friend.
+  const seq = window._fpCurrentSeq;
+  if (tab === 'groups')  fetchFriendGroups(f.id, seq);
+  if (tab === 'mutual')  fetchMutualFriends(f.id, 'fpMutualList', seq);
+  if (tab === 'worlds')  fetchFriendWorlds(f.id, seq);
+  if (tab === 'avatars') fetchFriendAvatars(f.id, seq);
 }
 
-async function fetchFriendGroups(userId) {
+async function fetchFriendGroups(userId, seq) {
   const el = document.getElementById('fpGroupsList');
   if (!el) return;
   el.innerHTML = '<div style="padding:20px;color:rgba(255,255,255,0.3);text-align:center;">加载中...</div>';
   try {
     const r = await apiCall('/api/vrc/users/' + userId + '/groups');
+    if (seq != null && window._fpCurrentSeq !== seq) return; // user opened another friend
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const groups = await r.json();
+    if (seq != null && window._fpCurrentSeq !== seq) return;
 
     if (!groups || !groups.length) { 
       el.innerHTML = '<div style="padding:20px;color:rgba(255,255,255,0.3);">暂无公开群组</div>'; 
@@ -334,14 +346,16 @@ async function fetchFriendGroups(userId) {
 }
 
 
-async function fetchFriendWorlds(userId) {
+async function fetchFriendWorlds(userId, seq) {
   const el = document.getElementById('fpWorldsList');
   if(!el) return;
   el.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:rgba(255,255,255,0.3);text-align:center;">加载中...</div>';
   try {
     const r = await apiCall(`/api/vrc/worlds?userId=${userId}&releaseStatus=public&n=20&sort=updated`);
+    if (seq != null && window._fpCurrentSeq !== seq) return;
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const worlds = await r.json();
+    if (seq != null && window._fpCurrentSeq !== seq) return;
     if (!worlds || !worlds.length) { el.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:rgba(255,255,255,0.3);">暂无公开世界</div>'; return; }
     const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
     el.innerHTML = worlds.map(w => `<div class="avatar-card" style="cursor:pointer;" onclick="openWorldDetail('${escHtml(w.id)}')">
@@ -394,7 +408,7 @@ async function buildLocalFavoriteNameMap() {
 
 const fpAvatarFetchCache = new Map(); // userId -> Promise
 
-async function fetchFriendAvatars(userId) {
+async function fetchFriendAvatars(userId, seq) {
   const el = document.getElementById('fpAvatarsList');
   if(!el) return;
   
@@ -493,6 +507,7 @@ async function fetchFriendAvatars(userId) {
     }
     
     // Store globally so detail modal can find them if needed
+    if (seq != null && window._fpCurrentSeq !== seq) return; // user opened another friend
     window._friendAvatars = allAvatars;
 
     const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';

@@ -114,6 +114,16 @@ async function fetchWorlds(category, forceRefresh = false) {
   try {
     const freshWorlds = [];
     let batchCount = 0;
+    let _worldFilterTimer = null;
+    // Debounced re-render: streaming refresh used to filter+render after EVERY
+    // 5-card chunk (20+ rebuilds for a 100-world group), causing the grid to
+    // jump and IntersectionObservers to recreate. Now debounced to 500ms.
+    const debouncedFilterWorlds = () => {
+      if (_worldFilterTimer) clearTimeout(_worldFilterTimer);
+      _worldFilterTimer = setTimeout(() => {
+        if (seq === currentWorldFetchSeq && category === currentWorldCategory) filterWorlds();
+      }, 500);
+    };
     const updateWorldBatch = (batch) => {
       if (seq !== currentWorldFetchSeq || category !== currentWorldCategory) return;
       batch.forEach(w => {
@@ -123,7 +133,7 @@ async function fetchWorlds(category, forceRefresh = false) {
       });
       allWorlds = freshWorlds;
       batchCount += batch.length;
-      filterWorlds();
+      debouncedFilterWorlds();
       saveWorldBasics(category);
       worldLogMsg(`🔄 已加载 ${freshWorlds.length} 个世界...`, 'info');
     };

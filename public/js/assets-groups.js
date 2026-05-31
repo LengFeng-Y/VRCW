@@ -309,11 +309,13 @@ async function fetchStore(container, gen) {
   }
 }
 
-async function fetchTransactions(container) {
+async function fetchTransactions(container, gen) {
   try {
     const r = await apiCall('/api/vrc/Steam/transactions');
+    if (gen != null && _assetsGen !== gen) return;
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const tx = await r.json();
+    if (gen != null && _assetsGen !== gen) return;
     container.innerHTML = '<h2 style="margin-bottom:16px;">💸 交易记录</h2>';
     if (!tx || (Array.isArray(tx) && tx.length === 0)) {
       container.innerHTML += '<div style="color:var(--text-muted);">暂无交易记录</div>';
@@ -352,9 +354,10 @@ async function fetchTransactions(container) {
   }
 }
 
-async function fetchSubscriptions(container) {
+async function fetchSubscriptions(container, gen) {
   try {
     const subs = await (await apiCall('/api/vrc/auth/user/subscription')).json();
+    if (gen != null && _assetsGen !== gen) return;
     container.innerHTML = '<h2 style="margin-bottom:16px;">⭐ VRC+ 订阅</h2>';
     if (!subs || subs.length === 0) {
       container.innerHTML += '<div style="color:var(--text-muted);">当前无有效的 VRC+ 订阅 (No active subscriptions)</div>';

@@ -355,9 +355,14 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
   // We don't want to wait for everything to finish. We'll fire off background tasks.
   
   let _filterDebounceTimer = null;
+  // Debounced re-filter: streaming refresh used to call filterFriends() after EVERY
+  // batch (50 cards/batch, ~5+ batches per refresh). Each call rebuilt the entire
+  // friend list innerHTML, which reset scroll position and broke selection state.
+  // Now debounced to 600ms — fires once after the burst settles instead of
+  // 5+ times during it.
   const debouncedFilter = () => {
     if (_filterDebounceTimer) clearTimeout(_filterDebounceTimer);
-    _filterDebounceTimer = setTimeout(() => filterFriends(), 300);
+    _filterDebounceTimer = setTimeout(() => filterFriends(), 600);
   };
 
   const updateFriendBatch = (batch) => {

@@ -159,11 +159,22 @@ async function fetchAvatars(forceRefresh = false) {
             .catch(() => [])
         );
         const favResults = await Promise.all(favPromises);
+        // Build a fresh map for THIS category: collect IDs that belong here, then
+        // remove their old entries (which may have been written when the user was
+        // viewing a different fav group — VRChat issues a different favoriteId per
+        // group per item, so the cached one may belong to another group).
+        const catItemIds = new Set();
         favResults.forEach(favList => {
           if (favList && favList.length > 0 && !favList.error) {
-            favList.forEach(fav => favoriteIdMap.set(fav.favoriteId, fav.id));
+            favList.forEach(fav => {
+              catItemIds.add(fav.favoriteId);
+              favoriteIdMap.set(fav.favoriteId, fav.id);
+            });
           }
         });
+        // Stash for unfavorite to reference. Used as a hint — if cleared/missing
+        // we still fall through to the cached favoriteId.
+        window._currentCategoryFavIds = catItemIds;
       } catch (e) {
         console.warn("Could not fetch favoriteIds", e);
       }
@@ -183,6 +194,16 @@ async function fetchAvatars(forceRefresh = false) {
     if (currentCategory !== 'mine' && currentCategory !== 'local') {
       const avIds = allFetched.map(a => a.id);
       const CONCURRENCY = 30;
+      // Debounced re-render: streaming refresh used to applyFilters() after every
+      // 30-avatar chunk, rebuilding the whole grid (and resetting scroll +
+      // IntersectionObservers). Now debounced.
+      let _stage3Timer = null;
+      const debouncedApply = () => {
+        if (_stage3Timer) clearTimeout(_stage3Timer);
+        _stage3Timer = setTimeout(() => {
+          if (seq === fetchSeq && currentCategory !== 'mine') applyFilters();
+        }, 500);
+      };
       for (let i = 0; i < avIds.length; i += CONCURRENCY) {
         if (seq !== fetchSeq || currentCategory === 'mine') return;
         const chunk = avIds.slice(i, i + CONCURRENCY);
@@ -194,7 +215,7 @@ async function fetchAvatars(forceRefresh = false) {
            const idx = avatars.findIndex(ex => ex.id === a.id);
            if (idx !== -1) avatars[idx] = Object.assign(avatars[idx], a);
         });
-        applyFilters();
+        debouncedApply();
         // Save basics with fresh data
         const freshBasics = avatars.map(a => ({
           id: a.id, name: a.name, thumbnailImageUrl: a.thumbnailImageUrl, imageUrl: a.imageUrl,
@@ -203,6 +224,8 @@ async function fetchAvatars(forceRefresh = false) {
         idb.set("avatar_basics_" + currentCategory, freshBasics).catch(()=>{});
         idb.set("avatar_basics_age_" + currentCategory, Date.now()).catch(()=>{});
       }
+      // Final apply to ensure last batch is rendered
+      if (seq === fetchSeq) applyFilters();
     }
 
     // Also populate upload avatar select
@@ -433,7 +456,29 @@ function renderGrid(list) {
 
 // ── Unfavorite ──
 async function unfavorite(avatarId, avatarName) {
-  const favoriteId = favoriteIdMap.get(avatarId);
+  // Resolve favoriteId. If our cache has it, try that first. The cache may be
+  // stale (favoriteId from a different group than the one being viewed), so on
+  // 404/410 fall back to a live lookup against the current category.
+  const resolveFavId = async () => {
+    const cached = favoriteIdMap.get(avatarId);
+    if (cached) return cached;
+    // Live lookup: scan favorites for the current category and find this avatar.
+    if (currentCategory !== 'mine' && currentCategory !== 'local') {
+      try {
+        const r = await apiCall(`/api/vrc/favorites?type=avatar&tag=${currentCategory}&n=100`);
+        if (r.ok) {
+          const list = await r.json();
+          const hit = (list || []).find(f => f.favoriteId === avatarId);
+          if (hit) {
+            favoriteIdMap.set(avatarId, hit.id);
+            return hit.id;
+          }
+        }
+      } catch(_) {}
+    }
+    return null;
+  };
+  let favoriteId = await resolveFavId();
   if (!favoriteId) {
     logMsg(`⚠ Cannot unfavorite ${avatarName}: favoriteId not found`, "error");
     return;
@@ -441,9 +486,16 @@ async function unfavorite(avatarId, avatarName) {
   if (!confirm(`⚠️ 即将移出收藏夹\n\n「${avatarName}」\n\n此操作不可撤销，确定继续吗？`)) return;
   try {
     logMsg(`Removing ${avatarName} from favorites...`, "info");
-    const resp = await apiCall(`/api/vrc/favorites/${favoriteId}`, {
-      method: "DELETE",
-    });
+    let resp = await apiCall(`/api/vrc/favorites/${favoriteId}`, { method: "DELETE" });
+    // Stale cached favoriteId? Try a live re-resolve once and retry.
+    if (resp.status === 404 || resp.status === 410) {
+      favoriteIdMap.delete(avatarId);
+      const fresh = await resolveFavId();
+      if (fresh && fresh !== favoriteId) {
+        favoriteId = fresh;
+        resp = await apiCall(`/api/vrc/favorites/${favoriteId}`, { method: "DELETE" });
+      }
+    }
     if (!resp.ok) {
       const err = await resp.text();
       throw new Error(err);
