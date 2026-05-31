@@ -127,6 +127,15 @@ async function fetchMyProfile(forceRefresh = false) {
     fetchMyModerations();
   } catch(e) {
     if (isAbortError(e)) return;
+    // Network blip / 522 / etc.: if we already rendered cached profile content,
+    // KEEP it visible — don't replace the populated panel with a red error
+    // message. Only show the error state when there's nothing cached to fall
+    // back to.
+    if (myProfileData) {
+      console.warn('fetchMyProfile refresh failed (keeping cached):', e.message);
+      try { friendLogMsg(`⚠ 资料刷新失败 (使用缓存): ${e.message}`, 'error'); } catch(_) {}
+      return;
+    }
     if (myView) myView.innerHTML = `<div style="text-align:center;padding:60px;color:var(--error);">加载失败: ${escHtml(e.message)}</div>`;
   }
 }

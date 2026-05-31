@@ -221,8 +221,8 @@ function doLogout() {
 function showMainApp() {
   document.getElementById("loginPage").classList.add("hidden");
   document.getElementById("mainApp").classList.remove("hidden");
-  
-  // 1. Initial User Fetch
+
+  // 1. Initial User Fetch (sets currentUserId — used by isOwner checks etc.)
   apiCall("/api/vrc/auth/user").then(async (r) => {
     if (r.ok) {
       const user = await r.json();
@@ -230,31 +230,27 @@ function showMainApp() {
     }
   }).catch(() => {});
 
-  // 2. Foveated Startup (Priority: Current View > Background Queue)
-  async function startupSequential() {
-    // Stage 1: Immediate High-Priority Load
-    runPriorityTask(async () => {
-       await fetchMyProfile(true);
-       // Only load friends if we are still on a relevant tab
-       if (currentTab === 'friends' || currentTab === 'download') {
-           await fetchCurrentFriendCategory(true);
-       }
-    });
+  // 2. Background syncs (don't block UI; switchTab handles the current tab below)
+  syncAllFavoriteIds();
+  queueBackgroundTask(async () => {
+    if (worldsLoaded) await fetchWorlds(currentWorldCategory, false);
+    // initWorldsTab is implicitly triggered when user opens the worlds tab
+  });
+  queueBackgroundTask(async () => {
+    await fetchFavoriteGroups(); // populates the favorite-group sidebar buttons
+  });
+  queueBackgroundTask(async () => {
+    // Keep the friends mini-profile fresh in the sidebar even if user starts on
+    // the avatars tab. Use forceRefresh=false so existing cache renders first.
+    await fetchMyProfile(false);
+  });
 
-    // Stage 2: Queue Peripheral Data (Worlds/Avatars)
-    queueBackgroundTask(async () => {
-        if (worldsLoaded) await fetchWorlds(currentWorldCategory, true);
-        else await initWorldsTab();
-    });
-    
-    queueBackgroundTask(async () => {
-        await fetchFavoriteGroups(); // triggers fetchAvatars
-    });
-  }
-
-  startupSequential();
-  syncAllFavoriteIds(); 
-  // Explicitly trigger current tab load to ensure it shows up immediately
-  switchTab(currentTab);
+  // 3. Trigger initial tab load. The same-tab guard in switchTab would fire if
+  //    currentTab already equals the target; bypass it by clearing first so the
+  //    first switchTab() actually populates the active panel. Without this, on
+  //    cold load the main grid stays empty until the user clicks a different tab.
+  const initialTab = currentTab || "download";
+  currentTab = "";
+  switchTab(initialTab);
 }
 
