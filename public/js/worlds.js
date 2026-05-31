@@ -231,7 +231,7 @@ async function cleanupInvalidWorlds() {
     );
 
     if (!invalid.length && !privateNonOwn.length) {
-        alert('✅ 当前列表中没有发现需要清理的失效或私人世界');
+        showToast('当前列表中没有发现需要清理的失效或私人世界', 'info');
         return;
     }
 
@@ -251,7 +251,7 @@ async function cleanupInvalidWorlds() {
                 } else fail++;
                 await new Promise(r => setTimeout(r, 200));
             }
-            alert(`✅ 清理完毕：成功移除 ${count} 个，失败 ${fail} 个`);
+            showToast(`清理完毕：成功 ${count} 个，失败 ${fail} 个`, fail > 0 ? 'error' : 'success');
             fetchWorlds(currentWorldCategory, true);
         }
     });
@@ -387,7 +387,7 @@ async function quickWorldFav(worldId, event) {
           allWorlds = allWorlds.filter(w => w.id !== worldId);
           filterWorlds();
         }
-      } else { btn.textContent = '⭐'; alert('取消收藏失败'); }
+      } else { btn.textContent = '⭐'; showToast('取消收藏失败', 'error'); }
     } catch(e) { btn.textContent = '⭐'; }
     return;
   }
@@ -397,7 +397,7 @@ async function quickWorldFav(worldId, event) {
     btn.textContent = '⏳';
     await loadWorldFavGroups();
     btn.textContent = '☆';
-    if (!worldFavGroups.length) { alert('无法获取收藏组列表，请重试'); return; }
+    if (!worldFavGroups.length) { showToast('无法获取收藏组列表，请重试', 'error'); return; }
   }
 
   document.getElementById('_wqfMenu')?.remove();
@@ -434,7 +434,7 @@ async function quickWorldFav(worldId, event) {
           // stays accurate without waiting for a refresh.
           worldFavGroupCounts.set(g.name, (worldFavGroupCounts.get(g.name) || 0) + 1);
           idb.set('world_basics_age_fav_' + g.name, 0).catch(()=>{});
-        } else { btn.textContent = '☆'; alert('收藏失败'); }
+        } else { btn.textContent = '☆'; showToast('收藏失败', 'error'); }
       } catch(e) { btn.textContent = '☆'; }
     };
     menu.appendChild(b);
@@ -521,7 +521,7 @@ async function cleanInvalidWorlds() {
   const invalid = allWorlds.filter(w => w.isInvalid);
   if (!invalid.length) {
     worldLogMsg('✅ 当前收藏夹没有失效世界', 'success');
-    alert('✅ 当前收藏夹没有失效世界');
+    showToast('当前收藏夹没有失效世界', 'info');
     return;
   }
   worldLogMsg(`🧹 发现 ${invalid.length} 个失效世界，准备清理...`, 'info');
@@ -805,7 +805,7 @@ async function deleteCurrentWorld() {
     const r = await apiCall(`/api/vrc/worlds/${encodeURIComponent(w.id)}`, { method: 'DELETE' });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
-      alert(`✗ 删除失败: ${err.error?.message || r.status}`);
+      showToast('删除失败: ' + (err.error?.message || ('HTTP ' + r.status)), 'error');
       return;
     }
     logMsg(`✓ 已删除世界 ${w.name || w.id}`, 'success');
@@ -822,7 +822,7 @@ async function deleteCurrentWorld() {
       try { await idb.set('world_basics_age_' + currentWorldCategory, 0); } catch(_) {}
     }
   } catch(e) {
-    alert('✗ 删除失败: ' + e.message);
+    showToast('删除失败: ' + e.message, 'error');
   }
 }
 
@@ -956,7 +956,7 @@ async function showCacheClearModal() {
     }
 
     close();
-    alert(`✅ 已清除 ${keysToDelete.length + (document.getElementById('ccc_images')?.checked ? imageCount : 0)} 条缓存记录`);
+    showToast(`已清除 ${keysToDelete.length + (document.getElementById('ccc_images')?.checked ? imageCount : 0)} 条缓存记录`, 'success');
   };
 }
 
@@ -965,7 +965,7 @@ async function joinWorldInstance() {
   if (!currentWorldDetail) return;
   const worldId = currentWorldDetail.id;
   const myId = currentUserId || myProfileData?.id;
-  if (!myId) { alert('无法获取用户 ID，请重新登录'); return; }
+  if (!myId) { showToast('无法获取用户 ID，请重新登录', 'error'); return; }
 
   // Update both header and mobile action buttons
   const allJoinBtns = [

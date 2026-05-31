@@ -904,9 +904,10 @@ async function saveEditAvatar() {
     // view ("Public only") even though it no longer matches the predicate.
     if (typeof applyFilters === 'function') applyFilters();
     logMsg(`✓ ${t("editSuccess")} ${name}`, "success");
+    showToast(`✓ ${t("editSuccess")} ${name}`, 'success');
   } catch (e) {
     logMsg(`✗ ${t("editFail")} ${name} - ${e.message}`, "error");
-    alert(e.message);
+    showToast(`${t("editFail")}: ${e.message}`, 'error');
   } finally {
     btn.textContent = oldText;
     btn.disabled = false;

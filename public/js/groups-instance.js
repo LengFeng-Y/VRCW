@@ -206,7 +206,7 @@ async function vrcGroupAction(groupId, action, myId, nextVis) {
     // Refresh modal
     openGroupDetail(groupId);
   } catch(e) {
-    alert('操作失败: ' + e.message);
+    showToast('操作失败: ' + e.message, 'error');
   }
 }
 

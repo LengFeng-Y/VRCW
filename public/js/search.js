@@ -773,7 +773,7 @@ async function setFallbackAvatar(avtrId, name) {
       throw new Error(res.error?.message || ('HTTP ' + r.status));
     }
   } catch(e) {
-    alert('设置后备模型失败: ' + e.message);
+    showToast('设置后备模型失败: ' + e.message, 'error');
   }
 }
 
@@ -790,7 +790,7 @@ async function enqueueImpostor(avtrId, name) {
       throw new Error(res.error?.message || ('HTTP ' + r.status));
     }
   } catch(e) {
-    alert('生成 Impostor 失败: ' + e.message);
+    showToast('生成 Impostor 失败: ' + e.message, 'error');
   }
 }
 
@@ -802,10 +802,10 @@ async function deleteImpostor(avtrId, name) {
       showToast('已删除 Impostor', 'success');
       logMsg(`✅ 已删除「${name || avtrId}」的 Impostor`, 'info');
     } else {
-      alert('删除 Impostor 失败: ' + r.status);
+      showToast('删除 Impostor 失败: HTTP ' + r.status, 'error');
     }
   } catch(e) {
-    alert('错误: ' + e.message);
+    showToast('错误: ' + e.message, 'error');
   }
 }
 

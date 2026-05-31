@@ -49,18 +49,18 @@ function extractFileVersionUrl(f) {
 
 async function uploadToVRC(tag, fileInput, onDone) {
   if (!fileInput || !fileInput.files || !fileInput.files[0]) {
-    alert('请选择一个图片文件');
+    showToast('请选择一个图片文件', 'info');
     return;
   }
   const file = fileInput.files[0];
   if (!file.type.startsWith('image/')) {
-    alert('仅支持图片文件 (PNG/JPEG/WebP)');
+    showToast('仅支持图片文件 (PNG/JPEG/WebP)', 'error');
     return;
   }
   // Size limits: icon/gallery < 10MB, emoji/sticker < 10MB and must be < 1024×1024
   const MAX_SIZE = 10 * 1024 * 1024;
   if (file.size > MAX_SIZE) {
-    alert('文件过大！VRChat 限制图片最大 10MB。');
+    showToast('文件过大！VRChat 限制图片最大 10MB。', 'error');
     return;
   }
 
@@ -305,6 +305,7 @@ async function fetchStore(container, gen) {
 
     container.innerHTML = '<h2 style="margin-bottom:16px;">🏪 商店浏览</h2>' + balHtml + listingsHtml;
   } catch(e) {
+    if (isAbortError(e)) return;
     container.innerHTML = '<div style="color:var(--error);">加载失败: ' + e.message + '</div>';
   }
 }
@@ -350,6 +351,7 @@ async function fetchTransactions(container, gen) {
       </div>`;
     }).join('');
   } catch(e) {
+    if (isAbortError(e)) return;
     container.innerHTML = '<div style="color:var(--error);">加载失败: ' + e.message + '</div>';
   }
 }
@@ -428,6 +430,7 @@ async function fetchEmoji(container, gen) {
       '<h3 style="font-size:0.9rem;margin-bottom:10px;">贴纸 (' + stickers.length + ')</h3>' +
       renderFileGrid(stickers, '暂无贴纸（需要 VRC+，可在官网或此处上传）');
   } catch(e) {
+    if (isAbortError(e)) return;
     container.innerHTML = '<div style="color:var(--error);">加载失败: ' + e.message + '</div>';
   }
 }
@@ -489,6 +492,7 @@ async function fetchInventory(container, gen) {
     }
     container.innerHTML = html;
   } catch(e) {
+    if (isAbortError(e)) return;
     container.innerHTML = '<div style="color:var(--error);">加载失败: ' + escHtml(e.message) + '</div>';
   }
 }
@@ -506,9 +510,9 @@ async function equipInventoryItem(inventoryId, slot, currentlyEquipped) {
       switchAssetsPage('inventory');
     } else {
       const err = await r.json().catch(() => ({}));
-      alert((currentlyEquipped ? '卸下' : '装备') + '失败: ' + (err.error?.message || r.status));
+      showToast((currentlyEquipped ? '卸下' : '装备') + '失败: ' + (err.error?.message || ('HTTP ' + r.status)), 'error');
     }
-  } catch(e) { alert('错误: ' + e.message); }
+  } catch(e) { showToast('错误: ' + e.message, 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -545,6 +549,7 @@ async function fetchProps(container, gen) {
     }
     container.innerHTML = html;
   } catch(e) {
+    if (isAbortError(e)) return;
     container.innerHTML = '<div style="color:var(--error);">加载失败: ' + escHtml(e.message) + '</div>';
   }
 }

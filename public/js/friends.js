@@ -564,7 +564,7 @@ async function handleNotification(id, action) {
     logMsg(`✅ 已${label}通知`, 'success');
     fetchNotifications();
   } catch(e) {
-    alert('操作失败: ' + e.message);
+    showToast('操作失败: ' + e.message, 'error');
   }
 }
 
@@ -579,7 +579,7 @@ async function seeAllNotifications() {
     if (!r.ok) throw new Error('Failed to clear notifications');
     fetchNotifications();
   } catch(e) {
-     alert('操作失败: ' + e.message);
+     showToast('操作失败: ' + e.message, 'error');
   }
 }
 

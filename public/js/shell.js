@@ -436,7 +436,7 @@ async function clearAllCacheNow() {
   await new Promise(r => { const tx = idb.db.transaction('cache','readwrite'); tx.objectStore('cache').clear(); tx.oncomplete=r; tx.onerror=r; });
   await new Promise(r => { const tx = idb.db.transaction('images','readwrite'); tx.objectStore('images').clear(); tx.oncomplete=r; tx.onerror=r; });
   loadCacheStats();
-  alert('✅ 已清除所有缓存');
+  showToast('已清除所有缓存', 'success');
 }
 
 // ── Categories ──

@@ -533,8 +533,15 @@ function fallbackCopy(value, onOk) {
 }
 
 // ── Lightweight toast (non-blocking feedback for actions) ──
+// Replaces native `alert()` for the common "operation succeeded/failed"
+// message. alert() blocks the entire page and forces a click — a death by
+// a thousand cuts when every favorite/unfavorite/edit triggers one. Toasts
+// fade in/out at the bottom and stack on top of any modal (z-index 99999).
+//
+// The optional `duration` lets error messages stay long enough to actually
+// read (default 2.2s for info/success, 4s for errors).
 let _toastTimer = null;
-function showToast(msg, type = "info") {
+function showToast(msg, type = "info", duration) {
   let el = document.getElementById("_vrcwToast");
   if (!el) {
     el = document.createElement("div");
@@ -542,7 +549,9 @@ function showToast(msg, type = "info") {
     el.style.cssText =
       "position:fixed;left:50%;bottom:32px;transform:translateX(-50%);z-index:99999;" +
       "padding:10px 18px;border-radius:10px;font-size:0.85em;font-weight:500;color:#fff;" +
-      "box-shadow:0 8px 24px rgba(0,0,0,0.4);pointer-events:none;opacity:0;transition:opacity 0.2s;max-width:80vw;text-align:center;";
+      "box-shadow:0 8px 24px rgba(0,0,0,0.4);cursor:pointer;opacity:0;transition:opacity 0.2s;max-width:80vw;text-align:center;";
+    // Click to dismiss — for errors that need acknowledgment without blocking.
+    el.addEventListener('click', () => { el.style.opacity = '0'; clearTimeout(_toastTimer); });
     document.body.appendChild(el);
   }
   const bg = { info: "rgba(30,30,46,0.96)", success: "rgba(22,101,52,0.96)", error: "rgba(153,27,27,0.96)" }[type] || "rgba(30,30,46,0.96)";
@@ -550,8 +559,85 @@ function showToast(msg, type = "info") {
   el.textContent = msg;
   el.style.opacity = "1";
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => { el.style.opacity = "0"; }, 2200);
+  // Errors get longer to read (network failures often need re-attempt).
+  const ms = duration != null ? duration : (type === 'error' ? 4000 : 2200);
+  _toastTimer = setTimeout(() => { el.style.opacity = "0"; }, ms);
 }
+
+// ── Global "Esc closes top modal" handler ─────────────────────────────────
+// Standard expectation: pressing Esc dismisses the topmost open modal/overlay.
+// Most of our modals already close on backdrop-click, but we never wired Esc
+// for the main ones (friend profile, world detail, group detail, instance
+// detail, edit avatar, search detail, cleanup, boop, group invite picker,
+// report, user note, cache clear). One global listener picks the highest
+// z-index visible overlay and triggers its close.
+//
+// We try, in order: a `closeXxx()` helper bound on the element, an explicit
+// onclick="closeXxx()" pattern in the DOM, then a click on the element's
+// own onclick (for backdrop-style modals), and finally `.remove()` for ad-hoc
+// modals that just live on the DOM until clicked away.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  // Don't fight with text-entry: typing Esc in an input/textarea should still
+  // bubble through, but only after we let the modal close. We allow it.
+  // Skip if a contenteditable element is focused (rare but possible).
+  const ae = document.activeElement;
+  if (ae && ae.isContentEditable) return;
+
+  // Collect all visible modal-ish overlays. Anything with class "modal" or
+  // "modal-overlay" that isn't .hidden and isn't display:none.
+  const candidates = Array.from(document.querySelectorAll(
+    '.modal:not(.hidden), .modal-overlay:not(.hidden), [id$="Modal"]:not(.hidden), [id^="_"][id$="Modal"]'
+  )).filter(el => {
+    const cs = getComputedStyle(el);
+    return cs.display !== 'none' && cs.visibility !== 'hidden' && el.offsetParent !== null;
+  });
+  if (!candidates.length) return;
+
+  // Topmost = highest z-index (fall back to DOM order).
+  const top = candidates.reduce((best, el) => {
+    const z = parseInt(getComputedStyle(el).zIndex, 10) || 0;
+    return (!best || z >= best._z) ? Object.assign(el, { _z: z }) : best;
+  }, null);
+  if (!top) return;
+
+  // Strategy 1: known close helpers by id
+  const id = top.id || '';
+  const closers = {
+    'worldDetailModal': 'closeWorldDetail',
+    'friendProfileModal': 'closeFriendProfile',
+    'groupDetailModal': 'closeGroupDetail',
+    'instanceDetailModal': 'closeInstanceDetail',
+    'editModal': 'closeEditModal',
+    'avtrdbDetailModal': 'closeAvtrdbDetail',
+    'cleanupModal': null,        // ad-hoc, just remove
+    'cacheClearModal': null,
+    'boopModal': null,
+    '_groupInvitePickerModal': null,
+    '_reportUserModal': null,
+    '_userNoteModal': null,
+    '_wqfMenu': null,
+  };
+  if (id && Object.prototype.hasOwnProperty.call(closers, id)) {
+    const fn = closers[id];
+    if (fn && typeof window[fn] === 'function') { window[fn](); e.preventDefault(); return; }
+    top.remove(); e.preventDefault(); return;
+  }
+
+  // Strategy 2: hide via .hidden class (matches the rest of our modal pattern)
+  if (top.classList.contains('modal')) {
+    top.classList.add('hidden');
+    if (top.dataset.scrollLocked) { unlockBodyScroll(); delete top.dataset.scrollLocked; }
+    e.preventDefault();
+    return;
+  }
+
+  // Strategy 3: ad-hoc overlays (modal-overlay class, dynamically inserted)
+  if (top.classList.contains('modal-overlay')) {
+    top.remove();
+    e.preventDefault();
+  }
+});
 
 // ── Centralized modal/overlay stacking + scroll lock ───────────────────────
 // Bug class fixed here: nested modals appearing BEHIND an already-open modal

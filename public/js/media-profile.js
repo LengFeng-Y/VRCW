@@ -238,6 +238,7 @@ async function fetchGalleryOnly(container, gen) {
       container.innerHTML += '<div style="color:var(--text-muted);font-size:0.85em;">暂无 VRC+ 相册图片（需要 VRC+，可在游戏内或此处上传）</div>';
     }
   } catch(e) {
+    if (isAbortError(e)) return;
     container.innerHTML = '<div style="color:var(--error);">加载失败: ' + e.message + '</div>';
   }
 }
@@ -295,6 +296,7 @@ async function fetchPrints(container, gen) {
         '</div>';
       }).join('') + '</div>';
   } catch(e) {
+    if (isAbortError(e)) return;
     container.innerHTML = '<div style="color:var(--error);">加载失败: ' + e.message + '</div>';
   }
 }
@@ -315,11 +317,11 @@ async function deletePrint(printId, btn) {
       logMsg('🗑️ 已删除拍立得照片', 'info');
     } else {
       if (btn) btn.disabled = false;
-      alert('删除失败: ' + r.status);
+      showToast('删除失败: HTTP ' + r.status, 'error');
     }
   } catch(e) {
     if (btn) btn.disabled = false;
-    alert('错误: ' + e.message);
+    showToast('删除失败: ' + e.message, 'error');
   }
 }
 function onPrintFileSelected(inputId) {
@@ -450,6 +452,7 @@ async function renderModerationLog() {
         </div>`;
     }).join('');
   } catch(e) {
+    if (isAbortError(e)) return;
     container.innerHTML = `<div style="color:var(--text-danger);text-align:center;padding:20px;">加载失败: ${e.message}</div>`;
   }
 }
@@ -489,7 +492,7 @@ async function fetchMyModerations() {
 async function openEditProfileModal() {
   const u = myProfileData;
   if (!u) {
-    alert('正在加载个人资料，请稍后再试');
+    showToast('正在加载个人资料，请稍后再试', 'info');
     return;
   }
   
@@ -564,18 +567,21 @@ async function openEditProfileModal() {
       // VRChat users PUT endpoint
       const r = await apiCall(`/api/vrc/users/${u.id}`, { method: 'PUT', json: payload });
       if (r.ok) {
-        alert('✅ 资料已更新');
+        // Toast instead of native alert — closing the modal first lets the
+        // toast appear over the (now-refreshing) page rather than chaining
+        // two click-to-dismiss dialogs.
         modal.remove();
         cleanup();
+        showToast('✅ 资料已更新', 'success');
         fetchMyProfile(true);
       } else {
-        const err = await r.json();
-        alert('❌ 更新失败: ' + (err.error?.message || r.status));
+        const err = await r.json().catch(() => ({}));
+        showToast('更新失败: ' + (err.error?.message || ('HTTP ' + r.status)), 'error');
         btn.disabled = false;
         btn.textContent = '保存修改';
       }
     } catch(e) {
-      alert('❌ 发生错误: ' + e.message);
+      showToast('发生错误: ' + e.message, 'error');
       btn.disabled = false;
       btn.textContent = '保存修改';
     }
