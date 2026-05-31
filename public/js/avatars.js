@@ -9,6 +9,13 @@ let currentCategory = "mine";
 
 function switchCategory(cat) {
   currentCategory = cat;
+  // Switching tabs invalidates the current selection — keeping IDs across tabs
+  // would let "delete selected" hit avatars in a category the user can't see,
+  // and the "已选 N" footer would lie about scope. Reset both the set and the
+  // counter chip so the next click of an avatar starts fresh in the new view.
+  if (typeof selectedIds !== 'undefined' && selectedIds.clear) selectedIds.clear();
+  const ssChip = document.getElementById('statSelected');
+  if (ssChip) ssChip.textContent = '0';
   document.querySelectorAll(".cat-btn").forEach((btn) => {
     btn.classList.remove("active", "btn-primary");
     btn.classList.add("btn-secondary");
@@ -557,7 +564,14 @@ async function unfavoriteSelected() {
 
   for (const avatarId of ids) {
     const fid = favoriteIdMap.get(avatarId);
-    if (!fid) { failCount++; continue; }
+    if (!fid) {
+      // No favorite-id mapping means we can't delete it on the server, but we
+      // still drop it from the selection — otherwise the chip count below is
+      // wrong and the next "select all" toggle keeps picking up zombies.
+      selectedIds.delete(avatarId);
+      failCount++;
+      continue;
+    }
     try {
       const resp = await apiCall(`/api/vrc/favorites/${fid}`, { method: "DELETE" });
       if (!resp.ok) throw new Error(await resp.text());
@@ -575,6 +589,10 @@ async function unfavoriteSelected() {
       successCount++;
     } catch (e) {
       logMsg(`✗ 移除失败: ${e.message}`, "error");
+      // Drop from the selection even on failure — leaving it selected makes the
+      // next "selected count" UI lie and confuses the user about which row is
+      // pending. The card still exists in `avatars` so they can retry manually.
+      selectedIds.delete(avatarId);
       failCount++;
     }
     // Small delay to avoid rate limiting
@@ -584,7 +602,9 @@ async function unfavoriteSelected() {
   // Update IDB cache
   try { await idb.set("avatars_" + currentCategory, avatars); } catch (_) {}
   document.getElementById("statTotal").textContent = visibleAvatars.length;
-  document.getElementById("statSelected").textContent = 0;
+  // Reflect the *real* remaining selection size — hard-coding 0 hid bugs where
+  // the loop forgot to delete from the set.
+  document.getElementById("statSelected").textContent = selectedIds.size;
   logMsg(`✓ 批量移除完成: 成功 ${successCount}, 失败 ${failCount}`, successCount > 0 ? "success" : "error");
 }
 
@@ -702,6 +722,15 @@ async function cleanInvalidFavorites() {
         if (!fid) { fail++; continue; }
         try {
           await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
+          // Cleanup the per-avatar state so the sidebar group counter and the
+          // ⭐ badge stay in sync without waiting for a full re-sync. The
+          // grouping for this view is `currentCategory` (the favorite tag the
+          // user is currently looking at).
+          favoriteIdMap.delete(av.id);
+          if (currentCategory && currentCategory !== 'mine' && currentCategory !== 'local') {
+            const cur = avatarFavGroupCounts.get(currentCategory) || 0;
+            avatarFavGroupCounts.set(currentCategory, Math.max(0, cur - 1));
+          }
           success++;
         } catch(e) { fail++; }
         await new Promise(r => setTimeout(r, 200));
@@ -870,6 +899,10 @@ async function saveEditAvatar() {
       }
     }
     closeEditModal();
+    // Re-apply filters after edit. The user may have flipped releaseStatus
+    // (public→private etc.); without this the card stays visible in a filtered
+    // view ("Public only") even though it no longer matches the predicate.
+    if (typeof applyFilters === 'function') applyFilters();
     logMsg(`✓ ${t("editSuccess")} ${name}`, "success");
   } catch (e) {
     logMsg(`✗ ${t("editFail")} ${name} - ${e.message}`, "error");

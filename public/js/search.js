@@ -687,6 +687,13 @@ async function addToFavorite(avtrId, groupName, btn) {
     if (resp.ok) {
       statusEl.style.color = "var(--success)";
       statusEl.textContent = `✓ 已收藏到 ${groupName}`;
+      // Track the new favoriteId so the user can immediately unfavorite without
+      // first refetching the whole favorites list. Same shape as syncAllFavoriteIds.
+      const data = await resp.json().catch(() => null);
+      if (data && data.id) favoriteIdMap.set(avtrId, data.id);
+      // Bump the per-group counter so the sidebar "x/100" hint and the
+      // disabled-when-full state are accurate without a roundtrip.
+      avatarFavGroupCounts.set(groupName, (avatarFavGroupCounts.get(groupName) || 0) + 1);
       // Invalidate IDB cache for that group so next load fetches fresh
       try { await idb.set("avatars_" + groupName, null); } catch (_) {}
       // INSTANT UI: Add star badge to card

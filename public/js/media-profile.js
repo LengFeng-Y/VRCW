@@ -283,7 +283,7 @@ async function fetchPrints(container, gen) {
         const world = p.worldName || p.worldId || '';
         const author = p.ownerDisplayName || '';
         const date = p.createdAt ? new Date(p.createdAt).toLocaleDateString('zh-CN') : '';
-        return '<div style="position:relative;cursor:pointer;background:#fff;border-radius:4px;padding:10px 10px 20px;box-shadow:0 4px 18px rgba(0,0,0,0.45);transition:transform 0.15s;" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'\'">' +
+        return '<div class="print-card" style="position:relative;cursor:pointer;background:#fff;border-radius:4px;padding:10px 10px 20px;box-shadow:0 4px 18px rgba(0,0,0,0.45);transition:transform 0.15s;" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'\'">' +
           '<button title="删除" onclick="event.stopPropagation(); deletePrint(\'' + escJsAttr(p.id) + '\', this)" style="position:absolute;top:6px;right:6px;z-index:3;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:0.8em;line-height:1;">×</button>' +
           '<img onclick="window.open(\'' + escHtml(imgUrl) + '\',\'_blank\')" src="' + escHtml(imgUrl) + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block;border-radius:2px;" loading="lazy" onerror="this.style.display=\'none\'">' +
           '<div style="margin-top:8px;">' +
@@ -306,8 +306,10 @@ async function deletePrint(printId, btn) {
   try {
     const r = await apiCall(`/api/vrc/prints/${printId}`, { method: 'DELETE' });
     if (r.ok) {
-      // Remove the card from the DOM
-      const card = btn && btn.closest('div');
+      // Use the explicit `.print-card` selector — `btn.closest('div')` was
+      // grabbing the inner caption row (a descendant <div>) and yanking it,
+      // leaving an empty white card visible until the next refresh.
+      const card = btn && (btn.closest('.print-card') || btn.closest('div'));
       if (card && card.parentElement) card.remove();
       showToast('已删除拍立得', 'success');
       logMsg('🗑️ 已删除拍立得照片', 'info');
@@ -496,6 +498,20 @@ async function openEditProfileModal() {
   // Use modalZTop() so this modal stacks above any already-open modal (was hard-
   // coded to 2000, which sits at the bottom of the modal range and got covered).
   modal.style.zIndex = modalZTop();
+  // Click-on-overlay closes the modal (matches the rest of the app).
+  modal.onclick = (e) => { if (e.target === modal) { modal.remove(); cleanup(); } };
+  // Esc closes too. The handler is one-shot — it tears itself down once the modal
+  // goes away, so opening the dialog repeatedly doesn't pile up listeners.
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      modal.remove();
+      cleanup();
+    }
+  };
+  function cleanup() {
+    document.removeEventListener('keydown', escHandler);
+  }
+  document.addEventListener('keydown', escHandler);
   modal.innerHTML = `
     <div class="modal-content glass" style="max-width:500px;padding:24px;width:90%;border:1px solid var(--border);border-radius:16px;">
       <h3 style="margin-bottom:20px;display:flex;align-items:center;gap:10px;font-size:1.1em;">
@@ -525,13 +541,15 @@ async function openEditProfileModal() {
         </div>
         <div style="display:flex;gap:12px;margin-top:10px;">
           <button class="btn btn-primary" style="flex:1;padding:12px;" id="btnUpdateProfile">保存修改</button>
-          <button class="btn btn-secondary" style="flex:1;padding:12px;" onclick="this.closest('.modal-overlay').remove()">取消</button>
+          <button class="btn btn-secondary" style="flex:1;padding:12px;" id="btnCancelEditProfile">取消</button>
         </div>
       </div>
     </div>`;
   
   document.body.appendChild(modal);
-  
+
+  document.getElementById('btnCancelEditProfile').onclick = () => { modal.remove(); cleanup(); };
+
   document.getElementById('btnUpdateProfile').onclick = async () => {
     const btn = document.getElementById('btnUpdateProfile');
     btn.disabled = true;
@@ -548,6 +566,7 @@ async function openEditProfileModal() {
       if (r.ok) {
         alert('✅ 资料已更新');
         modal.remove();
+        cleanup();
         fetchMyProfile(true);
       } else {
         const err = await r.json();

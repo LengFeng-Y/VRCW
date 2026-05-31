@@ -419,11 +419,29 @@ async function saveToLocalFavorite(av) {
 }
 
 async function removeFromLocalFavorite(id) {
+  // Confirm before destructive action — `localAvatarFavs` and the IDB record
+  // are both wiped here, so a misclick on a card's badge would otherwise lose
+  // the entry silently.
+  const av = localAvatarFavs.find(a => a.id === id);
+  const name = av?.name || id;
+  if (!confirm(`确定要从本地收藏中移除「${name}」吗？`)) return;
   localAvatarFavs = localAvatarFavs.filter(a => a.id !== id);
   localAvatarIdMap.delete(id);
+  // Drop from any pending bulk selection too — leaving it here makes the
+  // "已选 N" chip lie about what's actually selectable.
+  if (typeof selectedIds !== 'undefined' && selectedIds.delete) selectedIds.delete(id);
+  const ssChip = document.getElementById('statSelected');
+  if (ssChip) ssChip.textContent = (typeof selectedIds !== 'undefined') ? selectedIds.size : '0';
   await idb.removeLocalAvatar(id);
   syncLocalFavorites();
-  if (currentCategory === 'local') switchCategory('local');
+  // Surgical card removal beats a full switchCategory() reload — that would
+  // re-fetch & re-render the whole list and drop any in-flight thumbnails.
+  if (currentCategory === 'local') {
+    const card = document.getElementById('card-' + id);
+    if (card) card.remove();
+    const totalChip = document.getElementById('statTotal');
+    if (totalChip) totalChip.textContent = String(localAvatarFavs.length);
+  }
   logMsg(`🗑️ 已从本地收藏移除`, "info");
 }
 

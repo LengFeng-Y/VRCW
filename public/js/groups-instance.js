@@ -196,7 +196,13 @@ async function vrcGroupAction(groupId, action, myId, nextVis) {
 
     const r = await apiCall(url, opts);
     if (!r.ok) throw new Error(await r.text());
-    
+
+    // Invalidate the cached groups list — leave/join would otherwise let the
+    // sidebar keep showing the user as still in the group (or missing) for
+    // up to a full reload, since loadGroupsPage early-returns when myGroupsCache
+    // is populated. Setting it to null forces the next page open to re-fetch.
+    myGroupsCache = null;
+
     // Refresh modal
     openGroupDetail(groupId);
   } catch(e) {
@@ -446,6 +452,11 @@ async function openInstanceDetail(loc) {
   } catch(e) {
     console.error('Instance detail error', e);
     document.getElementById('insWorldName').textContent = '加载失败';
+    // Don't leave the friend list spinning forever ("同步中...") when the
+    // initial fetch throws — replace with an error indicator so the user
+    // knows to retry instead of staring at it.
+    const _flEl = document.getElementById('insFriendList');
+    if (_flEl) _flEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--error);font-size:0.85em;">加载失败: ${escHtml(e.message || '网络错误')}</div>`;
   }
 }
 

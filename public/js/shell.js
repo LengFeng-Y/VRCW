@@ -49,14 +49,25 @@ async function syncAllFavoriteIds() {
       if (favs.length < 100) break;
       offset += 100;
     }
-    // 3. Friends
+    // 3. Friends — store as { favoriteId, tags } to match the per-category refresh
+    // shape (friends.js:443). Previously this site stored a bare string and the
+    // refresh path stored an object, breaking toggleFriendFavorite (which read
+    // it as a string) after any tab refresh.
     offset = 0;
     while (true) {
       const resp = await apiCall(`/api/vrc/favorites?type=friend&n=100&offset=${offset}`);
       if (!resp.ok) break;
       const favs = await resp.json();
       if (!favs || favs.length === 0 || favs.error) break;
-      favs.forEach((f) => friendFavoriteIdMap.set(f.favoriteId, f.id));
+      favs.forEach((f) => {
+        const tag = f.tags?.[0] || 'group_0';
+        const existing = friendFavoriteIdMap.get(f.favoriteId);
+        if (existing && existing.tags) {
+          if (!existing.tags.includes(tag)) existing.tags.push(tag);
+        } else {
+          friendFavoriteIdMap.set(f.favoriteId, { favoriteId: f.id, tags: [tag] });
+        }
+      });
       if (favs.length < 100) break;
       offset += 100;
     }

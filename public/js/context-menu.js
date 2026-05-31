@@ -115,7 +115,14 @@ function showFriendContextMenu(e) {
   const name = f.displayName || '';
   const hasLocation = f.location && f.location.startsWith('wrld_');
   const isOnline = f.state === 'online' || (f.location && f.location !== 'offline');
-  const isJoinable = hasLocation && !f.location.includes('~private');
+  // Joinable means: we have a real world id, it's not private, and the user
+  // isn't mid-transit (`traveling`) or simply marked offline. A `~private`
+  // tag means a private instance — self-invite endpoint will 403 on those.
+  const isJoinable = hasLocation
+    && !f.location.includes('~private')
+    && f.location !== 'traveling'
+    && f.location !== 'offline'
+    && f.location !== 'private';
 
   const isBlocked = myModerations.some(m => m.moderated === id && m.type === 'block');
   const isMuted   = myModerations.some(m => m.moderated === id && m.type === 'mute');
@@ -345,8 +352,21 @@ async function addFriendToFavorite(userId, groupName, btn) {
     });
     if (r.ok) {
       const res = await r.json();
-      friendFavoriteIdMap.set(userId, res.id);
+      // Store as { favoriteId, tags } shape (matches shell.js + friends.js).
+      // Previously stored a bare string here and the next refresh would
+      // overwrite with the object shape — breaking toggleFriendFavorite.
+      const existing = friendFavoriteIdMap.get(userId);
+      if (existing && existing.tags) {
+        if (!existing.tags.includes(groupName)) existing.tags.push(groupName);
+      } else {
+        friendFavoriteIdMap.set(userId, { favoriteId: res.id, tags: [groupName] });
+      }
       logMsg(`✅ 已将好友添加到分组: ${groupName}`, "success");
+      // Refresh the open friend profile so the ⭐ button text updates.
+      const modal = document.getElementById('friendProfileModal');
+      if (currentFriendProfile && modal && !modal.classList.contains('hidden')) {
+        _renderFriendProfileUI(currentFriendProfile, modal);
+      }
     } else {
       const err = await r.json().catch(() => ({}));
       alert(`❌ 收藏失败: ${err.error?.message || r.status}`);
@@ -357,13 +377,22 @@ async function addFriendToFavorite(userId, groupName, btn) {
 
 async function toggleFriendFavorite(userId, name) {
   if (friendFavoriteIdMap.has(userId)) {
-    const favId = friendFavoriteIdMap.get(userId);
+    const entry = friendFavoriteIdMap.get(userId);
+    // entry is { favoriteId, tags } since the unified shape; tolerate the old
+    // bare-string layout in case any persisted state wasn't migrated.
+    const favId = (entry && typeof entry === 'object') ? entry.favoriteId : entry;
+    if (!favId) { alert('收藏 ID 缺失，请刷新好友列表后重试'); return; }
     if (!confirm(`确定要为 ${name} 移除好友收藏吗？`)) return;
     try {
       const r = await apiCall(`/api/vrc/favorites/${favId}`, {method:'DELETE'});
       if (r.ok) {
         friendFavoriteIdMap.delete(userId);
         logMsg(`✅ 已移除好友 ${name} 的收藏`, "info");
+        // Refresh the open friend profile so the ⭐ button text updates.
+        const modal = document.getElementById('friendProfileModal');
+        if (currentFriendProfile && modal && !modal.classList.contains('hidden')) {
+          _renderFriendProfileUI(currentFriendProfile, modal);
+        }
       } else {
         alert(`❌ 移除失败: ${r.status}`);
       }
@@ -453,8 +482,17 @@ async function cancelFriendRequest(userId, name) {
 async function friendRequestJoin(userId, name) {
   // Invite yourself to the user's current instance via POST /invite/myself/to/{instanceId}
   const f = currentFriendProfile;
-  if (!f || !f.location || !f.location.startsWith('wrld_')) {
-    alert('该好友当前不在公开实例中');
+  // Guards must mirror the menu's `isJoinable` exactly. Without `~private` /
+  // explicit traveling/offline checks the API will 403 (private), 404 (offline
+  // shows location 'offline'), or hang against the transit world while the
+  // user is mid-teleport.
+  if (!f || !f.location ||
+      !f.location.startsWith('wrld_') ||
+      f.location === 'offline' ||
+      f.location === 'private' ||
+      f.location === 'traveling' ||
+      f.location.includes('~private')) {
+    alert('该好友当前不在可加入的公开实例中');
     return;
   }
   try {
@@ -647,9 +685,22 @@ async function blockUser(userId, name) {
       myModerations.push({ moderated: userId, type: 'block' });
       logMsg(`✅ 已屏蔽 ${name}`, 'success');
       logModerationAction(userId, name, 'block', 'block');
+      _refreshFriendProfileIfOpen(userId);
       fetchMyModerations(); // background sync
     } else logMsg(`❌ 屏蔽失败: ${r.status}`, 'error');
   } catch(e) { alert('发生错误: ' + e.message); }
+}
+
+// Helper: re-render the friend profile modal if it's open and showing this user.
+// Used after any action that flips state visible in the modal (favorite, block,
+// mute, show/hide avatar, interact-off). Without this the badges + button labels
+// stay stale until the user manually reopens the profile.
+function _refreshFriendProfileIfOpen(userId) {
+  if (!currentFriendProfile || currentFriendProfile.id !== userId) return;
+  const modal = document.getElementById('friendProfileModal');
+  if (modal && !modal.classList.contains('hidden')) {
+    _renderFriendProfileUI(currentFriendProfile, modal);
+  }
 }
 
 async function unblockUser(userId, name) {
@@ -659,6 +710,7 @@ async function unblockUser(userId, name) {
       myModerations = myModerations.filter(m => !(m.moderated === userId && m.type === 'block'));
       logMsg(`✅ 已解除屏蔽 ${name}`, 'success');
       logModerationAction(userId, name, 'block', 'unblock');
+      _refreshFriendProfileIfOpen(userId);
       fetchMyModerations();
     } else logMsg(`❌ 解除失败: ${r.status}`, 'error');
   } catch(e) { alert('发生错误: ' + e.message); }
@@ -673,6 +725,7 @@ async function muteUser(userId, name) {
       myModerations.push({ moderated: userId, type: 'mute' });
       logMsg(`✅ 已静音 ${name}`, 'success');
       logModerationAction(userId, name, 'mute', 'mute');
+      _refreshFriendProfileIfOpen(userId);
       fetchMyModerations();
     } else logMsg(`❌ 静音失败: ${r.status}`, 'error');
   } catch(e) { alert('发生错误: ' + e.message); }
@@ -685,6 +738,7 @@ async function unmuteUser(userId, name) {
       myModerations = myModerations.filter(m => !(m.moderated === userId && m.type === 'mute'));
       logMsg(`✅ 已解除静音 ${name}`, 'success');
       logModerationAction(userId, name, 'mute', 'unmute');
+      _refreshFriendProfileIfOpen(userId);
       fetchMyModerations();
     } else logMsg(`❌ 解除失败: ${r.status}`, 'error');
   } catch(e) { alert('发生错误: ' + e.message); }
@@ -699,6 +753,7 @@ async function showAvatarUser(userId, name) {
       myModerations.push({ moderated: userId, type: 'showAvatar' });
       logMsg(`✅ 已强制显示 ${name} 的模型`, 'success');
       logModerationAction(userId, name, 'avatar', 'show');
+      _refreshFriendProfileIfOpen(userId);
       fetchMyModerations();
     } else logMsg(`❌ 操作失败: ${r.status}`, 'error');
   } catch(e) { alert('发生错误: ' + e.message); }
@@ -713,6 +768,7 @@ async function hideAvatarUser(userId, name) {
       myModerations.push({ moderated: userId, type: 'hideAvatar' });
       logMsg(`✅ 已隐藏 ${name} 的模型`, 'success');
       logModerationAction(userId, name, 'avatar', 'hide');
+      _refreshFriendProfileIfOpen(userId);
       fetchMyModerations();
     } else logMsg(`❌ 操作失败: ${r.status}`, 'error');
   } catch(e) { alert('发生错误: ' + e.message); }
@@ -726,6 +782,7 @@ async function disableAvatarInteraction(userId, name) {
       myModerations.push({ moderated: userId, type: 'interactOff' });
       logMsg(`✅ 已关闭 ${name} 的模型互动`, 'success');
       logModerationAction(userId, name, 'avatar', 'disableInteraction');
+      _refreshFriendProfileIfOpen(userId);
       fetchMyModerations();
     } else logMsg(`❌ 操作失败: ${r.status}`, 'error');
   } catch(e) { alert('发生错误: ' + e.message); }
@@ -740,6 +797,7 @@ async function resetAvatarModeration(userId, name, type) {
       const typeText = { showAvatar:'强制显示', hideAvatar:'隐藏', interactOff:'关闭互动' }[type] || type;
       logMsg(`✅ 已重置 ${name} 的${typeText}设置`, 'success');
       logModerationAction(userId, name, 'avatar', 'reset_' + type);
+      _refreshFriendProfileIfOpen(userId);
       fetchMyModerations();
     } else logMsg(`❌ 重置失败: ${r.status}`, 'error');
   } catch(e) { alert('发生错误: ' + e.message); }

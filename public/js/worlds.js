@@ -365,10 +365,24 @@ async function quickWorldFav(worldId, event) {
     btn.textContent = '⏳';
     try {
       const favId = worldFavoriteIdMap.get(worldId);
+      // Look up which group this world is in by scanning loaded `allWorlds`
+      // (cached in the current category). We need this to decrement
+      // worldFavGroupCounts — without it the sidebar "x/100" stays wrong
+      // until a full re-sync.
+      const cur = allWorlds.find(w => w.id === worldId);
+      const removedGroup = cur && Array.isArray(cur.favorites)
+        ? (cur.favorites[0]?.tags?.[0] || null)
+        : (currentWorldCategory && currentWorldCategory.startsWith('fav_')
+            ? currentWorldCategory.replace(/^fav_/, '')
+            : null);
       const r = await apiCall(`/api/vrc/favorites/${favId}`, { method: 'DELETE' });
       if (r.ok) {
         worldFavoriteIdMap.delete(worldId);
         _broadcastWorldFavUpdate(worldId, false);
+        if (removedGroup) {
+          const c = worldFavGroupCounts.get(removedGroup) || 0;
+          worldFavGroupCounts.set(removedGroup, Math.max(0, c - 1));
+        }
         if (currentWorldCategory.startsWith('fav_')) {
           allWorlds = allWorlds.filter(w => w.id !== worldId);
           filterWorlds();
@@ -416,6 +430,9 @@ async function quickWorldFav(worldId, event) {
           const res = await r.json();
           worldFavoriteIdMap.set(worldId, res.id);
           _broadcastWorldFavUpdate(worldId, true);
+          // Bump the per-group counter so the dropdown limit/disabled state
+          // stays accurate without waiting for a refresh.
+          worldFavGroupCounts.set(g.name, (worldFavGroupCounts.get(g.name) || 0) + 1);
           idb.set('world_basics_age_fav_' + g.name, 0).catch(()=>{});
         } else { btn.textContent = '☆'; alert('收藏失败'); }
       } catch(e) { btn.textContent = '☆'; }
@@ -776,6 +793,39 @@ function closeWorldDetail() {
   currentWorldDetail = null;
 }
 
+// Delete the world the user is currently viewing.
+// Wired from #worldDetailDeleteBtn (only visible for the user's own worlds —
+// see openWorldDetail logic that flips its display:none). Without this binding
+// the trash icon was a no-op: there was no JS handler at all.
+async function deleteCurrentWorld() {
+  const w = currentWorldDetail;
+  if (!w) return;
+  if (!confirm(`确定要删除世界「${w.name || w.id}」吗？此操作不可撤销。`)) return;
+  try {
+    const r = await apiCall(`/api/vrc/worlds/${encodeURIComponent(w.id)}`, { method: 'DELETE' });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      alert(`✗ 删除失败: ${err.error?.message || r.status}`);
+      return;
+    }
+    logMsg(`✓ 已删除世界 ${w.name || w.id}`, 'success');
+    closeWorldDetail();
+    // Drop from in-memory list and re-filter so the card disappears without
+    // needing a tab reload.
+    if (Array.isArray(allWorlds)) {
+      allWorlds = allWorlds.filter(x => x.id !== w.id);
+      if (typeof filterWorlds === 'function') filterWorlds();
+    }
+    // Invalidate the IDB cache for this category so it isn't resurrected from
+    // the 60s TTL on the next reload.
+    if (currentWorldCategory) {
+      try { await idb.set('world_basics_age_' + currentWorldCategory, 0); } catch(_) {}
+    }
+  } catch(e) {
+    alert('✗ 删除失败: ' + e.message);
+  }
+}
+
 // ── Cache Management Modal ─────────────────────────────────────────────────
 async function showCacheClearModal() {
   document.getElementById('cacheClearModal')?.remove();
@@ -1006,8 +1056,15 @@ async function addWorldToFavorite(worldId, groupName, btn) {
       const res = await r.json();
       worldFavoriteIdMap.set(worldId, res.id);
       _broadcastWorldFavUpdate(worldId, true);
+      // Bump the in-memory group counter so the dropdown's "x/100" badge
+      // and the disabled-when-full state stay accurate without a full re-sync.
+      worldFavGroupCounts.set(groupName, (worldFavGroupCounts.get(groupName) || 0) + 1);
       if (statusEl) { statusEl.textContent = `✓ 已收藏到 ${groupName}`; statusEl.style.color='var(--success)'; }
-      try { await idb.set('worlds_' + groupName, null); } catch (_) {}
+      // Invalidate the favorite group's TTL cache (`world_basics_age_fav_<group>`).
+      // The previous code wrote `worlds_<group>` which isn't a key anyone reads
+      // — the actual IDB keys are `world_basics_<cat>` / `world_basics_age_<cat>`,
+      // so the next time the user opened that group they got the stale list.
+      try { await idb.set('world_basics_age_fav_' + groupName, 0); } catch (_) {}
     } else {
       const err = await r.json().catch(() => ({}));
       if (statusEl) { statusEl.textContent = `✗ 失败: ${err.error?.message || r.status}`; statusEl.style.color='var(--error)'; }
@@ -1059,15 +1116,26 @@ async function toggleWorldFavorite() {
   try {
     if (isFaved) {
       const favId = worldFavoriteIdMap.get(w.id);
+      // Track which group we're removing from so the counter stays in sync.
+      // Read it from the world object (when listed) or fall back to the
+      // currently viewed favorite category.
+      const removedGroup = (w.favorites && w.favorites[0]?.tags?.[0])
+        || (currentWorldCategory && currentWorldCategory.startsWith('fav_')
+            ? currentWorldCategory.replace(/^fav_/, '')
+            : null);
       const r = await apiCall(`/api/vrc/favorites/${favId}`, {method:'DELETE'});
       if (!r.ok) throw new Error('取消收藏失败 HTTP ' + r.status);
       try { await r.json(); } catch(_) {} // Consume if JSON, ignore if not
       worldFavoriteIdMap.delete(w.id);
       _broadcastWorldFavUpdate(w.id, false);
+      if (removedGroup) {
+        const c = worldFavGroupCounts.get(removedGroup) || 0;
+        worldFavGroupCounts.set(removedGroup, Math.max(0, c - 1));
+      }
       if (statusEl) { statusEl.textContent='✓ 已取消收藏'; statusEl.style.color='var(--text-muted)'; }
       if (currentWorldCategory && currentWorldCategory.startsWith('fav_')) {
         allWorlds = allWorlds.filter(aw => aw.id!==w.id);
-        await idb.set('worlds_'+currentWorldCategory, allWorlds);
+        await idb.set('world_basics_' + currentWorldCategory, allWorlds);
         filterWorlds();
       }
     } else {

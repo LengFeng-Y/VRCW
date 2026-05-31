@@ -193,7 +193,12 @@ function _renderFriendProfileUI(f, modal) {
         <button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);font-size:0.82em;" onclick="deleteFriend('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">🗑️ 删除好友</button>
       `;
     } else {
-      actionButtons += `<button class="btn" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);font-size:0.82em;" onclick="sendFriendRequest('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">➕ 添加好友</button>`;
+      const pending = !!f.friendRequestPending;
+      if (pending) {
+        actionButtons += `<button class="btn btn-secondary" style="font-size:0.82em;opacity:0.7;cursor:default;" disabled>⏳ 请求已发送</button>`;
+      } else {
+        actionButtons += `<button class="btn" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);font-size:0.82em;" onclick="sendFriendRequest('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">➕ 添加好友</button>`;
+      }
     }
     actionButtons += `</div>`;
   }
@@ -587,6 +592,25 @@ async function deleteFriend(userId, name) {
     closeFriendProfile();
     allFriends = allFriends.filter(f => f.id !== userId);
     filterFriends();
+    // Persist the trimmed list to IDB so the 60s TTL can't resurrect the
+    // just-deleted friend on the next reload (saveFriendBasics is a closure
+    // inside loadFriendsList, so we inline an equivalent shape here).
+    try {
+      const basics = allFriends.map(f => ({
+        id: f.id,
+        displayName: f.displayName,
+        currentAvatarThumbnailImageUrl: f.currentAvatarThumbnailImageUrl,
+        userIcon: f.userIcon,
+        profilePicOverrideThumbnail: f.profilePicOverrideThumbnail,
+        tags: f.tags,
+        last_platform: f.last_platform,
+        status: f.status,
+        location: f.location,
+        state: f.state
+      }));
+      await idb.set('friend_basics', basics);
+      await idb.set('friend_basics_age', Date.now());
+    } catch (e) { /* IDB best-effort */ }
     friendLogMsg(`✓ 已删除好友 ${name}`, 'success');
   } catch(e) { friendLogMsg(`✗ 删除失败: ${e.message}`, 'error'); }
 }
@@ -596,7 +620,16 @@ async function sendFriendRequest(userId, name) {
     const r = await apiCall(`/api/vrc/user/${userId}/friendRequest`, { method: 'POST' });
     if (!r.ok) throw new Error(await r.text());
     friendLogMsg(`✓ 已向 ${name} 发送好友申请`, 'success');
-    _renderFriendProfileUI(currentFriendProfile, document.getElementById('friendProfileModal')); // Refresh UI
+    // Mark the request as pending. Don't flip isFriend — that requires the
+    // other side to accept. The pending flag drives the disabled
+    // "请求已发送" button on next render so the user can't double-send.
+    if (currentFriendProfile && currentFriendProfile.id === userId) {
+      currentFriendProfile.friendRequestPending = true;
+      const modal = document.getElementById('friendProfileModal');
+      if (modal && !modal.classList.contains('hidden')) {
+        _renderFriendProfileUI(currentFriendProfile, modal);
+      }
+    }
   } catch(e) { friendLogMsg(`✗ 发送失败: ${e.message}`, 'error'); }
 }
 
