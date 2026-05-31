@@ -640,6 +640,13 @@ function toggleFavMenuGeneric(event, menu, btn, contentFn) {
   if (list) list.innerHTML = contentFn();
 
   menu.classList.remove("hidden");
+  // Float above whatever modal is currently open. The hardcoded z-index:2000 in
+  // the markup gets overridden here because friend/world detail modals use
+  // modalZTop() which starts at 2001+ — the menu would otherwise paint BEHIND
+  // the modal that opened it ("friend favorite button doesn't respond").
+  if (typeof modalZPeek === 'function') {
+    menu.style.zIndex = String(modalZPeek() + 5);
+  }
   
   let left, top;
   if (btn) {
