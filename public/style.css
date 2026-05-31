@@ -34,6 +34,13 @@ body {
   min-height: 100vh;
 }
 
+/* Match html element so the brief flash before body's CSS applies isn't white
+   on slow first-paint (especially noticeable on mobile + dark mode). */
+html {
+  background: var(--bg-primary);
+  color-scheme: dark;
+}
+
 /* ── Scrollbars (global) ──────────────────────────────────────────────────
    Replaces the chunky native scrollbars (especially obvious on Windows) with
    a thin, dark, theme-matched style. Applies everywhere by default; opt-out
@@ -797,6 +804,41 @@ select.input-field {
 
 .btn-block {
   width: 100%;
+}
+
+/* ── Accessibility: keyboard focus outlines ──
+   :focus-visible only paints when the user navigates with the keyboard, so
+   mouse clicks don't get an ugly ring. Without this, Tab-navigation through
+   the app gives no visual indication of where focus is — fails WCAG 2.4.7.
+   We use box-shadow (not outline) so it follows the button's border-radius
+   and respects the existing layout. */
+.btn:focus-visible,
+.cat-btn:focus-visible,
+.tab-btn:focus-visible,
+.lang-btn:focus-visible,
+.nav-item:focus-visible,
+.nav-item-icon:focus-visible,
+.input-field:focus-visible,
+.glass-select-trigger:focus-visible,
+.glass-option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 4px rgba(212, 212, 216, 0.6);
+}
+
+/* The bare input-field already shows a border-color change on :focus; we
+   mirror that for keyboard-only users so the ring is visible. */
+.input-field:focus-visible {
+  border-color: rgba(212, 212, 216, 0.8);
+}
+
+/* Pressed-state feedback: a subtle scale-down on click makes buttons feel
+   tactile. Restricted to buttons that don't already animate (search-btn-premium
+   has its own active style). */
+.btn:active:not(:disabled),
+.cat-btn:active:not(:disabled),
+.btn-action:active {
+  transform: scale(0.97);
+  transition-duration: 60ms;
 }
 
 .btn-group {

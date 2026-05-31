@@ -41,13 +41,34 @@ function renderSavedAccounts() {
     return;
   }
 
+  // Each saved-account row is now a flex row: clicking the username logs in,
+  // clicking the small × removes that account. The previous version had no
+  // way to delete a saved account, so a typoed username sat in the list
+  // forever cluttering the login screen.
   let html = `<div style="margin-top: 20px; margin-bottom: 8px; font-size: 0.9em; color: rgba(255,255,255,0.6);">Saved Accounts</div>`;
-  html += '<div style="display: flex; flex-wrap: wrap; gap: 8px;">';
+  html += '<div style="display: flex; flex-direction:column; gap: 6px;">';
   accs.forEach((acc, i) => {
-    html += `<button class="btn btn-secondary" style="flex: 1; min-width: 100px; padding: 6px;" onclick="loginSaved(${i})">${escHtml(acc.username)}</button>`;
+    const u = escHtml(acc.username);
+    const ua = escJsAttr(acc.username);
+    html += `<div style="display:flex;gap:6px;align-items:stretch;">
+      <button class="btn btn-secondary" style="flex:1;padding:8px 12px;text-align:left;" onclick="loginSaved(${i})" title="登录 ${u}">${u}</button>
+      <button class="btn btn-secondary" style="padding:0 10px;" onclick="removeSavedAccount(${i}, '${ua}')" title="移除该已保存账号" aria-label="移除">×</button>
+    </div>`;
   });
   html += "</div>";
   container.innerHTML = html;
+}
+
+// Remove a saved account from the local list. Doesn't sign out an active
+// session — that's `doLogout()`. We just stop showing this entry on login.
+function removeSavedAccount(idx, username) {
+  if (!confirm(`从已保存账号中移除「${username}」？\n\n（不会注销当前会话，只清除登录页的快捷入口）`)) return;
+  let accs = JSON.parse(localStorage.getItem("vrc_accounts") || "[]");
+  if (idx < 0 || idx >= accs.length) return;
+  accs.splice(idx, 1);
+  localStorage.setItem("vrc_accounts", JSON.stringify(accs));
+  renderSavedAccounts();
+  showToast(`已移除 ${username}`, 'info');
 }
 
 window.loginSaved = async function (idx) {
@@ -112,7 +133,11 @@ async function doLogin() {
 
   lastAttemptUser = user;
   const btn = document.getElementById("btnLogin");
+  // Visible "登录中..." state — previously the button just disabled silently,
+  // making slow networks look like the click did nothing.
+  const _origLabel = btn.textContent;
   btn.disabled = true;
+  btn.textContent = "登录中...";
   const errEl = document.getElementById("login-error");
   errEl.style.display = "none";
   const lpEl = document.getElementById('loginplace-section');
@@ -180,13 +205,16 @@ async function doLogin() {
     errEl.style.display = "block";
   }
   btn.disabled = false;
+  btn.textContent = _origLabel;
 }
 
 async function doVerify2FA() {
   const code = document.getElementById("tfaCode").value.trim();
   if (!code) return;
   const btn = document.querySelector("#tfa-section button");
-  if (btn) btn.disabled = true;
+  // Visible "验证中..." state for slow links.
+  let _vfOrig = '';
+  if (btn) { _vfOrig = btn.textContent; btn.disabled = true; btn.textContent = "验证中..."; }
   // Map VRChat's requiresTwoFactorAuth methods to the verify endpoint type.
   // VRChat reports "emailOtp", "totp", and/or "otp" (recovery codes).
   const methods = (window._tfaMethods || []).map(m => String(m).toLowerCase());
@@ -205,7 +233,7 @@ async function doVerify2FA() {
   } catch (e) {
     alert("Network error: " + e.message);
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) { btn.disabled = false; btn.textContent = _vfOrig || btn.textContent; }
   }
 }
 
