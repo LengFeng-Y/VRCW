@@ -16,9 +16,20 @@ document.addEventListener("DOMContentLoaded", () => {
         if (r.ok) {
           showMainApp();
           fetchMyModerations();
+        } else {
+          // Saved token rejected — focus the username field so the user can
+          // immediately type a fresh login.
+          requestAnimationFrame(() => document.getElementById('username')?.focus());
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        requestAnimationFrame(() => document.getElementById('username')?.focus());
+      });
+  } else {
+    // No saved auth — focus the username field so the user can start typing
+    // right away. Wrapped in rAF so the focus happens after layout settles
+    // (otherwise mobile browsers ignore programmatic focus before paint).
+    requestAnimationFrame(() => document.getElementById('username')?.focus());
   }
 });
 

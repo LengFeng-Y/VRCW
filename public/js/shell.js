@@ -228,7 +228,12 @@ function switchTab(tab) {
 
   // UI Updates run regardless (so re-clicking a nav still gives visual feedback)
   document.querySelectorAll(".nav-item, .nav-item-icon, .tab-btn").forEach(b => b.classList.remove("active"));
-  document.querySelectorAll(`[onclick*="'${tab}'"]`).forEach(b => b.classList.add("active"));
+  // Use data-tab="X" (added in index.html) instead of the brittle
+  // [onclick*="'X'"] selector — the old version mis-matched any onclick that
+  // contained the tab name string anywhere (e.g. switchAssetsPage('search')
+  // accidentally activating the search tab nav item). data-tab is a precise
+  // declarative anchor.
+  document.querySelectorAll('[data-tab="' + tab + '"]').forEach(b => b.classList.add("active"));
 
   const panels = { download:'downloadPanel', upload:'uploadPanel', search:'searchPanel', friends:'friendsPanel', worlds:'worldsPanel', groups:'groupsPanel', assets:'assetsPanel', settings:'settingsPanel' };
   Object.entries(panels).forEach(([key, id]) => {

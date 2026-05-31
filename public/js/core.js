@@ -1059,7 +1059,13 @@ function setLang(lang) {
   currentLang = lang;
   localStorage.setItem("vrc_lang", lang);
   applyI18n();
-  
+
+  // Update <html lang> so screen readers, search engines and browser
+  // translation features know which language the page actually uses.
+  // (Static lang="zh" was just the initial default.)
+  const htmlLangMap = { en: 'en', zh: 'zh-CN', ja: 'ja' };
+  if (htmlLangMap[lang]) document.documentElement.lang = htmlLangMap[lang];
+
   document.querySelectorAll(".lang-btn").forEach((b) =>
     b.classList.toggle(
       "active",

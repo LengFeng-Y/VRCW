@@ -37,7 +37,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=28">
+    <link rel="stylesheet" href="style.css?v=29">
     <script src="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js" defer></script>
     <script>
       // Register Service Worker for image caching — eliminates repeat Cloudflare image requests
@@ -122,30 +122,30 @@
                     <button class="nav-collapse-btn" onclick="toggleGlobalNav()" title="收起">&#8249;</button>
                 </div>
                 <div class="global-nav-items">
-                    <button class="nav-item active" onclick="switchTab('download')" id="navItemDownload">
+                    <button class="nav-item active" onclick="switchTab('download')" data-tab="download" id="navItemDownload">
                         <span class="nav-icon">🖼️</span><span class="nav-label">模型</span>
                     </button>
-                    <button class="nav-item" onclick="switchTab('friends')" id="navItemFriends">
+                    <button class="nav-item" onclick="switchTab('friends')" data-tab="friends" id="navItemFriends">
                         <span class="nav-icon">👥</span><span class="nav-label">好友</span>
                     </button>
-                    <button class="nav-item" onclick="switchTab('worlds')" id="navItemWorlds">
+                    <button class="nav-item" onclick="switchTab('worlds')" data-tab="worlds" id="navItemWorlds">
                         <span class="nav-icon">🌍</span><span class="nav-label">世界</span>
                     </button>
                     <div style="height:1px;background:var(--border);margin:4px 0;"></div>
-                    <button class="nav-item" onclick="switchTab('groups')" id="navItemGroups">
+                    <button class="nav-item" onclick="switchTab('groups')" data-tab="groups" id="navItemGroups">
                         <span class="nav-icon">🏠</span><span class="nav-label">群组</span>
                     </button>
-                    <button class="nav-item" onclick="switchTab('upload')" id="navItemUpload">
+                    <button class="nav-item" onclick="switchTab('upload')" data-tab="upload" id="navItemUpload">
                         <span class="nav-icon">⬆️</span><span class="nav-label">上传</span>
                     </button>
-                    <button class="nav-item" onclick="switchTab('assets')" id="navItemAssets">
+                    <button class="nav-item" onclick="switchTab('assets')" data-tab="assets" id="navItemAssets">
                         <span class="nav-icon">💰</span><span class="nav-label">资产</span>
                     </button>
-                    <button class="nav-item" onclick="switchTab('search')" id="navItemSearch">
+                    <button class="nav-item" onclick="switchTab('search')" data-tab="search" id="navItemSearch">
                         <span class="nav-icon">🔍</span><span class="nav-label">搜索</span>
                     </button>
                     <div style="height:1px;background:var(--border);margin:4px 0;"></div>
-                    <button class="nav-item" onclick="switchTab('settings')" id="navItemSettings">
+                    <button class="nav-item" onclick="switchTab('settings')" data-tab="settings" id="navItemSettings">
                         <span class="nav-icon">⚙️</span><span class="nav-label">高级设置</span>
                     </button>
                 </div>
@@ -161,16 +161,16 @@
             <!-- Collapsed nav (icon only) -->
             <div class="global-nav-collapsed hidden" id="globalNavCollapsed">
                 <button class="nav-collapse-btn" onclick="toggleGlobalNav()" title="展开" style="margin:8px auto;">&#8250;</button>
-                <button class="nav-item-icon" onclick="switchTab('download')" id="navIconDownload" title="模型">🖼️</button>
-                <button class="nav-item-icon" onclick="switchTab('friends')" id="navIconFriends" title="好友">👥</button>
-                <button class="nav-item-icon" onclick="switchTab('worlds')" id="navIconWorlds" title="世界">🌍</button>
+                <button class="nav-item-icon" onclick="switchTab('download')" data-tab="download" id="navIconDownload" title="模型">🖼️</button>
+                <button class="nav-item-icon" onclick="switchTab('friends')" data-tab="friends" id="navIconFriends" title="好友">👥</button>
+                <button class="nav-item-icon" onclick="switchTab('worlds')" data-tab="worlds" id="navIconWorlds" title="世界">🌍</button>
                 <hr style="width:70%;border-color:var(--border);margin:2px 0;">
-                <button class="nav-item-icon" onclick="switchTab('groups')" id="navIconGroups" title="群组">🏠</button>
-                <button class="nav-item-icon" onclick="switchTab('upload')" id="navIconUpload" title="上传">⬆️</button>
-                <button class="nav-item-icon" onclick="switchTab('assets')" id="navIconAssets" title="资产">💰</button>
-                <button class="nav-item-icon" onclick="switchTab('search')" id="navIconSearch" title="搜索">🔍</button>
+                <button class="nav-item-icon" onclick="switchTab('groups')" data-tab="groups" id="navIconGroups" title="群组">🏠</button>
+                <button class="nav-item-icon" onclick="switchTab('upload')" data-tab="upload" id="navIconUpload" title="上传">⬆️</button>
+                <button class="nav-item-icon" onclick="switchTab('assets')" data-tab="assets" id="navIconAssets" title="资产">💰</button>
+                <button class="nav-item-icon" onclick="switchTab('search')" data-tab="search" id="navIconSearch" title="搜索">🔍</button>
                 <hr style="width:70%;border-color:var(--border);margin:2px 0;">
-                <button class="nav-item-icon" onclick="switchTab('settings')" id="navIconSettings" title="高级设置">⚙️</button>
+                <button class="nav-item-icon" onclick="switchTab('settings')" data-tab="settings" id="navIconSettings" title="高级设置">⚙️</button>
                 <button class="nav-item-icon" onclick="doLogout()" title="退出" style="margin-top:auto;color:var(--error);">🚩</button>
             </div>
 
@@ -965,21 +965,21 @@
     </div>
 
 
-    <script src="js/core.js?v=28"></script>
-    <script src="js/images.js?v=28"></script>
-    <script src="js/auth.js?v=28"></script>
-    <script src="js/shell.js?v=28"></script>
-    <script src="js/avatars.js?v=28"></script>
-    <script src="js/upload.js?v=28"></script>
-    <script src="js/search.js?v=28"></script>
-    <script src="js/common.js?v=28"></script>
-    <script src="js/friends.js?v=28"></script>
-    <script src="js/friend-profile.js?v=28"></script>
-    <script src="js/worlds.js?v=28"></script>
-    <script src="js/assets-groups.js?v=28"></script>
-    <script src="js/groups-instance.js?v=28"></script>
-    <script src="js/context-menu.js?v=28"></script>
-    <script src="js/media-profile.js?v=28"></script>
+    <script src="js/core.js?v=29"></script>
+    <script src="js/images.js?v=29"></script>
+    <script src="js/auth.js?v=29"></script>
+    <script src="js/shell.js?v=29"></script>
+    <script src="js/avatars.js?v=29"></script>
+    <script src="js/upload.js?v=29"></script>
+    <script src="js/search.js?v=29"></script>
+    <script src="js/common.js?v=29"></script>
+    <script src="js/friends.js?v=29"></script>
+    <script src="js/friend-profile.js?v=29"></script>
+    <script src="js/worlds.js?v=29"></script>
+    <script src="js/assets-groups.js?v=29"></script>
+    <script src="js/groups-instance.js?v=29"></script>
+    <script src="js/context-menu.js?v=29"></script>
+    <script src="js/media-profile.js?v=29"></script>
 
     <!-- ── avtrDB Avatar Detail Modal ── -->
     <div id="avtrdbDetailModal" class="modal hidden" onclick="if(event.target===this)closeAvtrdbDetail()">

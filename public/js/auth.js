@@ -183,6 +183,9 @@ async function doLogin() {
         // endpoint. emailOtp accounts otherwise always fail against the totp route.
         window._tfaMethods = tfa;
         document.getElementById("tfa-section").classList.add("active");
+        // Auto-focus the verification code input so user can paste from email
+        // / password manager / authenticator without an extra click.
+        requestAnimationFrame(() => document.getElementById("tfaCode")?.focus());
       } else {
         saveAccountInfo(user);
         showMainApp();
