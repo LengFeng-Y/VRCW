@@ -509,6 +509,30 @@ function displayAvatarDetail(av) {
   document.getElementById("avtrdbDetailDesc").textContent = desc;
   descRow.style.display = desc ? "" : "none";
 
+  // 3b. Release status (Public/Private). VRChat owned-avatar objects carry
+  // `releaseStatus`; AvtrDB/community search records sometimes don't, so only
+  // show the badge when we actually know. Shown on EVERY detail open
+  // regardless of which view (mine / favorites / search) launched it.
+  const relRow = document.getElementById("avtrdbDetailReleaseRow");
+  const relEl = document.getElementById("avtrdbDetailRelease");
+  if (relRow && relEl) {
+    const rs = av.releaseStatus || av.release_status || "";
+    if (rs === 'public') {
+      relEl.textContent = '🌐 Public';
+      relEl.style.background = 'var(--success)';
+      relEl.style.color = '#052e16';
+      relRow.style.display = '';
+    } else if (rs === 'private') {
+      relEl.textContent = '🔒 Private';
+      relEl.style.background = 'rgba(0,0,0,0.55)';
+      relEl.style.color = '#fff';
+      relRow.style.display = '';
+    } else {
+      // Unknown — hide rather than show a misleading default.
+      relRow.style.display = 'none';
+    }
+  }
+
   // 4. Favorites Status
   document.getElementById("avtrdbFavStatus").textContent = "";
   document.getElementById("avtrdbFavMenu")?.classList.add("hidden");
