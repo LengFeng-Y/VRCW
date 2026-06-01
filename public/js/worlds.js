@@ -115,14 +115,17 @@ async function fetchWorlds(category, forceRefresh = false) {
     const freshWorlds = [];
     let batchCount = 0;
     let _worldFilterTimer = null;
-    // Debounced re-render: streaming refresh used to filter+render after EVERY
-    // 5-card chunk (20+ rebuilds for a 100-world group), causing the grid to
-    // jump and IntersectionObservers to recreate. Now debounced to 500ms.
+    // Streaming refresh used to filter+render after EVERY 5-card chunk (20+
+    // rebuilds for a 100-world group), then was tightened to a 500ms debounce
+    // — but on slow networks chunks settle slower than 500ms apart and the
+    // grid still rebuilds every time, causing visible "twitches" as the user
+    // scrolls. Bumped to 3000ms so the user sees the cached version stably,
+    // and fresh data appears in one final smooth swap.
     const debouncedFilterWorlds = () => {
       if (_worldFilterTimer) clearTimeout(_worldFilterTimer);
       _worldFilterTimer = setTimeout(() => {
         if (seq === currentWorldFetchSeq && category === currentWorldCategory) filterWorlds();
-      }, 500);
+      }, 3000);
     };
     const updateWorldBatch = (batch) => {
       if (seq !== currentWorldFetchSeq || category !== currentWorldCategory) return;
@@ -300,28 +303,35 @@ function renderWorldGrid(list) {
     card.id = 'world-card-' + w.id;
     if (w.isInvalid) card.style.border = '1px solid rgba(239, 68, 68, 0.4)';
     card.setAttribute('data-worldid', w.id);
-    
+
     // VRCX Style: How many friends are here?
     const friendsHere = (allFriends || []).filter(f => f.location && f.location.startsWith(w.id)).length;
 
     card.onclick = () => openWorldDetail(w.id, w);
     const isCached = loadedImageUrls.has(thumb);
     const isFaved  = worldFavoriteIdMap.has(w.id);
+    const sel = selectedWorldIds.has(w.id);
+
+    // Card layout matches avatar card exactly (renderGrid in avatars.js):
+    //   top-left:  selection checkbox (.card-checkbox)
+    //   top-right: quick favorite toggle (.card-fav-quick)
+    //   image + name overlay
+    //   bottom-right: friend count + occupant count badges
+    // Per-card delete/edit lives in the detail modal (worldDetailDeleteBtn).
     card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached?'':'img-loading'}">
       ${isCached ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="">` : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`}
       <div class="avatar-name-overlay">${escHtml(w.name||'未知世界')}</div>
-      <div style="position:absolute;top:6px;left:6px;z-index:10;">
-        <div onclick="toggleSelectWorld('${w.id}', event)" style="width:20px;height:20px;border-radius:4px;background:${selectedWorldIds.has(w.id)?'var(--accent)':'rgba(0,0,0,0.4)'};border:2px solid ${selectedWorldIds.has(w.id)?'var(--accent)':'rgba(255,255,255,0.4)'};display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;" title="选择">${selectedWorldIds.has(w.id)?'<span style="color:white;font-size:0.75em;">✓</span>':''}</div>
+      <div class="card-tl-overlay">
+        <div class="card-checkbox ${sel ? 'on' : ''}" onclick="toggleSelectWorld('${w.id}', event)" title="选中/取消选中">${sel ? '✓' : ''}</div>
       </div>
-      <div style="position:absolute;top:6px;right:6px;z-index:10;">
-        <div data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escJsAttr(w.id)}',event)"
-          style="width:26px;height:26px;border-radius:6px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.85em;transition:transform 0.15s;" title="${isFaved?'取消收藏':'添加到收藏夹'}">${isFaved?'⭐':'☆'}</div>
+      <div class="card-tr-overlay">
+        <div class="card-fav-quick" data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escJsAttr(w.id)}',event)" title="${isFaved ? '取消收藏' : '添加到收藏夹'}">${isFaved ? '⭐' : '☆'}</div>
       </div>
-      <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:4px;z-index:5;">
+      <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:4px;z-index:5;pointer-events:none;">
         ${friendsHere>0 ? `<div style="background:var(--accent);color:white;font-size:0.7em;padding:2px 6px;border-radius:4px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">🤝 ${friendsHere}</div>` : ''}
         ${pc>0 ? `<div class="world-player-badge" style="position:static;margin:0;">👥 ${pc}</div>` : ''}
       </div>
-      ${w.isInvalid ? `<div style="position:absolute;top:8px;left:32px;background:var(--error);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;">已失效</div>` : ''}
+      ${w.isInvalid ? `<div class="card-release-badge release-private" style="background:var(--error);">已失效</div>` : ''}
     </div>`;
     gridEl.appendChild(card);
     if (!isCached && thumb) {
@@ -467,13 +477,14 @@ function selectAllWorlds() {
   if (!allSelected) list.forEach(w => selectedWorldIds.add(w.id));
   list.forEach(w => {
     const card = document.getElementById('world-card-' + w.id);
-    if (card) card.classList.toggle('selected', selectedWorldIds.has(w.id));
-    const chk = card?.querySelector('[title="选择"]');
-    if (chk) {
-      const sel = selectedWorldIds.has(w.id);
-      chk.style.background = sel ? 'var(--accent)' : 'rgba(0,0,0,0.4)';
-      chk.style.borderColor = sel ? 'var(--accent)' : 'rgba(255,255,255,0.4)';
-      chk.innerHTML = sel ? '<span style="color:white;font-size:0.75em;">✓</span>' : '';
+    if (!card) return;
+    const sel = selectedWorldIds.has(w.id);
+    card.classList.toggle('selected', sel);
+    // Sync the unified .card-checkbox UI (added in renderWorldGrid).
+    const cb = card.querySelector('.card-checkbox');
+    if (cb) {
+      cb.classList.toggle('on', sel);
+      cb.textContent = sel ? '✓' : '';
     }
   });
   // Toggle button text: 全选 ↔ 取消全选
@@ -558,11 +569,11 @@ function toggleSelectWorld(id, e) {
   const card = document.getElementById('world-card-' + id);
   if (card) {
     card.classList.toggle('selected', isSelected);
-    const chk = card.querySelector('[title="选择"]');
-    if (chk) {
-      chk.style.background = isSelected ? 'var(--accent)' : 'rgba(0,0,0,0.4)';
-      chk.style.borderColor = isSelected ? 'var(--accent)' : 'rgba(255,255,255,0.4)';
-      chk.innerHTML = isSelected ? '<span style="color:white;font-size:0.75em;">✓</span>' : '';
+    // Sync the unified .card-checkbox UI (added in renderWorldGrid).
+    const cb = card.querySelector('.card-checkbox');
+    if (cb) {
+      cb.classList.toggle('on', isSelected);
+      cb.textContent = isSelected ? '✓' : '';
     }
   }
   _updateWorldActionBtns();

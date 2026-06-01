@@ -546,6 +546,29 @@ function displayAvatarDetail(av) {
   const switchBtn = document.getElementById("avtrdbDetailSwitchBtn");
   if (switchBtn) switchBtn.onclick = () => switchAvatar(id);
 
+  // 6. Owner-only actions: edit + delete inside the detail modal.
+  // Per-card edit/delete were removed; the detail modal is now the single
+  // place these live, matching how worlds work (worldDetailDeleteBtn).
+  const ownerRow = document.getElementById("avtrdbDetailOwnerActions");
+  if (ownerRow) {
+    const isOwner = currentUserId && av.authorId && av.authorId === currentUserId;
+    // Use the .hidden class (display:none !important) instead of inline style
+    // so we don't fight with our flex layout on show.
+    ownerRow.classList.toggle('hidden', !isOwner);
+    if (isOwner) {
+      const editBtn = document.getElementById("avtrdbDetailEditBtn");
+      const delBtn = document.getElementById("avtrdbDetailDeleteBtn");
+      if (editBtn) editBtn.onclick = () => {
+        // Close detail first so the edit modal owns the foreground.
+        closeAvtrdbDetail();
+        if (typeof editAvatar === 'function') editAvatar(id);
+      };
+      if (delBtn) delBtn.onclick = () => {
+        if (typeof deleteAvatar === 'function') deleteAvatar(id, name);
+      };
+    }
+  }
+
   modal.classList.remove("hidden");
   if (modal.dataset.scrollLocked !== '1') { lockBodyScroll(); modal.dataset.scrollLocked = '1'; }
   modal.style.zIndex = modalZTop();
@@ -709,18 +732,14 @@ async function addToFavorite(avtrId, groupName, btn) {
       avatarFavGroupCounts.set(groupName, (avatarFavGroupCounts.get(groupName) || 0) + 1);
       // Invalidate IDB cache for that group so next load fetches fresh
       try { await idb.set("avatars_" + groupName, null); } catch (_) {}
-      // INSTANT UI: Add star badge to card
+      // INSTANT UI: flip the unified card-fav-quick toggle from ☆ → ⭐
       const card = document.getElementById("card-" + avtrId);
       if (card) {
-        if (!card.querySelector('.fav-badge')) {
-          const badge = document.createElement('div');
-          badge.className = 'fav-badge';
-          badge.title = '已收藏';
-          badge.textContent = '⭐';
-          card.appendChild(badge);
+        const fq = card.querySelector('.card-fav-quick');
+        if (fq) {
+          fq.textContent = '⭐';
+          fq.title = '已收藏';
         }
-        // Hide the 'Favorite' button if it was there
-        card.querySelector('.btn-action.favorite')?.classList.add('hidden');
       }
     } else {
       const err = await resp.json().catch(() => ({}));

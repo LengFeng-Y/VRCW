@@ -37,7 +37,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=37">
+    <link rel="stylesheet" href="style.css?v=38">
     <script src="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js" defer></script>
     <script>
       // Register Service Worker for image caching — eliminates repeat Cloudflare image requests
@@ -965,21 +965,21 @@
     </div>
 
 
-    <script src="js/core.js?v=37"></script>
-    <script src="js/images.js?v=37"></script>
-    <script src="js/auth.js?v=37"></script>
-    <script src="js/shell.js?v=37"></script>
-    <script src="js/avatars.js?v=37"></script>
-    <script src="js/upload.js?v=37"></script>
-    <script src="js/search.js?v=37"></script>
-    <script src="js/common.js?v=37"></script>
-    <script src="js/friends.js?v=37"></script>
-    <script src="js/friend-profile.js?v=37"></script>
-    <script src="js/worlds.js?v=37"></script>
-    <script src="js/assets-groups.js?v=37"></script>
-    <script src="js/groups-instance.js?v=37"></script>
-    <script src="js/context-menu.js?v=37"></script>
-    <script src="js/media-profile.js?v=37"></script>
+    <script src="js/core.js?v=38"></script>
+    <script src="js/images.js?v=38"></script>
+    <script src="js/auth.js?v=38"></script>
+    <script src="js/shell.js?v=38"></script>
+    <script src="js/avatars.js?v=38"></script>
+    <script src="js/upload.js?v=38"></script>
+    <script src="js/search.js?v=38"></script>
+    <script src="js/common.js?v=38"></script>
+    <script src="js/friends.js?v=38"></script>
+    <script src="js/friend-profile.js?v=38"></script>
+    <script src="js/worlds.js?v=38"></script>
+    <script src="js/assets-groups.js?v=38"></script>
+    <script src="js/groups-instance.js?v=38"></script>
+    <script src="js/context-menu.js?v=38"></script>
+    <script src="js/media-profile.js?v=38"></script>
 
     <!-- ── avtrDB Avatar Detail Modal ── -->
     <div id="avtrdbDetailModal" class="modal hidden" onclick="if(event.target===this)closeAvtrdbDetail()">
@@ -1032,6 +1032,14 @@
                             onclick="toggleAvtrdbFavMenu(event)">⭐ 收藏</button>
                     </div>
                     <button id="avtrdbDetailSwitchBtn" class="btn btn-primary" style="flex:1;">⚡ 切换模型</button>
+                </div>
+                <!-- Owner-only actions: edit + delete. Visible only when av.authorId
+                     matches currentUserId. Per-card edit/delete were removed for
+                     visual consistency across mine / favorites / local categories,
+                     so this is the single home for those actions. -->
+                <div id="avtrdbDetailOwnerActions" class="hidden" style="display:flex;gap:8px;">
+                    <button id="avtrdbDetailEditBtn" class="btn btn-secondary" style="flex:1;">✏️ 编辑</button>
+                    <button id="avtrdbDetailDeleteBtn" class="btn btn-danger-full" style="flex:1;">🗑️ 删除</button>
                 </div>
                 <!-- Favorite status feedback -->
                 <div id="avtrdbFavStatus" style="font-size:0.75em;text-align:center;min-height:18px;"></div>

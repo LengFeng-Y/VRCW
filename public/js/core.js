@@ -404,16 +404,14 @@ async function saveToLocalFavorite(av) {
   localAvatarIdMap.set(av.id, true);
   await idb.saveLocalAvatar(av);
   syncLocalFavorites();
-  // INSTANT UI: Add star badge to card
+  // INSTANT UI: flip the unified card-fav-quick toggle from ☆ → ⭐
   const card = document.getElementById("card-" + av.id);
-  if (card && !card.querySelector('.fav-badge')) {
-    const badge = document.createElement('div');
-    badge.className = 'fav-badge';
-    badge.title = '已收藏';
-    badge.textContent = '⭐';
-    card.appendChild(badge);
-    // Hide the 'Favorite' button if it was there
-    card.querySelector('.btn-action.favorite')?.classList.add('hidden');
+  if (card) {
+    const fq = card.querySelector('.card-fav-quick');
+    if (fq) {
+      fq.textContent = '⭐';
+      fq.title = '已收藏';
+    }
   }
   logMsg(`✅ 已保存到本地收藏: ${av.name}`, "info");
 }

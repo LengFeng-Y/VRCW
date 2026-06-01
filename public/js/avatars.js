@@ -201,28 +201,23 @@ async function fetchAvatars(forceRefresh = false) {
     if (currentCategory !== 'mine' && currentCategory !== 'local') {
       const avIds = allFetched.map(a => a.id);
       const CONCURRENCY = 30;
-      // Debounced re-render: streaming refresh used to applyFilters() after every
-      // 30-avatar chunk, rebuilding the whole grid (and resetting scroll +
-      // IntersectionObservers). Now debounced.
-      let _stage3Timer = null;
-      const debouncedApply = () => {
-        if (_stage3Timer) clearTimeout(_stage3Timer);
-        _stage3Timer = setTimeout(() => {
-          if (seq === fetchSeq && currentCategory !== 'mine') applyFilters();
-        }, 500);
-      };
+      // Streaming refresh used to applyFilters() per chunk, which rebuilt the
+      // ENTIRE grid (innerHTML="" + recreate all cards). On a flaky network
+      // the user saw cards "twitch" every few seconds as chunks settled in.
+      // We now run all chunks first, then apply ONCE at the very end. The
+      // user sees the cached version for the full window — fresh data appears
+      // once, smoothly, after the streaming completes.
       for (let i = 0; i < avIds.length; i += CONCURRENCY) {
         if (seq !== fetchSeq || currentCategory === 'mine') return;
         const chunk = avIds.slice(i, i + CONCURRENCY);
         const results = await Promise.allSettled(chunk.map(id => fetchOfficialAvatarData(id)));
         if (seq !== fetchSeq) return;
-        
+
         const freshBatch = results.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
         freshBatch.forEach(a => {
            const idx = avatars.findIndex(ex => ex.id === a.id);
            if (idx !== -1) avatars[idx] = Object.assign(avatars[idx], a);
         });
-        debouncedApply();
         // Save basics with fresh data
         const freshBasics = avatars.map(a => ({
           id: a.id, name: a.name, thumbnailImageUrl: a.thumbnailImageUrl, imageUrl: a.imageUrl,
@@ -403,54 +398,48 @@ function renderGrid(list) {
     const safeId = escHtml(av.id);
     const isOwner = currentUserId && av.authorId === currentUserId;
     const card = document.createElement("div");
-
-    // Both mine and favorites support selection now
     card.className = "avatar-card" + (selectedIds.has(av.id) ? " selected" : "");
+    card.style.cursor = "pointer";
 
     const isLocalFaved = localAvatarIdMap.has(av.id);
     const isCloudFaved = favoriteIdMap.has(av.id);
     const isFaved = isLocalFaved || isCloudFaved;
 
-    // Build action buttons: edit/delete only for owner; unfavorite only in favorites view
-    let actionBtns = "";
-    if (isOwner) {
-      actionBtns += `<button class="btn-action edit" title="Edit" onclick="event.stopPropagation(); editAvatar('${safeId}')">✏️</button>`;
-      actionBtns += `<button class="btn-action delete" title="Delete" onclick="event.stopPropagation(); deleteAvatar('${safeId}', '${escJsAttr(av.name)}')">🗑️</button>`;
-      actionBtns += `<button class="btn-action" title="更多操作" onclick="event.stopPropagation(); showOwnedAvatarMenu(event, '${safeId}', '${escJsAttr(av.name)}')">⋯</button>`;
-    }
-    if (isFavoriteView) {
-      if (currentCategory === 'local') {
-        actionBtns += `<button class="btn-action unfavorite" title="移出本地收藏" onclick="event.stopPropagation(); removeFromLocalFavorite('${safeId}')">&times;</button>`;
-      } else {
-        actionBtns += `<button class="btn-action unfavorite" title="移出收藏" onclick="event.stopPropagation(); unfavorite('${safeId}', '${escJsAttr(av.name)}')">&times;</button>`;
-      }
-    } else if (!isFaved) {
-      // In non-favorite view (e.g. mine), show Favorite button if not already favorited
-      actionBtns += `<button class="btn-action favorite" title="收藏" onclick="event.stopPropagation(); toggleAvatarFavGridMenu(event, '${safeId}', '${escJsAttr(av.name)}', this)">⭐</button>`;
-    }
-
     // Apply memory cache for instant render if already loaded previously
     const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
     const isCached = loadedImageUrls.has(thumb);
-    const imgHtml = isCached 
-        ? `<img class="avatar-thumb clickable-thumb" src="${escHtml(thumb)}" alt="${escHtml(av.name)}" onclick="event.stopPropagation(); openLocalDetail('${safeId}')" title="点击查看详情">`
-        : `<img class="avatar-thumb loading clickable-thumb" src="${BLANK}" data-src="${escHtml(thumb)}" alt="" onclick="event.stopPropagation(); openLocalDetail('${safeId}')" title="点击查看详情">`;
+    const imgHtml = isCached
+        ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="${escHtml(av.name)}">`
+        : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`;
 
-    const releaseBadge = av.releaseStatus === 'public' 
-      ? '<div style="position:absolute;top:32px;left:8px;background:var(--success);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">Public</div>'
-      : '<div style="position:absolute;top:32px;left:8px;background:rgba(0,0,0,0.5);color:white;font-size:0.65em;padding:2px 6px;border-radius:4px;z-index:10;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">Private</div>';
+    // Card layout matches world card exactly (renderWorldGrid in worlds.js):
+    //   top-left:  selection checkbox
+    //   top-right: quick favorite toggle (☆/⭐)
+    //   below:     release-status badge (Public/Private) — only if owner-known
+    //   bottom:    image + name overlay
+    // Per-card edit/delete buttons were removed — they now live ONLY in the
+    // detail modal (clicking the card opens the modal, where the owner sees
+    // ✏️ edit / 🗑️ delete actions). This unifies the look across mine /
+    // favorites / local categories and removes per-card visual variance.
+    const releaseBadge = isOwner
+      ? (av.releaseStatus === 'public'
+          ? '<div class="card-release-badge release-public">Public</div>'
+          : '<div class="card-release-badge release-private">Private</div>')
+      : '';
 
-    card.innerHTML = `
-            ${actionBtns ? `<div class="avatar-actions">${actionBtns}</div>` : ""}
-            ${isFaved ? `<div class="fav-badge" title="已收藏">⭐</div>` : ""}
-            <div class="avatar-checkbox" onclick="event.stopPropagation(); toggleSelect('${safeId}')" title="选中/取消选中">✓</div>
-            <div class="avatar-thumb-wrapper ${isCached ? '' : 'img-loading'}">
-                ${releaseBadge}
-                ${imgHtml}
-                <div class="avatar-name-overlay">${escHtml(av.name || "失效模型 (Invalid / Deleted)")}</div>
-            </div>
-        `;
+    card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached ? '' : 'img-loading'}">
+      ${imgHtml}
+      <div class="avatar-name-overlay">${escHtml(av.name || "失效模型 (Invalid / Deleted)")}</div>
+      <div class="card-tl-overlay">
+        <div class="card-checkbox ${selectedIds.has(av.id) ? 'on' : ''}" onclick="event.stopPropagation(); toggleSelect('${safeId}')" title="选中/取消选中">${selectedIds.has(av.id) ? '✓' : ''}</div>
+      </div>
+      <div class="card-tr-overlay">
+        <div class="card-fav-quick" onclick="event.stopPropagation(); _avatarQuickFav('${escJsAttr(av.id)}','${escJsAttr(av.name)}',event,this)" title="${isFaved ? '已收藏' : '添加到收藏'}">${isFaved ? '⭐' : '☆'}</div>
+      </div>
+      ${releaseBadge}
+    </div>`;
     card.id = "card-" + av.id;
+    card.onclick = () => openLocalDetail(av.id);
     grid.appendChild(card);
   });
 
@@ -756,18 +745,53 @@ function toggleSelect(id) {
   if (selectedIds.has(id)) selectedIds.delete(id);
   else selectedIds.add(id);
   const card = document.getElementById("card-" + id);
-  if (card) card.classList.toggle("selected", selectedIds.has(id));
+  if (card) {
+    const on = selectedIds.has(id);
+    card.classList.toggle("selected", on);
+    // Sync the in-card checkbox UI: ✓ when selected, blank when not
+    const cb = card.querySelector('.card-checkbox');
+    if (cb) {
+      cb.classList.toggle('on', on);
+      cb.textContent = on ? '✓' : '';
+    }
+  }
   document.getElementById("statSelected").textContent = selectedIds.size;
+}
+
+// Quick favorite from the unified card. Mirrors quickWorldFav in worlds.js:
+//   - already faved (cloud or local): confirm + remove
+//   - not faved: open the existing fav-group dropdown menu
+// Per-card edit/delete are gone (moved to detail modal); fav stays because it
+// flips with one click and is the most common card-level action.
+function _avatarQuickFav(id, name, event, btn) {
+  if (event) event.stopPropagation();
+  const isLocalFaved = localAvatarIdMap.has(id);
+  const isCloudFaved = favoriteIdMap.has(id);
+  if (isCloudFaved) { unfavorite(id, name); return; }
+  if (isLocalFaved) { removeFromLocalFavorite(id); return; }
+  // Not yet faved → reuse the existing toggleAvatarFavGridMenu (search.js)
+  // which builds the "save to local + per-group" dropdown anchored to btn.
+  if (typeof toggleAvatarFavGridMenu === 'function') {
+    toggleAvatarFavGridMenu(event, id, name, btn);
+  }
 }
 
 function selectAll() {
   const allSelected = selectedIds.size > 0 && selectedIds.size === visibleAvatars.length;
   selectedIds.clear();
   if (!allSelected) visibleAvatars.forEach((a) => selectedIds.add(a.id));
-  // Toggle CSS class on existing cards — DO NOT call renderAvatars() which rebuilds the DOM
+  // Toggle CSS class + the in-card checkbox UI on existing cards — DO NOT
+  // call renderAvatars() which would rebuild the DOM and lose scroll/observer.
   visibleAvatars.forEach((a) => {
     const card = document.getElementById("card-" + a.id);
-    if (card) card.classList.toggle("selected", selectedIds.has(a.id));
+    if (!card) return;
+    const on = selectedIds.has(a.id);
+    card.classList.toggle("selected", on);
+    const cb = card.querySelector('.card-checkbox');
+    if (cb) {
+      cb.classList.toggle('on', on);
+      cb.textContent = on ? '✓' : '';
+    }
   });
   document.getElementById("statSelected").textContent = selectedIds.size;
 }

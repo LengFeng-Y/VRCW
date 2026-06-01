@@ -497,16 +497,25 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   border-radius: var(--radius);
   overflow: hidden;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
   position: relative;
+  /* content-visibility lets the browser skip painting cards that aren't near
+     the viewport — huge win for 200+ card grids. The intrinsic size hint
+     prevents layout jumps when cards become visible. */
   content-visibility: auto;
   contain-intrinsic-size: auto 240px;
+  /* Promote each card to its own composited layer so the hover transform
+     doesn't repaint neighbors. Without this, big grids visibly twitch when
+     a card lifts (browser repaints the row). */
+  will-change: transform;
 }
 
 .avatar-card:hover {
   border-color: var(--border-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(255, 255, 255, 0.1);
+  /* Reduced from translateY(-2px) — the bigger lift caused neighboring cards
+     to flicker on slow scrolls when the hover state crossed cards rapidly. */
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
 }
 
 .avatar-card.selected {
@@ -707,6 +716,99 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   word-break: break-word;
   line-height: 1.3;
 }
+
+/* ── Unified card overlays (avatar + world cards share these) ────────────
+   Both grids render with the same anchored overlays:
+     .card-tl-overlay  top-left   (selection checkbox)
+     .card-tr-overlay  top-right  (quick favorite toggle)
+     .card-checkbox    inside .card-tl-overlay
+     .card-fav-quick   inside .card-tr-overlay
+     .card-release-badge  Public/Private indicator (own avatars only)
+   The previous design had separate .avatar-actions / .avatar-checkbox /
+   .fav-badge classes for avatars and inline-styled boxes for worlds, which
+   gave them noticeably different visuals. Unified now. */
+.card-tl-overlay,
+.card-tr-overlay {
+  position: absolute;
+  top: 6px;
+  z-index: 10;
+  pointer-events: none;  /* container is just a positioner */
+}
+.card-tl-overlay { left: 6px; }
+.card-tr-overlay { right: 6px; }
+.card-tl-overlay > *,
+.card-tr-overlay > * { pointer-events: auto; }
+
+.card-checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  opacity: 0;  /* invisible until hover or selected */
+}
+.avatar-card:hover .card-checkbox,
+.card-checkbox.on {
+  opacity: 1;
+}
+.card-checkbox.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.card-checkbox:hover {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+}
+.card-checkbox.on:hover {
+  background: var(--accent);
+  filter: brightness(1.15);
+}
+
+.card-fav-quick {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #fff;
+  transition: transform 0.15s, background 0.15s;
+  user-select: none;
+}
+.card-fav-quick:hover {
+  background: rgba(0, 0, 0, 0.78);
+  transform: scale(1.08);
+}
+
+.card-release-badge {
+  position: absolute;
+  top: 38px;   /* below the .card-tl-overlay (6 + 22 + 10) */
+  left: 6px;
+  z-index: 9;
+  font-size: 0.62rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+.card-release-badge.release-public { background: var(--success); color: #052e16; }
+.card-release-badge.release-private { background: rgba(0, 0, 0, 0.62); }
 
 .avatar-actions {
   position: absolute;
