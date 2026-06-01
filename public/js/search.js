@@ -534,7 +534,7 @@ function displayAvatarDetail(av) {
         let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveCurrentDetailToLocal()">📦 保存到本地 (200槽位)</button>`;
         if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
         else html += favoriteGroups.map(g => {
-          const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 100; const full = count >= cap;
+          const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 50; const full = count >= cap;
           const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
           return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
         }).join("");
@@ -640,7 +640,7 @@ function toggleAvatarFavGridMenu(event, id, name, btn) {
     let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(visibleAvatars.find(a=>a.id==='${id}'))">📦 保存到本地 (200槽位)</button>`;
     if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
     else html += favoriteGroups.map(g => {
-      const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 100; const full = count >= cap;
+      const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 50; const full = count >= cap;
       const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
       return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
     }).join("");
@@ -658,7 +658,7 @@ function toggleAvtrdbFavMenu(event) {
     let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveCurrentDetailToLocal()">📦 保存到本地 (200槽位)</button>`;
     if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
     else html += favoriteGroups.map(g => {
-      const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 100; const full = count >= cap;
+      const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 50; const full = count >= cap;
       const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
       return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
     }).join("");
@@ -727,7 +727,7 @@ async function addToFavorite(avtrId, groupName, btn) {
       // first refetching the whole favorites list. Same shape as syncAllFavoriteIds.
       const data = await resp.json().catch(() => null);
       if (data && data.id) favoriteIdMap.set(avtrId, data.id);
-      // Bump the per-group counter so the sidebar "x/100" hint and the
+      // Bump the per-group counter so the sidebar "x/50" hint and the
       // disabled-when-full state are accurate without a roundtrip.
       avatarFavGroupCounts.set(groupName, (avatarFavGroupCounts.get(groupName) || 0) + 1);
       // Invalidate IDB cache for that group so next load fetches fresh
