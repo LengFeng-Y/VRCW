@@ -624,16 +624,29 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   background: var(--bg-secondary);
 }
 
+/* Failed thumbnail state. The wrapper is also clickable (images.js wires
+   tap-to-retry once we hit the retry-cap), so we hint that with a subtle
+   glow and a "↻" symbol below the ✕. pointer-events:none on the marker
+   keeps the click target the wrapper itself. */
 .avatar-thumb-wrapper.img-failed::after {
-  content: '✕';
+  content: '✕\A↻ 点击重试';
+  white-space: pre;
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 1.2rem;
-  color: rgba(239, 68, 68, 0.4);
+  font-size: 0.72rem;
+  text-align: center;
+  line-height: 1.6;
+  color: rgba(239, 68, 68, 0.7);
   pointer-events: none;
   z-index: 1;
+}
+.avatar-thumb-wrapper.img-failed:hover {
+  background: rgba(239, 68, 68, 0.05);
+}
+.avatar-thumb-wrapper.img-failed:hover::after {
+  color: rgba(239, 68, 68, 0.95);
 }
 
 .avatar-name-overlay {

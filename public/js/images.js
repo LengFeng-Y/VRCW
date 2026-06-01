@@ -68,7 +68,37 @@ function processImageQueue() {
         finishLoad(false);
       } else {
         img.classList.add('failed');
-        if (wrapper) wrapper.classList.add('img-failed');
+        if (wrapper) {
+          wrapper.classList.add('img-failed');
+          // Tap-to-retry: clicking a failed thumbnail re-queues it. The user
+          // shouldn't have to scroll out + back in just to retry a transient
+          // CDN hiccup. Listener is one-shot per failure.
+          if (!wrapper.dataset.retryWired) {
+            wrapper.dataset.retryWired = '1';
+            wrapper.style.cursor = 'pointer';
+            wrapper.title = '点击重试加载';
+            const onRetryClick = (e) => {
+              e.stopPropagation();
+              wrapper.classList.remove('img-failed');
+              wrapper.style.cursor = '';
+              wrapper.title = '';
+              delete wrapper.dataset.retryWired;
+              wrapper.removeEventListener('click', onRetryClick);
+              img.classList.remove('failed');
+              img.dataset.retry = '0';
+              const oldSrc = img.getAttribute('data-src');
+              // If data-src was already cleared, recover from the current src
+              const recoverSrc = oldSrc || img.src;
+              if (recoverSrc) {
+                img.setAttribute('data-src', recoverSrc);
+                img.dataset.loading = '1';
+                imageQueue.push({ img, src: recoverSrc });
+                processImageQueue();
+              }
+            };
+            wrapper.addEventListener('click', onRetryClick);
+          }
+        }
         img.removeAttribute('data-src');
         delete img.dataset.loading;
         avatarObserver.unobserve(img);
