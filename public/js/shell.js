@@ -187,19 +187,28 @@ function renderFavoriteGroupButtons() {
 }
 
 // ── Foveated Loading Orchestrator ──
+// Concurrent runPriorityTask calls used to corrupt isPriorityTaskRunning:
+// the inner task's `finally` would flip the flag false while the outer was
+// still running, releasing background tasks too early. Counter-based version
+// below is reentrant-safe.
+let _priorityDepth = 0;
 async function runPriorityTask(taskFn) {
-  currentGlobalFetchSeq++; 
+  currentGlobalFetchSeq++;
+  _priorityDepth++;
   isPriorityTaskRunning = true;
   // NOTE: Don't clear imageQueue here. Previously this was done to "favor current
   // JSON" but it caused thumbnails on the destination tab to need re-queueing,
   // making revisits feel slower. IntersectionObserver naturally pauses off-screen
   // image loads (cancelLoad()), so leaving the queue alone is fine.
-  
+
   try {
     await taskFn();
   } finally {
-    isPriorityTaskRunning = false;
-    processBackgroundQueue();
+    _priorityDepth = Math.max(0, _priorityDepth - 1);
+    if (_priorityDepth === 0) {
+      isPriorityTaskRunning = false;
+      processBackgroundQueue();
+    }
   }
 }
 
