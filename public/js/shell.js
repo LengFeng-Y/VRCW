@@ -422,6 +422,7 @@ async function clearCacheCategory(keys) {
     });
   });
   loadCacheStats();
+  showToast(`已清除 ${keys.length} 条缓存`, 'success');
 }
 
 async function clearImageCache() {
@@ -433,6 +434,7 @@ async function clearImageCache() {
     tx.oncomplete = r; tx.onerror = r;
   });
   loadCacheStats();
+  showToast('已清除图片缓存', 'success');
 }
 
 async function clearAllCacheNow() {

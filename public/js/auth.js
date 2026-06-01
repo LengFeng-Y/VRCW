@@ -243,10 +243,40 @@ async function doVerify2FA() {
 function doLogout() {
   vrcAuth = "";
   localStorage.removeItem("vrc_auth");
+  // Wipe in-memory session state so a subsequent login on the same tab doesn't
+  // briefly flash the previous user's friends / avatars / modals before the
+  // fresh fetch comes back. Per red-line R2, we DON'T call VRChat /logout —
+  // doing so would invalidate the session in a way that prevents re-login.
+  try {
+    if (typeof avatars !== 'undefined') avatars = [];
+    if (typeof visibleAvatars !== 'undefined') visibleAvatars = [];
+    if (typeof allFriends !== 'undefined') allFriends = [];
+    if (typeof selectedIds !== 'undefined' && selectedIds.clear) selectedIds.clear();
+    if (typeof selectedWorldIds !== 'undefined' && selectedWorldIds.clear) selectedWorldIds.clear();
+    if (typeof favoriteIdMap !== 'undefined' && favoriteIdMap.clear) favoriteIdMap.clear();
+    if (typeof worldFavoriteIdMap !== 'undefined' && worldFavoriteIdMap.clear) worldFavoriteIdMap.clear();
+    if (typeof friendFavoriteIdMap !== 'undefined' && friendFavoriteIdMap.clear) friendFavoriteIdMap.clear();
+    if (typeof avatarFavGroupCounts !== 'undefined' && avatarFavGroupCounts.clear) avatarFavGroupCounts.clear();
+    if (typeof worldFavGroupCounts !== 'undefined' && worldFavGroupCounts.clear) worldFavGroupCounts.clear();
+    if (typeof myModerations !== 'undefined') myModerations = [];
+    currentUserId = "";
+    if (typeof myProfileData !== 'undefined') myProfileData = null;
+    if (typeof currentFriendProfile !== 'undefined') currentFriendProfile = null;
+    if (typeof currentWorldDetail !== 'undefined') currentWorldDetail = null;
+  } catch (e) { /* best-effort: never block logout on a stale ref */ }
+
+  // Close any open modals so they don't linger over the login page.
+  document.querySelectorAll('.modal:not(.hidden), .modal-overlay').forEach(m => {
+    if (m.classList.contains('modal')) m.classList.add('hidden');
+    else m.remove();
+  });
+
   renderSavedAccounts();
   resetBodyScroll(); // safety: clear any lingering modal scroll-lock
   document.getElementById("loginPage").classList.remove("hidden");
   document.getElementById("mainApp").classList.add("hidden");
+  // Focus username so re-login is one keystroke away
+  requestAnimationFrame(() => document.getElementById('username')?.focus());
 }
 
 function showMainApp() {
