@@ -6,12 +6,19 @@
  * 函数声明会提升为全局，跨文件调用没问题；请勿改为 type="module"。
  */
 // ── Smart Image Loading with Viewport Cancellation ──
-// - Entering viewport  → start load (AbortController attached)
-// - Leaving viewport   → abort fetch if incomplete, restore data-src for retry
-// - Load complete      → unobserve, cleanup
+// Strategy (rev 2026-05-31, after user feedback "fast-scroll shows blank cards"):
+// - Preload aggressively: rootMargin 1500px (≈ 1.5 viewports above + below)
+//   so fast scrolling stays inside the preload zone.
+// - DON'T cancel mid-flight when an image leaves the viewport. Cancelling
+//   sounds like it saves bandwidth but in practice the bytes are already
+//   arriving — we just throw them away and force a fresh request when the
+//   user scrolls back. Net result of fast scroll-by-then-back was MORE
+//   network than just letting the load complete and cache. We only abort
+//   on tab teardown or session logout.
+// - Higher concurrency (12) so a wide grid fills in faster.
 const imageQueue = [];
 let runningLoads = 0;
-const MAX_CONCURRENT_IMAGES = 6;
+const MAX_CONCURRENT_IMAGES = 12;
 const loadedImageUrls = new Set();
 const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
@@ -160,35 +167,37 @@ const avatarObserver = new IntersectionObserver(
     entries.forEach((entry) => {
       const img = entry.target;
       if (entry.isIntersecting) {
-        // Entering viewport: clear cancel flag, queue for load
+        // Entering viewport (or preload zone): clear cancel flag, queue for load
         delete img.dataset.cancelled;
         const src = img.getAttribute('data-src');
         if (src && !img.dataset.loading) {
           img.dataset.loading = '1';
           imageQueue.push({ img, src });
           processImageQueue();
-        }
-      } else {
-        // Leaving viewport: cancel if load is in progress
-        if (img.dataset.loading) {
-          img.dataset.cancelled = '1';
-          // Abort active network fetch
-          if (img._abortCtrl) {
-            img._abortCtrl.abort();
-            // AbortError catch → cancelLoad() will clean up
-          }
-          // Remove from pending queue if not yet started
-          const idx = imageQueue.findIndex(item => item.img === img);
-          if (idx !== -1) {
-            imageQueue.splice(idx, 1);
-            delete img.dataset.loading;
-            delete img.dataset.cancelled; // Already removed, no need to propagate
+        } else if (src && img.dataset.loading === '1') {
+          // Already queued but maybe far back behind 500 other items from a
+          // scroll burst — bubble it to the front so currently-visible cards
+          // win the next concurrency slot. We only re-order pending items
+          // (those still in imageQueue); in-flight loads keep going.
+          const idx = imageQueue.findIndex(it => it.img === img);
+          if (idx > 0) {
+            const item = imageQueue.splice(idx, 1)[0];
+            imageQueue.unshift(item);
           }
         }
       }
+      // Leaving viewport: do NOT abort. The bytes are usually already arriving
+      // and aborting just means we re-fetch when the user scrolls back. The
+      // earlier "save quota" intent backfires on fast scroll-then-back motion.
+      // Off-screen requests still count against MAX_CONCURRENT_IMAGES, so the
+      // queue self-throttles naturally.
     });
   },
-  { rootMargin: '200px' } // Pre-load 200px ahead; cancel sooner than 300px to save requests
+  // 1500px ≈ 1.5 viewports above and below — fast scrolling stays inside the
+  // preload zone so cards never enter view as blank placeholders. Tradeoff:
+  // slightly more eager fetching, but the IDB blob cache + worker prefetch
+  // make subsequent visits cheap.
+  { rootMargin: '1500px 0px' }
 );
 
 // ── Batch Image Prefetch ──
