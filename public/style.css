@@ -747,10 +747,10 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
-  opacity: 0;  /* invisible until hover or selected */
-}
-.avatar-card:hover .card-checkbox,
-.card-checkbox.on {
+  /* Always visible (was opacity:0 until hover). On touch devices the
+     hover-to-reveal pattern made the card feel like it needed two taps:
+     first tap revealed the checkbox, second did the action. Keeping it
+     visible fixes that and makes selection discoverable. */
   opacity: 1;
 }
 .card-checkbox.on {
