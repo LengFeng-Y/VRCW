@@ -624,24 +624,16 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   opacity: 0.8;
 }
 
-/* State 1 & 2: Actively loading or waiting in queue — subtle pulse bg on image + spinning ring on wrapper */
+/* State 1 & 2: Actively loading or waiting in queue.
+   Previous version used a shimmer animation (loadpulse) that caused visible
+   "twitch" when many images finished loading simultaneously — the animation
+   stopping mid-frame triggered a repaint storm. Replaced with a static dark
+   background; the only animated element is the small spinner ring on the
+   wrapper (::after), which is a composited pseudo-element and doesn't affect
+   the card's layout or paint. */
 .avatar-thumb.loading {
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(255, 255, 255, 0.08) 50%, var(--bg-secondary) 100%);
-  background-size: 200% 200%;
-  animation: loadpulse 2s ease-in-out infinite;
+  background: var(--bg-secondary);
   color: transparent;
-}
-
-@keyframes loadpulse {
-
-  0%,
-  100% {
-    background-position: 0% 0%;
-  }
-
-  50% {
-    background-position: 100% 100%;
-  }
 }
 
 .avatar-thumb-wrapper.img-loading::after {
@@ -658,6 +650,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   animation: spin 0.8s linear infinite;
   pointer-events: none;
   z-index: 1;
+  will-change: transform;  /* own composited layer — no repaint on neighbors */
 }
 
 @keyframes spin {
@@ -795,7 +788,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
 
 .card-release-badge {
   position: absolute;
-  top: 38px;   /* below the .card-tl-overlay (6 + 22 + 10) */
+  bottom: 28px;  /* sits just above the name overlay gradient */
   left: 6px;
   z-index: 9;
   font-size: 0.62rem;
