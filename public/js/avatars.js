@@ -100,6 +100,14 @@ async function fetchAvatars(forceRefresh = false) {
         const batch = await resp.json();
         if (!Array.isArray(batch) || batch.length === 0) break;
         allFetched = allFetched.concat(batch);
+        // Render progressively after each page so users with 200+ avatars see
+        // the first 100 immediately instead of waiting for every page. Only do
+        // this when there's no cached view already on screen (cold load) — when
+        // a cache render is up we let the final applyFilters() swap it once.
+        if (!renderedFromCache && seq === fetchSeq) {
+          avatars = allFetched;
+          applyFilters();
+        }
         if (batch.length < 100) break;
         offset += 100;
         if (offset >= 1000) break; // safety ceiling
@@ -116,6 +124,13 @@ async function fetchAvatars(forceRefresh = false) {
         const batch = await resp.json();
         if (!batch || batch.length === 0 || seq !== currentGlobalFetchSeq) break;
         allFetched = allFetched.concat(batch);
+        // Progressive render per page (cold load only) so the first 100
+        // favorites show immediately instead of waiting for all pages.
+        if (!renderedFromCache && seq === fetchSeq) {
+          const seenIds = new Set();
+          avatars = allFetched.filter(av => { if (seenIds.has(av.id)) return false; seenIds.add(av.id); return true; });
+          applyFilters();
+        }
         if (batch.length < 100) break;
         offset += 100;
         if (offset >= 400) break; // Maximum safety ceiling for favorites
@@ -185,16 +200,10 @@ async function fetchAvatars(forceRefresh = false) {
       } catch (e) {
         console.warn("Could not fetch favoriteIds", e);
       }
-      // Update only the unfavorite buttons on existing cards (no full re-render)
-      document.querySelectorAll('.avatar-card').forEach(card => {
-        const id = card.id.replace('card-', '');
-        const updateFavBtn = card.querySelector('.btn-action.unfavorite');
-        if (updateFavBtn && !favoriteIdMap.has(id)) {
-          // favoriteId still not found, mark as unresolvable
-          updateFavBtn.title = 'Cannot unfavorite (ID not found)';
-          updateFavBtn.style.opacity = '0.4';
-        }
-      });
+      // NOTE: previously this block patched a per-card `.btn-action.unfavorite`
+      // button to mark unresolvable favoriteIds. That button no longer exists
+      // (cards were unified — unfavorite now lives in the detail modal / the
+      // card-fav-quick toggle), so the DOM-patching loop was removed as dead code.
     }
 
     // Stage 3: Streaming Refresh (metadata check)
