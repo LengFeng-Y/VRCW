@@ -594,17 +594,31 @@ function updateNotificationBadge(count) {
 }
 
 // Global Notification Poller
+// Polls for unread-notification count every 5 minutes (only when the tab is
+// visible and we have a session). Keeps the sidebar badge fresh without
+// hammering quota. Also catches token expiry: a 401 here clears vrcAuth so
+// the next user action surfaces a relogin prompt instead of silent failures.
 setInterval(() => {
-  if (vrcAuth && document.visibilityState === 'visible') {
-    // Silent fetch to update badge only
-    apiCall('/api/vrc/auth/user/notifications').then(r => r.ok ? r.json() : null).then(data => {
+  if (!vrcAuth || document.visibilityState !== 'visible') return;
+  apiCall('/api/vrc/auth/user/notifications')
+    .then(r => {
+      if (r.status === 401) {
+        // Token rejected. Drop it so subsequent calls don't keep using a
+        // dead session — auth.js will redirect to login on next user action.
+        vrcAuth = '';
+        try { localStorage.removeItem('vrc_auth'); } catch (_) {}
+        return null;
+      }
+      return r.ok ? r.json() : null;
+    })
+    .then(data => {
       if (data) {
         const activeCount = data.filter(n => !n.seen).length;
         updateNotificationBadge(activeCount);
       }
-    }).catch(()=>{});
-  }
-}, 300000); // Optimized: Poll every 5 minutes instead of 1 minute to save quota
+    })
+    .catch(() => {});
+}, 300000); // 5 min — balanced between freshness and Worker request quota
 
 async function openFriendProfileById(userId) {
   try {
