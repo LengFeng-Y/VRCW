@@ -114,21 +114,14 @@ async function fetchWorlds(category, forceRefresh = false) {
   try {
     const freshWorlds = [];
     let batchCount = 0;
-    let _worldFilterTimer = null;
-    // Streaming refresh used to filter+render after EVERY 5-card chunk (20+
-    // rebuilds for a 100-world group), then was tightened to a 500ms debounce
-    // — but on slow networks chunks settle slower than 500ms apart and the
-    // grid still rebuilds every time, causing visible "twitches" as the user
-    // scrolls. Bumped to 3000ms so the user sees the cached version stably,
-    // and fresh data appears in one final smooth swap.
-    const debouncedFilterWorlds = () => {
-      if (_worldFilterTimer) clearTimeout(_worldFilterTimer);
-      _worldFilterTimer = setTimeout(() => {
-        if (seq === currentWorldFetchSeq && category === currentWorldCategory) filterWorlds();
-      }, 3000);
-    };
+    // True streaming display: each resolved batch of 5 is APPENDED to the grid
+    // immediately via _appendWorldCards (no full rebuild). This replaces the
+    // old debounced filterWorlds() approach which either twitched (500ms) or
+    // made you wait for all 100 to finish (3000ms). Existing cards are never
+    // touched, so there's no twitch AND cards stream in as they arrive.
     const updateWorldBatch = (batch) => {
       if (seq !== currentWorldFetchSeq || category !== currentWorldCategory) return;
+      const isFirst = freshWorlds.length === 0;
       batch.forEach(w => {
         const idx = freshWorlds.findIndex(ex => ex.id === w.id);
         if (idx !== -1) freshWorlds[idx] = Object.assign(freshWorlds[idx], w);
@@ -136,7 +129,10 @@ async function fetchWorlds(category, forceRefresh = false) {
       });
       allWorlds = freshWorlds;
       batchCount += batch.length;
-      debouncedFilterWorlds();
+      // First batch: clear the cache view (if any) and do a clean render so the
+      // grid order is correct. Subsequent batches: just append the new cards.
+      if (isFirst) renderWorldGrid(freshWorlds);
+      else _appendWorldCards(batch);
       saveWorldBasics(category);
       worldLogMsg(`🔄 已加载 ${freshWorlds.length} 个世界...`, 'info');
     };
@@ -159,8 +155,11 @@ async function fetchWorlds(category, forceRefresh = false) {
             return f.favoriteId;
         }).filter(Boolean);
 
-        // Reduced concurrency to prevent request burst on Cloudflare free tier
-        const CONCURRENCY = 5;
+        // Concurrency 8: streams in fast without bursting the CF free-tier
+        // subrequest budget. Each resolved chunk is appended immediately
+        // (see updateWorldBatch -> _appendWorldCards), so the user sees
+        // worlds appear continuously rather than waiting for all 100.
+        const CONCURRENCY = 8;
         for (let i = 0; i < worldIds.length; i += CONCURRENCY) {
             if (seq !== currentWorldFetchSeq || category !== currentWorldCategory) return;
             const chunk = worldIds.slice(i, i + CONCURRENCY);
@@ -293,32 +292,35 @@ function renderWorldGrid(list) {
     return;
   }
   gridEl.innerHTML = '';
-  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
   list.forEach(w => {
-    const thumb = proxyImg(w.thumbnailImageUrl||w.imageUrl||'');
-    const pc  = w.occupants || 0;
-    const card = document.createElement('div');
-    card.className = `avatar-card ${w.isInvalid ? 'invalid-world' : ''} ${selectedWorldIds.has(w.id) ? 'selected' : ''}`;
-    card.style.cursor = 'pointer';
-    card.id = 'world-card-' + w.id;
-    if (w.isInvalid) card.style.border = '1px solid rgba(239, 68, 68, 0.4)';
-    card.setAttribute('data-worldid', w.id);
+    const card = _buildWorldCard(w);
+    gridEl.appendChild(card);
+    const img = card.querySelector('.avatar-thumb[data-src]');
+    if (img) avatarObserver.observe(img);
+  });
+}
 
-    // VRCX Style: How many friends are here?
-    const friendsHere = (allFriends || []).filter(f => f.location && f.location.startsWith(w.id)).length;
+// Build ONE world card element. Extracted so both the full re-render
+// (renderWorldGrid) and the streaming appender (_appendWorldCards) share
+// identical markup.
+function _buildWorldCard(w) {
+  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const thumb = proxyImg(w.thumbnailImageUrl||w.imageUrl||'');
+  const pc  = w.occupants || 0;
+  const card = document.createElement('div');
+  card.className = `avatar-card ${w.isInvalid ? 'invalid-world' : ''} ${selectedWorldIds.has(w.id) ? 'selected' : ''}`;
+  card.style.cursor = 'pointer';
+  card.id = 'world-card-' + w.id;
+  if (w.isInvalid) card.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+  card.setAttribute('data-worldid', w.id);
 
-    card.onclick = () => openWorldDetail(w.id, w);
-    const isCached = loadedImageUrls.has(thumb);
-    const isFaved  = worldFavoriteIdMap.has(w.id);
-    const sel = selectedWorldIds.has(w.id);
+  const friendsHere = (allFriends || []).filter(f => f.location && f.location.startsWith(w.id)).length;
+  card.onclick = () => openWorldDetail(w.id, w);
+  const isCached = loadedImageUrls.has(thumb);
+  const isFaved  = worldFavoriteIdMap.has(w.id);
+  const sel = selectedWorldIds.has(w.id);
 
-    // Card layout matches avatar card exactly (renderGrid in avatars.js):
-    //   top-left:  selection checkbox (.card-checkbox)
-    //   top-right: quick favorite toggle (.card-fav-quick)
-    //   image + name overlay
-    //   bottom-right: friend count + occupant count badges
-    // Per-card delete/edit lives in the detail modal (worldDetailDeleteBtn).
-    card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached?'':'img-loading'}">
+  card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached?'':'img-loading'}">
       ${isCached ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="">` : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`}
       <div class="avatar-name-overlay">${escHtml(w.name||'未知世界')}</div>
       <div class="card-tl-overlay">
@@ -333,11 +335,33 @@ function renderWorldGrid(list) {
       </div>
       ${w.isInvalid ? `<div class="card-release-badge release-private" style="background:var(--error);">已失效</div>` : ''}
     </div>`;
+  return card;
+}
+
+// Append world cards INCREMENTALLY during streaming load, without rebuilding
+// the whole grid. This is what gives true streaming display: each batch of 5
+// shows up as soon as it resolves, instead of waiting for all 100. Cards
+// already present are skipped (by id), so calling this repeatedly is safe.
+// A search/platform filter being active falls back to a full filtered render.
+function _appendWorldCards(batch) {
+  const gridEl = document.getElementById('worldGrid');
+  if (!gridEl) return;
+  // If a filter is active the incremental path could show cards that don't
+  // match — defer to the full filtered render instead.
+  const q = (document.getElementById('worldSearch')?.value || '').trim();
+  const plat = document.getElementById('worldFilterPlatform')?.value || 'all';
+  if (q || plat !== 'all') { filterWorlds(); return; }
+
+  // Clear the "加载中..." placeholder on first append.
+  const placeholder = gridEl.querySelector('div[style*="grid-column"]');
+  if (placeholder) gridEl.innerHTML = '';
+
+  batch.forEach(w => {
+    if (document.getElementById('world-card-' + w.id)) return; // already shown
+    const card = _buildWorldCard(w);
     gridEl.appendChild(card);
-    if (!isCached && thumb) {
-      const img = card.querySelector('.avatar-thumb[data-src]');
-      if (img) avatarObserver.observe(img);
-    }
+    const img = card.querySelector('.avatar-thumb[data-src]');
+    if (img) avatarObserver.observe(img);
   });
 }
 
