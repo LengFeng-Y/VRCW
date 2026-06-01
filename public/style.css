@@ -42,44 +42,82 @@ html {
 }
 
 /* ── Scrollbars (global) ──────────────────────────────────────────────────
-   Replaces the chunky native scrollbars (especially obvious on Windows) with
-   a thin, dark, theme-matched style. Applies everywhere by default; opt-out
-   selectors below for areas that should hide the scrollbar entirely.
+   Replaces the chunky native white Windows scrollbars with a polished, dark,
+   theme-matched style. The thumb is dark by default (low-contrast on dark
+   background), brightens on hover, and is fully rounded. A subtle 1px gap
+   between thumb and edge gives a "floating capsule" feel.
 
-   - Firefox:  scrollbar-width / scrollbar-color
-   - WebKit:   ::-webkit-scrollbar pseudo-elements
-   Track is transparent so it blends with any background. Thumb gets a touch
-   of contrast on hover. Width tightened from the default ~17px to 8px.
+   - Firefox: scrollbar-width / scrollbar-color (limited; just thin + dark thumb)
+   - WebKit (Chrome / Edge / Safari / WebView2 / Electron): full ::-webkit-*
+     pseudo-element styling
+
+   Important: the previous version used a *brighter* whitish thumb that read
+   as "default white" against the near-black panels. We're using rgba black
+   over zinc-300 to actually visually recede.
 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  /* Firefox 64+: thumb / track colors. Track transparent so it inherits the
+     panel bg; thumb is a soft mid-zinc. */
+  scrollbar-color: rgba(120, 120, 130, 0.32) transparent;
 }
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
+  background: transparent;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
+  border: none;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  /* Capsule with a 2px transparent border (via background-clip) so the visible
+     thumb is 6px wide inside a 10px gutter — feels floating, not pinned to
+     the edge. */
+  background-color: rgba(120, 120, 130, 0.28);
   border-radius: 999px;
-  /* Inset border keeps a small gap between thumb and edge for a "floating" feel */
   border: 2px solid transparent;
   background-clip: content-box;
-  transition: background 0.15s ease;
+  transition: background-color 0.18s ease;
+  min-height: 32px;  /* don't let the thumb shrink to a useless dot */
+  min-width: 32px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.32);
+  background-color: rgba(160, 160, 170, 0.55);
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:active {
-  background: rgba(255, 255, 255, 0.46);
+  background-color: rgba(200, 200, 210, 0.75);
   background-clip: content-box;
 }
 *::-webkit-scrollbar-corner {
   background: transparent;
+}
+/* Hide the up/down arrow buttons — they look dated and waste space. */
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Specific elements WebKit doesn't always cascade into — re-declare so they
+   pick up the same look. textarea / contenteditable have their own paint. */
+textarea::-webkit-scrollbar,
+[contenteditable]::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+textarea::-webkit-scrollbar-thumb,
+[contenteditable]::-webkit-scrollbar-thumb {
+  background-color: rgba(120, 120, 130, 0.28);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+textarea::-webkit-scrollbar-thumb:hover,
+[contenteditable]::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(160, 160, 170, 0.55);
+  background-clip: content-box;
 }
 
 /* Hide the page-level body scrollbar entirely (background looks cleaner;
