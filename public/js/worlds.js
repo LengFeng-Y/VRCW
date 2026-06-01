@@ -976,7 +976,11 @@ async function joinWorldInstance() {
 
   const statusEl = document.getElementById('worldDetailFavStatus');
   const _joinType   = localStorage.getItem(PREF_TYPE)   || 'hidden';
-  const _joinRegion = localStorage.getItem(PREF_REGION) || 'jp';
+  // Default region: 'use' (US East). Mirrors shell.js loadJoinPrefs/saveJoinPrefs
+  // and the HTML hidden input — earlier inconsistency had this defaulting to
+  // 'jp' which would create instances in Japan for first-session users who
+  // never visited Settings.
+  const _joinRegion = localStorage.getItem(PREF_REGION) || 'use';
   const _typeLabel   = INSTANCE_TYPE_LABELS[_joinType]   || _joinType;
   const _regionLabel = REGION_LABELS[_joinRegion]?.replace(/🇺🇸|🇪🇺|🇯🇵/u, '').trim() || _joinRegion;
   if (statusEl) { statusEl.textContent = `正在创建 ${_typeLabel} · ${_regionLabel} 房间...`; statusEl.style.color = 'var(--text-muted)'; }

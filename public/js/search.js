@@ -189,11 +189,24 @@ async function avtrdbLoadMore() {
 }
 
 // Current sort mode for avatar search: 'relevance' | 'newest' | 'name'
-let avtrdbSortMode = 'relevance';
+// Persisted in localStorage so a chosen sort survives reloads — mirrors VRCX.
+let avtrdbSortMode = (function () {
+  try { return localStorage.getItem('vrcw_avtrdb_sort') || 'relevance'; }
+  catch (_) { return 'relevance'; }
+})();
+
+// On script load, paint the saved sort onto the chip row. Without this the
+// HTML's hardcoded `<button class="sort-chip active" data-sort="relevance">`
+// would remain highlighted even when the user previously selected newest/name.
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('#avtrdbSortBtns .sort-chip').forEach(b =>
+    b.classList.toggle('active', b.dataset.sort === avtrdbSortMode));
+});
 
 function setAvtrdbSort(mode) {
   if (avtrdbSortMode === mode) return;
   avtrdbSortMode = mode;
+  try { localStorage.setItem('vrcw_avtrdb_sort', mode); } catch (_) {}
   document.querySelectorAll('#avtrdbSortBtns .sort-chip').forEach(b =>
     b.classList.toggle('active', b.dataset.sort === mode));
   _rerenderAvtrdbGrid(); // re-sort already-collected results, no refetch
