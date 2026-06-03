@@ -312,6 +312,9 @@ function showMainApp() {
   //    cold load the main grid stays empty until the user clicks a different tab.
   const initialTab = currentTab || "download";
   currentTab = "";
+  // Signal to switchTab that this is a full page load — force API refresh
+  // even if the basics cache TTL hasn't expired yet.
+  window._isInitialLoad = true;
   switchTab(initialTab);
 }
 

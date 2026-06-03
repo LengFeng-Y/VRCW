@@ -288,7 +288,13 @@ function switchTab(tab) {
       else fetchWorlds(currentWorldCategory, false);
     }
     if (tab === "groups") loadGroupsPage('mine');
-    if (tab === "download") fetchAvatars(false);
+    if (tab === "download") {
+      // On initial page load (F5/login), always refresh from API so users
+      // see up-to-date data. Subsequent tab switches use cached fast path.
+      const force = !!window._isInitialLoad;
+      window._isInitialLoad = false;
+      fetchAvatars(force);
+    }
     if (tab === 'assets') initAssetsTab?.();
     if (tab === 'settings') loadCacheStats();
   });
@@ -471,6 +477,132 @@ async function clearAllCacheNow() {
   await new Promise(r => { const tx = idb.db.transaction('images','readwrite'); tx.objectStore('images').clear(); tx.oncomplete=r; tx.onerror=r; });
   loadCacheStats();
   showToast('已清除所有缓存', 'success');
+}
+
+// ── Refresh All Persistent Cache ──
+// Re-fetches avatar groups, friends, worlds, and favorite IDs from API
+// and writes them to IDB. Unlike "clear cache", this preserves local favorites
+// and just overwrites stale data with fresh API responses.
+async function refreshAllPersistentCache() {
+  const btn = document.getElementById('btnRefreshAllCache');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 正在刷新...'; }
+  const log = (msg) => logMsg(msg, 'info');
+
+  try {
+    // 1. Re-sync favorite IDs + group counts
+    log('🔄 正在同步收藏 ID...');
+    await syncAllFavoriteIds();
+
+    // 2. Re-fetch all avatar favorite groups
+    if (favoriteGroups.length > 0) {
+      log(`🔄 正在刷新 ${favoriteGroups.length} 个模型收藏组...`);
+      for (const g of favoriteGroups) {
+        try {
+          let offset = 0, all = [];
+          while (true) {
+            const resp = await apiCall(`/api/vrc/avatars/favorites?n=100&offset=${offset}&tag=${g.name}`);
+            if (!resp.ok) break;
+            const batch = await resp.json();
+            if (!batch || batch.length === 0) break;
+            all = all.concat(batch);
+            if (batch.length < 100) break;
+            offset += 100;
+          }
+          // Write full data + basics + age
+          await idb.set('avatars_' + g.name, all);
+          const basics = all.map(a => ({
+            id: a.id, name: a.name, thumbnailImageUrl: a.thumbnailImageUrl,
+            imageUrl: a.imageUrl, releaseStatus: a.releaseStatus,
+            authorId: a.authorId, tags: a.tags
+          }));
+          await idb.set('avatar_basics_' + g.name, basics);
+          await idb.set('avatar_basics_age_' + g.name, Date.now());
+          all.forEach(av => {
+            if (av.id && av.name && av.name !== 'Unknown') window._localNameMap.set(av.id, av.name);
+          });
+          log(`  ✓ ${g.displayName || g.name}: ${all.length} 个模型`);
+        } catch (e) {
+          log(`  ✗ ${g.name}: ${e.message}`);
+        }
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    // 3. Re-fetch "my avatars"
+    log('🔄 正在刷新我的模型...');
+    try {
+      let offset = 0, myAll = [];
+      while (true) {
+        const resp = await apiCall(`/api/vrc/avatars?user=me&releaseStatus=all&n=100&offset=${offset}`);
+        if (!resp.ok) break;
+        const batch = await resp.json();
+        if (!Array.isArray(batch) || batch.length === 0) break;
+        myAll = myAll.concat(batch);
+        if (batch.length < 100) break;
+        offset += 100;
+        if (offset >= 1000) break;
+      }
+      const myBasics = myAll.map(a => ({
+        id: a.id, name: a.name, thumbnailImageUrl: a.thumbnailImageUrl,
+        imageUrl: a.imageUrl, releaseStatus: a.releaseStatus,
+        authorId: a.authorId, tags: a.tags
+      }));
+      await idb.set('avatar_basics_mine', myBasics);
+      await idb.set('avatar_basics_age_mine', Date.now());
+      await idb.set('avatars_mine', myAll);
+      myAll.forEach(av => {
+        if (av.id && av.name) window._localNameMap.set(av.id, av.name);
+      });
+      log(`  ✓ 我的模型: ${myAll.length} 个`);
+    } catch (e) {
+      log(`  ✗ 我的模型: ${e.message}`);
+    }
+
+    // 4. Re-fetch friends
+    log('🔄 正在刷新好友列表...');
+    try {
+      let offset = 0, friendAll = [];
+      while (true) {
+        const resp = await apiCall(`/api/vrc/auth/user/friends?offset=${offset}&n=100&offline=true`);
+        if (!resp.ok) break;
+        const batch = await resp.json();
+        if (!Array.isArray(batch) || batch.length === 0) break;
+        friendAll = friendAll.concat(batch);
+        if (batch.length < 100) break;
+        offset += 100;
+        if (offset >= 1000) break;
+      }
+      const friendBasics = friendAll.map(f => ({
+        id: f.id, displayName: f.displayName,
+        currentAvatarImageUrl: f.currentAvatarImageUrl,
+        currentAvatarThumbnailImageUrl: f.currentAvatarThumbnailImageUrl,
+        status: f.status, location: f.location,
+        last_activity: f.last_activity, last_login: f.last_login,
+        isFriend: f.isFriend, tags: f.tags
+      }));
+      await idb.set('friend_basics', friendBasics);
+      await idb.set('friend_basics_age', Date.now());
+      log(`  ✓ 好友: ${friendAll.length} 位`);
+    } catch (e) {
+      log(`  ✗ 好友: ${e.message}`);
+    }
+
+    // 5. Persist the name map
+    if (window._localNameMap && window._localNameMap.size > 0) {
+      const exportMap = {};
+      window._localNameMap.forEach((v, k) => { exportMap[k] = v; });
+      await idb.set('persistent_avatar_names', exportMap);
+      log(`  ✓ 名称映射: ${window._localNameMap.size} 条`);
+    }
+
+    log('✅ 所有持久化缓存已刷新完成');
+    showToast('✅ 所有持久化缓存已刷新', 'success');
+  } catch (e) {
+    showToast('刷新缓存失败: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 刷新所有缓存（从 API 重新拉取）'; }
+    loadCacheStats();
+  }
 }
 
 // ── Categories ──
