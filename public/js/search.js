@@ -714,6 +714,17 @@ function toggleAvtrdbFavMenu(event) {
     // Use a temp container to build the HTML via _buildFavGroupListHtml
     const tmp = document.createElement('div');
     _buildFavGroupListHtml(tmp, id);
+    // Background refresh: re-sync favorite counts from API, then rebuild
+    // the list if the menu is still open. This ensures counts stay fresh
+    // even when favorites were modified externally (e.g. in VRChat client).
+    syncAllFavoriteIds().then(() => {
+      if (menu.classList.contains('hidden')) return;
+      const freshId = document.getElementById("avtrdbDetailId")?.textContent || "";
+      const list = menu.querySelector('div:last-child');
+      if (list && freshId) _buildFavGroupListHtml(list, freshId);
+      // Also refresh the main button state
+      if (freshId) _refreshDetailAfterFavChange(freshId);
+    }).catch(() => {});
     return tmp.innerHTML;
   });
 }
