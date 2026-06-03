@@ -28,6 +28,44 @@ function saveCurrentDetailToLocal() {
   if (_currentDetailAvatar) saveToLocalFavorite(_currentDetailAvatar);
 }
 
+// Builds the favorite group list HTML with checkmarks for groups where the avatar
+// is already favorited. Clicking a checked group unfavorites; unchecked adds.
+function _buildFavGroupListHtml(favList, id) {
+  const favedGroups = avatarFavTagMap.get(id) || new Set();
+  const isLocalFaved = localAvatarIdMap.has(id);
+
+  let html = '';
+  // Local favorites row
+  if (isLocalFaved) {
+    html += `<button class="avtrdb-fav-group-btn avtrdb-fav-group-active" onclick="removeFromLocalFavorite('${escJsAttr(id)}'); _refreshDetailAfterFavChange('${escJsAttr(id)}');">✓ 📦 本地收藏</button>`;
+  } else {
+    html += `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveCurrentDetailToLocal(); _refreshDetailAfterFavChange('${escJsAttr(id)}');">+ 📦 保存到本地 (200槽位)</button>`;
+  }
+
+  // Cloud groups
+  if (favoriteGroups.length === 0) {
+    html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
+  } else {
+    html += favoriteGroups.map(g => {
+      const count = avatarFavGroupCounts.get(g.name) || 0;
+      const cap = 50;
+      const full = count >= cap;
+      const isFavedInGroup = favedGroups.has(g.name);
+      const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full && !isFavedInGroup ?'#f87171':'inherit'}">(${count}/${cap})</span>`;
+      const displayName = escHtml(g.displayName || g.name);
+
+      if (isFavedInGroup) {
+        // Already in this group — click to unfavorite
+        return `<button class="avtrdb-fav-group-btn avtrdb-fav-group-active" onclick="unfavoriteFromGroup('${escJsAttr(id)}','${escJsAttr(g.name)}',this)">✓ ${displayName} ${lbl}</button>`;
+      } else {
+        // Not in this group — click to add
+        return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escJsAttr(id)}','${escJsAttr(g.name)}',this)">${displayName} ${lbl}</button>`;
+      }
+    }).join("");
+  }
+  favList.innerHTML = html;
+}
+
 
 function onSearchCategoryChange() {
   const cat = document.getElementById("searchCategory")?.value;
@@ -533,37 +571,31 @@ function displayAvatarDetail(av) {
     }
   }
 
-  // 4. Favorites Status
+  // 4. Favorites Status — unified group selector
+  // The button always opens the fav-group menu. Groups where this avatar is
+  // already favorited show a ✓ checkmark; clicking them triggers unfavorite.
+  // Groups without a checkmark add the avatar on click.
   document.getElementById("avtrdbFavStatus").textContent = "";
   document.getElementById("avtrdbFavMenu")?.classList.add("hidden");
 
   const favBtn = document.getElementById("avtrdbDetailFavBtn");
   const isLocalFaved = localAvatarIdMap.has(id);
   const isCloudFaved = favoriteIdMap.has(id);
-  
-  if (isCloudFaved) {
-     favBtn.innerHTML = "⭐ 移除收藏";
-     favBtn.className = "btn btn-danger-full";
-     favBtn.onclick = (e) => { e.stopPropagation(); unfavorite(id, name); };
-  } else if (isLocalFaved) {
-     favBtn.innerHTML = "⭐ 移除本地收藏";
-     favBtn.className = "btn btn-danger-full";
-     favBtn.onclick = (e) => { e.stopPropagation(); removeFromLocalFavorite(id); };
+
+  if (isCloudFaved || isLocalFaved) {
+     favBtn.innerHTML = "⭐ 已收藏";
+     favBtn.className = "btn btn-success-full";
   } else {
      favBtn.innerHTML = "⭐ 收藏";
      favBtn.className = "btn btn-secondary";
-     favBtn.onclick = toggleAvtrdbFavMenu;
-     const favList = document.getElementById("avtrdbFavGroupList");
-     if (favList) {
-        let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveCurrentDetailToLocal()">📦 保存到本地 (200槽位)</button>`;
-        if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
-        else html += favoriteGroups.map(g => {
-          const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 50; const full = count >= cap;
-          const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
-          return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
-        }).join("");
-        favList.innerHTML = html;
-     }
+  }
+  // Always open the group selector — for adding or removing
+  favBtn.onclick = toggleAvtrdbFavMenu;
+
+  // Pre-build the group list so it's ready when the menu opens
+  const favList = document.getElementById("avtrdbFavGroupList");
+  if (favList) {
+     _buildFavGroupListHtml(favList, id);
   }
 
   // 5. Actions
@@ -679,14 +711,10 @@ function toggleAvtrdbFavMenu(event) {
   toggleFavMenuGeneric(event, menu, btn, () => {
     const idRow = document.getElementById("avtrdbDetailId");
     const id = idRow ? idRow.textContent : "";
-    let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveCurrentDetailToLocal()">📦 保存到本地 (200槽位)</button>`;
-    if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
-    else html += favoriteGroups.map(g => {
-      const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 50; const full = count >= cap;
-      const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
-      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
-    }).join("");
-    return html;
+    // Use a temp container to build the HTML via _buildFavGroupListHtml
+    const tmp = document.createElement('div');
+    _buildFavGroupListHtml(tmp, id);
+    return tmp.innerHTML;
   });
 }
 
@@ -751,6 +779,10 @@ async function addToFavorite(avtrId, groupName, btn) {
       // first refetching the whole favorites list. Same shape as syncAllFavoriteIds.
       const data = await resp.json().catch(() => null);
       if (data && data.id) favoriteIdMap.set(avtrId, data.id);
+      // Track which group this avatar is now in
+      const existing = avatarFavTagMap.get(avtrId);
+      if (existing) existing.add(groupName);
+      else avatarFavTagMap.set(avtrId, new Set([groupName]));
       // Bump the per-group counter so the sidebar "x/50" hint and the
       // disabled-when-full state are accurate without a roundtrip.
       avatarFavGroupCounts.set(groupName, (avatarFavGroupCounts.get(groupName) || 0) + 1);
@@ -765,6 +797,8 @@ async function addToFavorite(avtrId, groupName, btn) {
           fq.title = '已收藏';
         }
       }
+      // Refresh the detail modal button to show "已收藏" state
+      _refreshDetailAfterFavChange(avtrId);
     } else {
       const err = await resp.json().catch(() => ({}));
       statusEl.style.color = "var(--error)";
@@ -776,6 +810,81 @@ async function addToFavorite(avtrId, groupName, btn) {
   } finally {
     if (btn) { btn.disabled = false; btn.style.opacity = ""; }
   }
+}
+
+// Unfavorite from a specific group via the group selector in the detail modal.
+// Unlike the old unfavorite() which removes the avatar from the current view list,
+// this only removes the favorite link. The detail modal stays open.
+async function unfavoriteFromGroup(avtrId, groupName, btn) {
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = '移除中...'; }
+  const statusEl = document.getElementById("avtrdbFavStatus");
+  try {
+    // Resolve the favoriteId for this avatar
+    const favId = favoriteIdMap.get(avtrId);
+    if (!favId) {
+      // Try live lookup
+      const r = await apiCall(`/api/vrc/favorites?type=avatar&tag=${groupName}&n=100`);
+      if (r.ok) {
+        const list = await r.json();
+        const hit = (list || []).find(f => f.favoriteId === avtrId);
+        if (hit) favoriteIdMap.set(avtrId, hit.id);
+      }
+    }
+    const resolvedFavId = favoriteIdMap.get(avtrId);
+    if (!resolvedFavId) {
+      if (statusEl) { statusEl.style.color = 'var(--error)'; statusEl.textContent = '✗ 找不到收藏记录'; }
+      return;
+    }
+    const resp = await apiCall(`/api/vrc/favorites/${resolvedFavId}`, { method: 'DELETE' });
+    if (!resp.ok && resp.status !== 404) {
+      throw new Error('HTTP ' + resp.status);
+    }
+    // Update state
+    favoriteIdMap.delete(avtrId);
+    const tags = avatarFavTagMap.get(avtrId);
+    if (tags) { tags.delete(groupName); if (tags.size === 0) avatarFavTagMap.delete(avtrId); }
+    const cur = avatarFavGroupCounts.get(groupName) || 0;
+    avatarFavGroupCounts.set(groupName, Math.max(0, cur - 1));
+    try { await idb.set('avatars_' + groupName, null); } catch (_) {}
+    if (statusEl) { statusEl.style.color = 'var(--success)'; statusEl.textContent = `✓ 已从 ${groupName} 移除`; }
+    // Flip the card star back
+    const card = document.getElementById('card-' + avtrId);
+    if (card) {
+      const fq = card.querySelector('.card-fav-quick');
+      if (fq && !favoriteIdMap.has(avtrId) && !localAvatarIdMap.has(avtrId)) {
+        fq.textContent = '☆'; fq.title = '添加到收藏';
+      }
+    }
+    // Refresh detail modal
+    _refreshDetailAfterFavChange(avtrId);
+  } catch (e) {
+    if (statusEl) { statusEl.style.color = 'var(--error)'; statusEl.textContent = `✗ 取消收藏失败: ${e.message}`; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  }
+}
+
+// Refresh the detail modal's favorite button and group list after a fav change.
+// Called after addToFavorite / unfavoriteFromGroup / saveToLocal / removeFromLocal.
+function _refreshDetailAfterFavChange(avtrId) {
+  const modal = document.getElementById('avtrdbDetailModal');
+  if (!modal || modal.classList.contains('hidden')) return;
+  const displayedId = document.getElementById('avtrdbDetailId')?.textContent;
+  if (displayedId !== avtrId) return;
+
+  const favBtn = document.getElementById('avtrdbDetailFavBtn');
+  const isCloudFaved = favoriteIdMap.has(avtrId);
+  const isLocalFaved = localAvatarIdMap.has(avtrId);
+  if (isCloudFaved || isLocalFaved) {
+    favBtn.innerHTML = '⭐ 已收藏';
+    favBtn.className = 'btn btn-success-full';
+  } else {
+    favBtn.innerHTML = '⭐ 收藏';
+    favBtn.className = 'btn btn-secondary';
+  }
+  // Rebuild group list to reflect new checkmarks
+  const favList = document.getElementById('avtrdbFavGroupList');
+  if (favList) _buildFavGroupListHtml(favList, avtrId);
 }
 
 function openInVRCX(avtrId) {

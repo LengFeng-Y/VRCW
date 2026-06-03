@@ -31,6 +31,7 @@ let favoriteGroups = []; // Avatar favorite groups
 let worldFavGroups  = []; // World favorite groups
 let friendFavGroups = []; // Friend favorite groups
 let favoriteIdMap = new Map(); // avatarId -> favoriteId (kept per current category)
+let avatarFavTagMap = new Map(); // avatarId -> Set<groupName> (which groups this avatar is in)
 let worldFavoriteIdMap = new Map(); // worldId -> favoriteId (kept per current category)
 let worldFavGroupCounts = new Map(); // groupName -> count (populated by syncAllFavoriteIds)
 let avatarFavGroupCounts = new Map(); // groupName -> count
@@ -414,6 +415,8 @@ async function saveToLocalFavorite(av) {
     }
   }
   logMsg(`✅ 已保存到本地收藏: ${av.name}`, "info");
+  // Refresh the detail modal button if it's showing this avatar
+  if (typeof _refreshDetailAfterFavChange === 'function') _refreshDetailAfterFavChange(av.id);
 }
 
 async function removeFromLocalFavorite(id) {
@@ -441,6 +444,8 @@ async function removeFromLocalFavorite(id) {
     if (totalChip) totalChip.textContent = String(localAvatarFavs.length);
   }
   logMsg(`🗑️ 已从本地收藏移除`, "info");
+  // Refresh the detail modal button if it's showing this avatar
+  if (typeof _refreshDetailAfterFavChange === 'function') _refreshDetailAfterFavChange(id);
 }
 
 // ── HTML escape helper (prevent XSS) ──

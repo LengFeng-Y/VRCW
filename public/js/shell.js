@@ -10,6 +10,7 @@ async function syncAllFavoriteIds() {
   try {
     // Clear maps to prevent accumulation on sync/refresh
     favoriteIdMap.clear();
+    avatarFavTagMap.clear();
     worldFavoriteIdMap.clear();
     avatarFavGroupCounts.clear();
     worldFavGroupCounts.clear();
@@ -27,7 +28,13 @@ async function syncAllFavoriteIds() {
        favs.forEach((f) => {
         favoriteIdMap.set(f.favoriteId, f.id);
         const tag = f.tags?.[0];
-        if (tag) avatarFavGroupCounts.set(tag, (avatarFavGroupCounts.get(tag) || 0) + 1);
+        if (tag) {
+          avatarFavGroupCounts.set(tag, (avatarFavGroupCounts.get(tag) || 0) + 1);
+          // Track which group(s) this avatar is favorited into
+          const existing = avatarFavTagMap.get(f.favoriteId);
+          if (existing) existing.add(tag);
+          else avatarFavTagMap.set(f.favoriteId, new Set([tag]));
+        }
       });
       if (favs.length < 100) break;
       offset += 100;

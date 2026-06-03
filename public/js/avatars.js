@@ -508,28 +508,21 @@ async function unfavorite(avatarId, avatarName) {
     logMsg(`✓ Removed ${avatarName} from favorites`, "success");
     // Remove from local data
     favoriteIdMap.delete(avatarId);
+    avatarFavTagMap.delete(avatarId);
+    // Decrement group counter
+    if (currentCategory && currentCategory !== 'mine' && currentCategory !== 'local') {
+      const cur = avatarFavGroupCounts.get(currentCategory) || 0;
+      avatarFavGroupCounts.set(currentCategory, Math.max(0, cur - 1));
+    }
     avatars = avatars.filter((a) => a.id !== avatarId);
     visibleAvatars = visibleAvatars.filter((a) => a.id !== avatarId);
     selectedIds.delete(avatarId);
     // Update IDB cache to reflect removal
     try { await idb.set("avatars_" + currentCategory, avatars); } catch (_) {}
     
-    // Update Modal UI if it's currently showing this avatar
-    const modal = document.getElementById("avtrdbDetailModal");
-    const favBtn = document.getElementById("avtrdbDetailFavBtn");
-    if (modal && !modal.classList.contains("hidden")) {
-       const displayedId = document.getElementById("avtrdbDetailId").textContent;
-       if (displayedId === avatarId) {
-           favBtn.innerHTML = "⭐ 收藏";
-           favBtn.className = "btn btn-secondary";
-           favBtn.onclick = toggleAvtrdbFavMenu;
-           const favList = document.getElementById("avtrdbFavGroupList");
-           if (favList && favoriteGroups.length > 0) {
-             favList.innerHTML = favoriteGroups.map(g =>
-               `<button class="avtrdb-fav-group-btn" onclick="addToFavorite('${escHtml(avatarId)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>`
-             ).join("");
-           }
-       }
+    // Update Modal UI via the shared helper
+    if (typeof _refreshDetailAfterFavChange === 'function') {
+      _refreshDetailAfterFavChange(avatarId);
     }
 
     // Animate card removal
