@@ -131,10 +131,10 @@ async function preloadAllFavorites(groups) {
   for (const g of groups) {
     // Skip currently active category - already fetched by fetchAvatars
     if (g === currentCategory) continue;
-    // Skip if we already have cache for this group (avoid overwriting user changes)
+    // Skip if cache is still fresh (same TTL as fetchAvatars: 5 min)
     try {
-      const existing = await idb.get("avatars_" + g);
-      if (existing && existing.length > 0) continue;
+      const cacheAge = await idb.get('avatar_basics_age_' + g) || 0;
+      if (cacheAge > 0 && (Date.now() - cacheAge) < 5 * 60 * 1000) continue;
     } catch (_) {}
     try {
       let offset = 0;
@@ -152,6 +152,14 @@ async function preloadAllFavorites(groups) {
       }
       if (allFetched.length > 0) {
         await idb.set("avatars_" + g, allFetched);
+        // Also write basics + age so fetchAvatars' fast path works correctly
+        const basics = allFetched.map(a => ({
+          id: a.id, name: a.name, thumbnailImageUrl: a.thumbnailImageUrl,
+          imageUrl: a.imageUrl, releaseStatus: a.releaseStatus,
+          authorId: a.authorId, tags: a.tags
+        }));
+        idb.set('avatar_basics_' + g, basics).catch(() => {});
+        idb.set('avatar_basics_age_' + g, Date.now()).catch(() => {});
         // Incremental update to global map
         allFetched.forEach(av => {
           if (av.id && av.name && av.name !== 'Unknown') {
@@ -159,6 +167,9 @@ async function preloadAllFavorites(groups) {
           }
         });
         logMsg(`✓ Preloaded ${allFetched.length} for ${g}`, "info");
+      } else {
+        // Even if empty, mark as freshly checked so we don't re-fetch immediately
+        idb.set('avatar_basics_age_' + g, Date.now()).catch(() => {});
       }
       // Small delay between groups to prevent rate limiting
       await new Promise((r) => setTimeout(r, 500));
