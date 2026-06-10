@@ -1903,9 +1903,14 @@ select.input-field {
   flex-shrink: 0;
 }
 
+#fpActions > div {
+  display: contents !important;
+}
+
 #fpActions .btn {
   width: 100%;
-  min-height: 38px;
+  height: 40px;
+  min-height: 40px;
   min-width: 0;
   padding: 8px 12px;
   white-space: nowrap;
