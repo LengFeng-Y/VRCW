@@ -37,18 +37,44 @@ function openFriendProfile(el) {
   }
 }
 
+function getFriendProfileActionState(f) {
+  const id = (f && f.id) || '';
+  const myId = (typeof currentUserId !== 'undefined' && currentUserId) || (window.myProfileData && window.myProfileData.id) || '';
+  const hasLocation = !!(f && f.location && f.location.startsWith('wrld_'));
+  const isOnline = !!(f && (f.state === 'online' || (f.location && f.location !== 'offline')));
+  const isFriend = !!(f && (f.isFriend || (window.allFriends && window.allFriends.some(af => af.id === id))));
+  const isJoinable = !!(f && hasLocation
+    && !f.location.includes('~private')
+    && f.location !== 'traveling'
+    && f.location !== 'offline'
+    && f.location !== 'private');
+
+  const hasModeration = type => myModerations.some(m => m.moderated === id && m.type === type);
+  const isFriendFaved = isFriend && friendFavoriteIdMap.has(id);
+
+  return {
+    id,
+    isSelf: !!id && id === myId,
+    isFriend,
+    isOnline,
+    isJoinable,
+    isFriendFaved,
+    isBlocked: hasModeration('block'),
+    isMuted: hasModeration('mute'),
+    isShown: hasModeration('showAvatar'),
+    isHidden: hasModeration('hideAvatar'),
+    isInteractOff: hasModeration('interactOff'),
+    friendRequestPending: !!(f && f.friendRequestPending),
+  };
+}
+
 
 function _renderFriendProfileUI(f, modal) {
   if (!f) return;
   const id = f.id || '';
   const name = f.displayName || '';
-  // Determine if this profile is the logged-in user. The canonical globals are
-  // currentUserId (core.js) and myProfileData (friends.js). The old `window._myUser`
-  // was never assigned anywhere, so isSelf was always false and self-profiles
-  // wrongly showed add/delete-friend/boop buttons.
-  const myId = (typeof currentUserId !== 'undefined' && currentUserId) || (window.myProfileData && window.myProfileData.id) || '';
-  const isSelf = !!id && id === myId;
-  const isFriend = f.isFriend || (window.allFriends && window.allFriends.some(af => af.id === id));
+  const fpState = getFriendProfileActionState(f);
+  const { isSelf, isFriend, isBlocked, isMuted } = fpState;
 
   // Show modal and ensure it's on top
   modal.classList.remove('hidden');
@@ -84,8 +110,6 @@ function _renderFriendProfileUI(f, modal) {
   const ab = document.getElementById('fpAgeBadge');
   if (ab) ab.style.display = f.ageVerificationStatus==='18+' ? '' : 'none';
 
-  const isBlocked = myModerations.some(m => m.moderated === f.id && m.type === 'block');
-  const isMuted   = myModerations.some(m => m.moderated === f.id && m.type === 'mute');
   const modBadge = document.getElementById('fpModBadge');
   if (modBadge) {
     if (isBlocked) {
@@ -172,13 +196,16 @@ function _renderFriendProfileUI(f, modal) {
     `<span style="font-family:monospace;font-size:0.9em;">${escHtml(f.id||'')}</span>
     <button onclick="navigator.clipboard.writeText('${escJsAttr(f.id||'')}').then(()=>this.textContent='✓')" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.9em;">复制</button>`;
 
-  const isFriendFaved = friendFavoriteIdMap.has(id);
-  const isOnline = f.state === 'online' || (f.location && f.location !== 'offline');
+  const isFriendFaved = fpState.isFriendFaved;
+  const isOnline = fpState.isOnline;
+  const friendFavBtn = isFriend
+    ? `<button class="btn ${isFriendFaved?'btn-warning':'btn-secondary'}" style="font-size:0.82em;" onclick="${isFriendFaved?'toggleFriendFavorite(\''+escJsAttr(id)+'\',\''+escJsAttr(name)+'\')':'toggleFriendFavMenu(event,\''+escJsAttr(id)+'\')'}">${isFriendFaved?'⭐ 已收藏':'⭐ 收藏'}</button>`
+    : '';
   
   let actionButtons = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
       <button class="btn btn-secondary" style="font-size:0.82em;padding:6px 14px;" onclick="showFriendContextMenu(event)">··· 操作菜单</button>
-      <button class="btn ${isFriendFaved?'btn-warning':'btn-secondary'}" style="font-size:0.82em;" onclick="${isFriendFaved?'toggleFriendFavorite(\''+escJsAttr(id)+'\',\''+escJsAttr(name)+'\')':'toggleFriendFavMenu(event,\''+escJsAttr(id)+'\')'}">${isFriendFaved?'⭐ 已收藏':'⭐ 收藏'}</button>
+      ${friendFavBtn}
       <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escHtml(f.id||'')}','_blank')">🔗 VRChat 主页</button>
     </div>
   `;
@@ -186,18 +213,29 @@ function _renderFriendProfileUI(f, modal) {
   if (!isSelf) {
     actionButtons += `<div style="display:flex;gap:8px;flex-wrap:wrap;">`;
     if (isFriend) {
-      actionButtons += `
-        <button class="btn btn-primary" style="font-size:0.82em;" onclick="sendBoop('${escJsAttr(id)}','${escJsAttr(name)}')">👋 戳一下 (Boop)</button>
-        ${isOnline ? `<button class="btn btn-success" style="font-size:0.82em;" onclick="sendInvite('${escJsAttr(id)}','${escJsAttr(name)}')">📩 邀请</button>` : ''}
-        ${isOnline ? `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="requestInvite('${escJsAttr(id)}','${escJsAttr(name)}')">📩 请求邀请</button>` : ''}
-        <button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);font-size:0.82em;" onclick="deleteFriend('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">🗑️ 删除好友</button>
-      `;
+      if (isBlocked) {
+        actionButtons += `<button class="btn" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);font-size:0.82em;" onclick="unblockUser('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">解除屏蔽</button>`;
+      } else {
+        actionButtons += `
+          <button class="btn btn-primary" style="font-size:0.82em;" onclick="sendBoop('${escJsAttr(id)}','${escJsAttr(name)}')">👋 戳一下 (Boop)</button>
+          ${isOnline ? `<button class="btn btn-success" style="font-size:0.82em;" onclick="sendInvite('${escJsAttr(id)}','${escJsAttr(name)}')">📩 邀请</button>` : ''}
+          ${isOnline ? `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="requestInvite('${escJsAttr(id)}','${escJsAttr(name)}')">📩 请求邀请</button>` : ''}
+        `;
+      }
+      if (isMuted) {
+        actionButtons += `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="unmuteUser('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">解除静音</button>`;
+      }
+      actionButtons += `<button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);font-size:0.82em;" onclick="deleteFriend('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">🗑️ 删除好友</button>`;
     } else {
-      const pending = !!f.friendRequestPending;
-      if (pending) {
-        actionButtons += `<button class="btn btn-secondary" style="font-size:0.82em;opacity:0.7;cursor:default;" disabled>⏳ 请求已发送</button>`;
+      if (isBlocked) {
+        actionButtons += `<button class="btn" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);font-size:0.82em;" onclick="unblockUser('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">解除屏蔽</button>`;
+      } else if (fpState.friendRequestPending) {
+        actionButtons += `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="cancelFriendRequest('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">⏳ 取消好友请求</button>`;
       } else {
         actionButtons += `<button class="btn" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);font-size:0.82em;" onclick="sendFriendRequest('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">➕ 添加好友</button>`;
+      }
+      if (isMuted) {
+        actionButtons += `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="unmuteUser('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">解除静音</button>`;
       }
     }
     actionButtons += `</div>`;
@@ -632,4 +670,3 @@ async function sendFriendRequest(userId, name) {
     }
   } catch(e) { friendLogMsg(`✗ 发送失败: ${e.message}`, 'error'); }
 }
-

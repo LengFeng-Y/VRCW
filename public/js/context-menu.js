@@ -72,7 +72,7 @@ function buildCtxMenu(sections) {
       const btn = document.createElement('button');
       btn.className = 'ctx-menu-item' + (item.danger ? ' danger' : '');
       btn.innerHTML = `<span class="ctx-icon">${item.icon||''}</span><span>${item.label}</span>`;
-      btn.onclick = (e) => { e.stopPropagation(); closeCtxMenu(); item.action && item.action(); };
+      btn.onclick = (e) => { e.stopPropagation(); closeCtxMenu(); item.action && item.action(e); };
       sec.appendChild(btn);
     });
     menu.appendChild(sec);
@@ -113,25 +113,22 @@ function showFriendContextMenu(e) {
   if (!f) return;
   const id = f.id || '';
   const name = f.displayName || '';
-  const hasLocation = f.location && f.location.startsWith('wrld_');
-  const isOnline = f.state === 'online' || (f.location && f.location !== 'offline');
-  // Joinable means: we have a real world id, it's not private, and the user
-  // isn't mid-transit (`traveling`) or simply marked offline. A `~private`
-  // tag means a private instance — self-invite endpoint will 403 on those.
-  const isJoinable = hasLocation
-    && !f.location.includes('~private')
-    && f.location !== 'traveling'
-    && f.location !== 'offline'
-    && f.location !== 'private';
+  const fpState = getFriendProfileActionState(f);
+  const {
+    isSelf,
+    isFriend,
+    isOnline,
+    isJoinable,
+    isFriendFaved,
+    isBlocked,
+    isMuted,
+    isShown,
+    isHidden,
+    isInteractOff,
+    friendRequestPending,
+  } = fpState;
 
-  const isBlocked = myModerations.some(m => m.moderated === id && m.type === 'block');
-  const isMuted   = myModerations.some(m => m.moderated === id && m.type === 'mute');
-  const isShown   = myModerations.some(m => m.moderated === id && m.type === 'showAvatar');
-  const isHidden  = myModerations.some(m => m.moderated === id && m.type === 'hideAvatar');
-  const isInteractOff = myModerations.some(m => m.moderated === id && m.type === 'interactOff');
-  const isFriendFaved = friendFavoriteIdMap.has(id);
-
-  const menu = buildCtxMenu([
+  const sections = [
     { items: [
       { icon:'🔄', label:'刷新资料', action: async () => {
         // Re-fetch from API for up-to-date data
@@ -152,36 +149,41 @@ function showFriendContextMenu(e) {
       { icon:'🔗', label:'分享 VRChat 主页', action: () => window.open(`https://vrchat.com/home/user/${id}`, '_blank') },
     ]},
     { label:'位置互动', items: [
-      isJoinable ? { icon:'🚀', label:'申请加入实例', action: () => friendRequestJoin(id, name) } : null,
-      isOnline ? { icon:'📩', label:'请求邀请', action: () => requestInvite(id, name) } : null,
-      isOnline ? { icon:'📨', label:'发送邀请', action: () => sendInvite(id, name) } : null,
-      { icon:'👋', label:'发送戳一戳...', action: () => {
+      !isSelf && !isBlocked && isFriend && isJoinable ? { icon:'🚀', label:'申请加入实例', action: () => friendRequestJoin(id, name) } : null,
+      !isSelf && !isBlocked && isFriend && isOnline ? { icon:'📩', label:'请求邀请', action: () => requestInvite(id, name) } : null,
+      !isSelf && !isBlocked && isFriend && isOnline ? { icon:'📨', label:'发送邀请', action: () => sendInvite(id, name) } : null,
+      !isSelf && !isBlocked && isFriend ? { icon:'👋', label:'发送戳一戳...', action: () => {
           setTimeout(() => showBoopMenu(e, id, name), 10);
-      }},
+      }} : null,
     ].filter(Boolean)},
     { label:'模型控制', items: [
-      { icon:'👁️', label: isShown ? '取消强制显示模型' : '显示该玩家模型', action: () => isShown ? resetAvatarModeration(id, name, 'showAvatar') : showAvatarUser(id, name) },
-      { icon:'🙈', label: isHidden ? '取消隐藏模型' : '隐藏该玩家模型', action: () => isHidden ? resetAvatarModeration(id, name, 'hideAvatar') : hideAvatarUser(id, name) },
-      { icon:'🤝', label: isInteractOff ? '打开模型互动 (PhysBones)' : '关闭模型互动', action: () => isInteractOff ? resetAvatarModeration(id, name, 'interactOff') : disableAvatarInteraction(id, name) },
+      !isSelf && !isBlocked ? { icon:'👁️', label: isShown ? '取消强制显示模型' : '显示该玩家模型', action: () => isShown ? resetAvatarModeration(id, name, 'showAvatar') : showAvatarUser(id, name) } : null,
+      !isSelf && !isBlocked ? { icon:'🙈', label: isHidden ? '取消隐藏模型' : '隐藏该玩家模型', action: () => isHidden ? resetAvatarModeration(id, name, 'hideAvatar') : hideAvatarUser(id, name) } : null,
+      !isSelf && !isBlocked ? { icon:'🤝', label: isInteractOff ? '打开模型互动 (PhysBones)' : '关闭模型互动', action: () => isInteractOff ? resetAvatarModeration(id, name, 'interactOff') : disableAvatarInteraction(id, name) } : null,
       { icon:'🧑', label:'查看模型信息 (官网)', action: () => {
         const avId = f.currentAvatarId; if (avId) window.open(`https://vrchat.com/home/avatar/${avId}`, '_blank');
         else showToast('该好友模型 ID 不可访问', 'info');
       }},
-    ]},
+    ].filter(Boolean)},
     { label:'群组', items: [
-      { icon:'🏠', label:'邀请加入群组', action: (ev) => showGroupInviteMenu(ev, id, name) },
+      !isSelf && !isBlocked && isFriend ? { icon:'🏠', label:'邀请加入群组', action: (ev) => showGroupInviteMenu(ev, id, name) } : null,
     ]},
     { label:'管理', items: [
-      { icon:'⭐', label: isFriendFaved ? '针对该好友移除收藏' : '收藏到分组', action: (ev) => isFriendFaved ? toggleFriendFavorite(id, name) : toggleFriendFavMenu(ev, id) },
-      { icon:'📝', label:'编辑备注', action: () => showUserNoteDialog(id, name) },
-      { icon:'🔇', label: isBlocked ? '解除屏蔽' : '屏蔽', action: () => isBlocked ? unblockUser(id, name) : blockUser(id, name) },
-      { icon:'🔕', label: isMuted ? '解除静音' : '静音', action: () => isMuted ? unmuteUser(id, name) : muteUser(id, name) },
-      { icon:'🚩', label:'举报该用户', action: () => showReportUserDialog(id, name) },
+      isFriend ? { icon:'⭐', label: isFriendFaved ? '针对该好友移除收藏' : '收藏到分组', action: (ev) => isFriendFaved ? toggleFriendFavorite(id, name) : toggleFriendFavMenu(ev, id) } : null,
+      isFriend ? { icon:'📝', label:'编辑备注', action: () => showUserNoteDialog(id, name) } : null,
+      !isSelf && !isFriend && !isBlocked && !friendRequestPending ? { icon:'➕', label:'添加好友', action: () => sendFriendRequest(id, name) } : null,
+      !isSelf && !isFriend && friendRequestPending ? { icon:'⏳', label:'取消好友请求', action: () => cancelFriendRequest(id, name) } : null,
+      !isSelf ? { icon:'🔇', label: isBlocked ? '解除屏蔽' : '屏蔽', action: () => isBlocked ? unblockUser(id, name) : blockUser(id, name) } : null,
+      !isSelf ? { icon:'🔕', label: isMuted ? '解除静音' : '静音', action: () => isMuted ? unmuteUser(id, name) : muteUser(id, name) } : null,
+      !isSelf ? { icon:'🚩', label:'举报该用户', action: () => showReportUserDialog(id, name) } : null,
     ]},
     { items: [
-      { icon:'🗑️', label:'删除好友', danger: true, action: () => deleteFriend(id, name) },
+      isFriend ? { icon:'🗑️', label:'删除好友', danger: true, action: () => deleteFriend(id, name) } : null,
     ]},
-  ]);
+  ].map(section => Object.assign({}, section, { items: section.items.filter(Boolean) }))
+   .filter(section => section.items.length > 0);
+
+  const menu = buildCtxMenu(sections);
   positionCtxMenu(e, menu);
 }
 
@@ -473,6 +475,10 @@ async function cancelFriendRequest(userId, name) {
     if (r.ok) {
       showToast('已取消好友请求', 'success');
       logMsg(`已取消向 ${name} 的好友请求`, 'info');
+      if (currentFriendProfile && currentFriendProfile.id === userId) {
+        currentFriendProfile.friendRequestPending = false;
+        _refreshFriendProfileIfOpen(userId);
+      }
     } else {
       showToast('取消失败: ' + r.status, 'error');
     }
