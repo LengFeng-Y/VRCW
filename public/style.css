@@ -1679,6 +1679,7 @@ select.input-field {
   cursor: default;
   content-visibility: auto;
   contain-intrinsic-size: auto 64px;
+  min-height: 64px;
   margin-bottom: 2px;
 }
 
@@ -1864,6 +1865,12 @@ select.input-field {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
+  min-width: 0;
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
 }
 
 .fp-stat-label {
@@ -1876,6 +1883,32 @@ select.input-field {
   font-size: 0.82em;
   color: var(--text-primary);
   font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#fpStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+#fpActions {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+#fpActions .btn {
+  width: 100%;
+  min-height: 38px;
+  min-width: 0;
+  padding: 8px 12px;
+  white-space: nowrap;
 }
 
 /* ── Friend Profile Modal sub-tabs ── */
@@ -2869,6 +2902,7 @@ select.input-field {
   align-items: center;
   gap: 10px;
   padding: 10px;
+  min-height: 62px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
