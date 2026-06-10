@@ -490,6 +490,48 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   align-content: start;
 }
 
+.avatar-grid.search-user-grid {
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  grid-auto-rows: minmax(86px, max-content);
+}
+
+.search-user-card {
+  min-height: 86px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  cursor: pointer;
+  contain-intrinsic-size: auto 86px;
+}
+
+.search-user-card .friend-avatar-wrap {
+  width: 52px;
+  height: 52px;
+}
+
+.search-user-card .friend-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 52px;
+}
+
+.search-user-card .friend-name {
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.search-user-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.search-user-status {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
 /* ── Cards ── */
 .avatar-card {
   background: var(--bg-card);
@@ -2470,6 +2512,21 @@ select.input-field {
     grid-template-columns: repeat(2, 1fr) !important;
     padding: 12px 8px !important;
     gap: 10px !important;
+  }
+
+  .avatar-grid.search-user-grid {
+    grid-template-columns: 1fr !important;
+    grid-auto-rows: minmax(82px, max-content);
+  }
+
+  .search-user-card {
+    min-height: 82px;
+    padding: 12px;
+  }
+
+  .search-user-card .friend-avatar-wrap {
+    width: 48px;
+    height: 48px;
   }
 
   /* Modal: full-screen on mobile */

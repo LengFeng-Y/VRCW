@@ -112,6 +112,9 @@ async function doAvtrdbSearch() {
   _avtrdbRenderMap = new Map();
 
   const grid = document.getElementById("avtrdbGrid");
+  grid.classList.remove('search-user-grid', 'search-group-grid', 'search-world-grid');
+  const searchGridClass = cat === 'users' ? 'search-user-grid' : cat === 'groups' ? 'search-group-grid' : cat === 'worlds' ? 'search-world-grid' : '';
+  if (searchGridClass) grid.classList.add(searchGridClass);
   grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:rgba(255,255,255,0.4);">搜索中...</div>`;
   document.getElementById("avtrdbStats").textContent = "";
   document.getElementById("avtrdbLoadMore").style.display = "none";
@@ -157,13 +160,14 @@ async function vrcdbFetch(cat, query) {
     if (cat === 'users') {
       grid.innerHTML = filteredData.map(u => {
         const fJson = escAttrJson(u);
-        return `<div class="friend-card" onclick="openFriendProfile(this);" data-friend="${fJson}">
+        return `<div class="friend-card search-user-card" onclick="openFriendProfile(this);" data-friend="${fJson}">
           <div class="friend-avatar-wrap">
             <img src="${escHtml(proxyImg(u.userIcon||u.profilePicOverride||u.currentAvatarThumbnailImageUrl||''))}" onerror="this.style.display=\'none\'">
           </div>
           <div class="friend-info">
             <div class="friend-name">${escHtml(u.displayName)}</div>
-            <div class="friend-location" style="font-size:0.75em;color:var(--text-muted);">${escHtml(u.statusDescription||'')}</div>
+            <div class="friend-location search-user-id">${escHtml(u.id||'')}</div>
+            <div class="friend-location search-user-status">${escHtml(u.statusDescription||u.username||'')}</div>
           </div>
         </div>`;
       }).join('');
@@ -984,5 +988,3 @@ async function deleteImpostor(avtrId, name) {
     showToast('错误: ' + e.message, 'error');
   }
 }
-
-
