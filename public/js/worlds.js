@@ -106,8 +106,21 @@ function switchWorldCategory(cat) {
   const btn = document.getElementById(btnId);
   if (btn) { btn.classList.remove('btn-secondary'); btn.classList.add('active','btn-primary'); }
 
-  fetchWorlds(cat);
+  fetchWorlds(cat, cat.startsWith('fav_'));
   });
+}
+
+function _worldCacheIdsMatch(category, ids) {
+  const cachedIds = (allWorlds || []).map(w => w && w.id).filter(Boolean);
+  if (!category.startsWith('fav_') || cachedIds.length !== ids.length) return false;
+  for (let i = 0; i < ids.length; i++) {
+    if (cachedIds[i] !== ids[i]) return false;
+  }
+  return true;
+}
+
+function _worldFavTypeForGroup(groupName) {
+  return String(groupName || '').startsWith('vrcPlusWorlds') ? 'vrcPlusWorld' : 'world';
 }
 
 async function fetchWorlds(category, forceRefresh = false) {
@@ -131,17 +144,17 @@ async function fetchWorlds(category, forceRefresh = false) {
   try {
     const cachedBasics = await idb.get('world_basics_' + category) || [];
     const cacheAge = await idb.get('world_basics_age_' + category) || 0;
-    cacheIsFresh = cachedBasics.length > 0 && !forceRefresh && (Date.now() - cacheAge) < WORLDS_CACHE_TTL;
+    cacheIsFresh = cachedBasics.length > 0 && (Date.now() - cacheAge) < WORLDS_CACHE_TTL;
 
-    if (cachedBasics.length > 0 && !forceRefresh) {
+    if (cachedBasics.length > 0) {
       allWorlds = cachedBasics;
       filterWorlds();
-      const freshLabel = cacheIsFresh ? '缓存' : '缓存(刷新中)';
+      const freshLabel = forceRefresh ? '缓存(刷新中)' : (cacheIsFresh ? '缓存' : '缓存(刷新中)');
       if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界 (${freshLabel})`;
-      worldLogMsg(`⚡ 从缓存加载了 ${cachedBasics.length} 个世界${cacheIsFresh ? '，缓存有效跳过API' : ''}`, 'info');
+      worldLogMsg(`⚡ 从缓存加载了 ${cachedBasics.length} 个世界${cacheIsFresh && !forceRefresh ? '，缓存有效跳过API' : ''}`, 'info');
 
       // If cache is still fresh, skip API refresh entirely — saves 87+ requests
-      if (cacheIsFresh) return;
+      if (cacheIsFresh && !forceRefresh) return;
     } else {
       gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.3);">加载中...</div>';
       worldLogMsg('🌐 从 API 获取世界列表...', 'info');
@@ -177,14 +190,19 @@ async function fetchWorlds(category, forceRefresh = false) {
 
     if (category.startsWith('fav_')) {
       const groupName = category.slice(4);
-      const isVrcPlusGroup = groupName.startsWith('vrcPlusWorlds');
-      const favType = isVrcPlusGroup ? 'vrcPlusWorld' : 'world';
+      const favType = _worldFavTypeForGroup(groupName);
+      const onlineWorldIds = [];
+      let favoriteListFailed = false;
       
       let offset = 0;
       while (true) {
         if (seq !== currentWorldFetchSeq) return;
         const r = await apiCall(`/api/vrc/favorites?type=${favType}&tag=${groupName}&n=100&offset=${offset}`);
-        if (!r.ok) { worldLogMsg(`✗ 获取收藏列表失败 (HTTP ${r.status})`, 'error'); break; }
+        if (!r.ok) {
+          favoriteListFailed = true;
+          worldLogMsg(`✗ 获取收藏列表失败 (HTTP ${r.status})，保留本地缓存`, 'error');
+          break;
+        }
         const favs = await r.json();
         if (!favs || !favs.length || seq !== currentWorldFetchSeq) break;
         
@@ -192,28 +210,50 @@ async function fetchWorlds(category, forceRefresh = false) {
             if (f.favoriteId) worldFavoriteIdMap.set(f.favoriteId, f.id);
             return f.favoriteId;
         }).filter(Boolean);
-
-        // Concurrency 8: streams in fast without bursting the CF free-tier
-        // subrequest budget. Each resolved chunk is appended immediately
-        // (see updateWorldBatch -> _appendWorldCards), so the user sees
-        // worlds appear continuously rather than waiting for all 100.
-        const CONCURRENCY = 8;
-        for (let i = 0; i < worldIds.length; i += CONCURRENCY) {
-            if (seq !== currentWorldFetchSeq || category !== currentWorldCategory) return;
-            const chunk = worldIds.slice(i, i + CONCURRENCY);
-            const results = await Promise.allSettled(chunk.map(wid => 
-                apiCall(`/api/vrc/worlds/${wid}`).then(async res => {
-                    if (res.status === 404 || res.status === 403) return { id: wid, name: '失效世界 (Invalid World)', isInvalid: true };
-                    return res.ok ? res.json() : { id: wid, name: '加载失败', isInvalid: true };
-                })
-            ));
-            const freshBatch = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-            const invalids = freshBatch.filter(w => w.isInvalid).length;
-            if (invalids > 0) worldLogMsg(`⚠ 发现 ${invalids} 个失效世界`, 'error');
-            updateWorldBatch(freshBatch);
-        }
+        onlineWorldIds.push(...worldIds);
         if (favs.length < 100) break;
         offset += 100;
+      }
+
+      if (favoriteListFailed) return;
+
+      worldFavGroupCounts.set(groupName, onlineWorldIds.length);
+      renderWorldFavGroupButtons();
+      const activeBtn = document.getElementById(`worldCatFav_${groupName}`);
+      if (activeBtn) { activeBtn.classList.remove('btn-secondary'); activeBtn.classList.add('active', 'btn-primary'); }
+
+      if (forceRefresh && _worldCacheIdsMatch(category, onlineWorldIds)) {
+        if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界 (已是最新)`;
+        worldLogMsg('✅ 收藏夹未变化，跳过详情刷新', 'success');
+        return;
+      }
+
+      if (onlineWorldIds.length === 0) {
+        allWorlds = [];
+        renderWorldGrid([]);
+        await idb.set('world_basics_' + category, []);
+        await idb.set('world_basics_age_' + category, Date.now());
+        worldLogMsg('✅ 收藏夹为空，已同步本地缓存', 'success');
+      }
+
+      // Concurrency 8: streams in fast without bursting the CF free-tier
+      // subrequest budget. Each resolved chunk is appended immediately
+      // (see updateWorldBatch -> _appendWorldCards), so the user sees
+      // worlds appear continuously rather than waiting for all 100.
+      const CONCURRENCY = 8;
+      for (let i = 0; i < onlineWorldIds.length; i += CONCURRENCY) {
+          if (seq !== currentWorldFetchSeq || category !== currentWorldCategory) return;
+          const chunk = onlineWorldIds.slice(i, i + CONCURRENCY);
+          const results = await Promise.allSettled(chunk.map(wid =>
+              apiCall(`/api/vrc/worlds/${wid}`).then(async res => {
+                  if (res.status === 404 || res.status === 403) return { id: wid, name: '失效世界 (Invalid World)', isInvalid: true };
+                  return res.ok ? res.json() : { id: wid, name: '加载失败', isInvalid: true };
+              })
+          ));
+          const freshBatch = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+          const invalids = freshBatch.filter(w => w.isInvalid).length;
+          if (invalids > 0) worldLogMsg(`⚠ 发现 ${invalids} 个失效世界`, 'error');
+          updateWorldBatch(freshBatch);
       }
     } else {
       // Recent, Active, Mine
@@ -496,7 +536,7 @@ async function quickWorldFav(worldId, event) {
       try {
         const r = await apiCall('/api/vrc/favorites', {
           method: 'POST',
-          json: { type: 'world', favoriteId: worldId, tags: [g.name] }
+          json: { type: _worldFavTypeForGroup(g.name), favoriteId: worldId, tags: [g.name] }
         });
         if (r.ok) {
           const res = await r.json();
@@ -1127,7 +1167,7 @@ async function addWorldToFavorite(worldId, groupName, btn) {
   try {
     const r = await apiCall('/api/vrc/favorites', {
       method: "POST",
-      json: { type: "world", favoriteId: worldId, tags: [groupName] },
+      json: { type: _worldFavTypeForGroup(groupName), favoriteId: worldId, tags: [groupName] },
     });
     if (r.ok) {
       const res = await r.json();
