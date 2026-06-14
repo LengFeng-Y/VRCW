@@ -40,21 +40,23 @@ async function syncAllFavoriteIds() {
       offset += 100;
       if (offset >= 500) break;
     }
-    // 2. Worlds
-    offset = 0;
-    while (true) {
-      const resp = await apiCall(`/api/vrc/favorites?type=world&n=100&offset=${offset}`);
-      if (!resp.ok) break;
-      const favs = await resp.json();
-      if (!favs || favs.length === 0 || favs.error) break;
-       favs.forEach((f) => {
-        worldFavoriteIdMap.set(f.favoriteId, f.id);
-        const tag = f.tags?.[0];
-        if (tag) worldFavGroupCounts.set(tag, (worldFavGroupCounts.get(tag) || 0) + 1);
-      });
+    // 2. Worlds (standard + VRC+ extra slots)
+    for (const worldFavType of ['world', 'vrcPlusWorld']) {
+      offset = 0;
+      while (true) {
+        const resp = await apiCall(`/api/vrc/favorites?type=${worldFavType}&n=100&offset=${offset}`);
+        if (!resp.ok) break;
+        const favs = await resp.json();
+        if (!favs || favs.length === 0 || favs.error) break;
+        favs.forEach((f) => {
+          worldFavoriteIdMap.set(f.favoriteId, f.id);
+          const tag = f.tags?.[0];
+          if (tag) worldFavGroupCounts.set(tag, (worldFavGroupCounts.get(tag) || 0) + 1);
+        });
 
-      if (favs.length < 100) break;
-      offset += 100;
+        if (favs.length < 100) break;
+        offset += 100;
+      }
     }
     // 3. Friends — store as { favoriteId, tags } to match the per-category refresh
     // shape (friends.js:443). Previously this site stored a bare string and the
@@ -99,7 +101,7 @@ async function fetchFavoriteGroups() {
     const rW = await apiCall("/api/vrc/favorite/groups?type=world&n=50");
     if (rW.ok) {
       const g = await rW.json();
-      worldFavGroups = (g || []).filter(x => x.name && x.name.startsWith('worlds')).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+      worldFavGroups = (g || []).filter(x => x.name && (x.name.startsWith('worlds') || x.name.startsWith('vrcPlusWorlds'))).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
       if (typeof renderWorldFavGroupButtons === 'function') renderWorldFavGroupButtons();
     }
     // 3. Friends

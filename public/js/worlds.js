@@ -31,9 +31,29 @@ function renderWorldFavGroupButtons(message) {
   const container = document.getElementById('worldFavGroupList');
   if (!container) return;
 
-  const vrcPlusNames = new Set(worldFavGroups.filter(g => g.type === 'vrcPlusWorld').map(g => g.name));
-  let html = (worldFavGroups || []).map(g => {
-    const isVrcPlus = vrcPlusNames.has(g.name) || g.name === 'worlds1';
+  const groupByName = new Map((worldFavGroups || []).filter(g => g && g.name).map(g => [g.name, g]));
+  const myTags = (typeof myProfileData !== 'undefined' && myProfileData && myProfileData.tags) || [];
+  const hasVrcPlus = typeof isVRCPlus === 'function' && isVRCPlus(myTags);
+  const standardSlots = ['worlds1', 'worlds2', 'worlds3', 'worlds4'];
+  const vrcPlusSlots = hasVrcPlus ? ['vrcPlusWorlds1', 'vrcPlusWorlds2', 'vrcPlusWorlds3', 'vrcPlusWorlds4'] : [];
+  const slotNames = [...standardSlots, ...vrcPlusSlots];
+  const rendered = new Set();
+
+  let html = slotNames.map(name => {
+    const g = groupByName.get(name) || { name, displayName: name };
+    rendered.add(name);
+    const isVrcPlus = name.startsWith('vrcPlusWorlds') || g.type === 'vrcPlusWorld';
+    const count = worldFavGroupCounts.get(name);
+    const countLabel = Number.isFinite(count) ? ` (${count}/100)` : '';
+    const icon = isVrcPlus ? '💎' : '⭐';
+    return makeCatBtn(`${icon} ${escHtml(g.displayName || g.name)}${countLabel}`, `switchWorldCategory('fav_${name}')`, `worldCatFav_${name}`);
+  }).join('');
+
+  const extra = (worldFavGroups || [])
+    .filter(g => g && g.name && !rendered.has(g.name))
+    .sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+  html += extra.map(g => {
+    const isVrcPlus = g.name.startsWith('vrcPlusWorlds') || g.type === 'vrcPlusWorld';
     const icon = isVrcPlus ? '💎' : '⭐';
     return makeCatBtn(`${icon} ${escHtml(g.displayName || g.name)}`, `switchWorldCategory('fav_${g.name}')`, `worldCatFav_${g.name}`);
   }).join('');
@@ -59,7 +79,7 @@ async function loadWorldFavGroups() {
     const standard  = r1.ok ? (await r1.json() || []) : [];
     const vrcPlus   = r2.ok ? (await r2.json() || []) : [];
     const groups = [...standard, ...vrcPlus]
-      .filter(g => g && g.name && (g.name.startsWith('worlds') || g.type === 'world' || g.type === 'vrcPlusWorld'))
+      .filter(g => g && g.name && (g.name.startsWith('worlds') || g.name.startsWith('vrcPlusWorlds') || g.type === 'world' || g.type === 'vrcPlusWorld'))
       .sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
 
     worldFavGroups = groups;
