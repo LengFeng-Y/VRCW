@@ -497,10 +497,12 @@ async function openEditProfileModal() {
   }
   
   const modal = document.createElement('div');
-  modal.className = 'modal-overlay active';
+  modal.className = 'modal';
   // Use modalZTop() so this modal stacks above any already-open modal (was hard-
   // coded to 2000, which sits at the bottom of the modal range and got covered).
   modal.style.zIndex = modalZTop();
+  modal.dataset.scrollLocked = '1';
+  lockBodyScroll();
   // Click-on-overlay closes the modal (matches the rest of the app).
   modal.onclick = (e) => { if (e.target === modal) { modal.remove(); cleanup(); } };
   // Esc closes too. The handler is one-shot — it tears itself down once the modal
@@ -513,6 +515,7 @@ async function openEditProfileModal() {
   };
   function cleanup() {
     document.removeEventListener('keydown', escHandler);
+    if (modal.dataset.scrollLocked === '1') { unlockBodyScroll(); modal.dataset.scrollLocked = ''; }
   }
   document.addEventListener('keydown', escHandler);
   modal.innerHTML = `
