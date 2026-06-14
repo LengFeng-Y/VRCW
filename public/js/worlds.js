@@ -402,7 +402,7 @@ function _buildWorldCard(w) {
       ${isCached ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="">` : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`}
       <div class="avatar-name-overlay">${escHtml(w.name||'未知世界')}</div>
       <div class="card-tl-overlay">
-        <div class="card-checkbox ${sel ? 'on' : ''}" onclick="toggleSelectWorld('${w.id}', event)" title="选中/取消选中">${sel ? '✓' : ''}</div>
+        <div class="card-checkbox ${sel ? 'on' : ''}" onclick="toggleSelectWorld('${escJsAttr(w.id)}', event)" title="选中/取消选中">${sel ? '✓' : ''}</div>
       </div>
       <div class="card-tr-overlay">
         <div class="card-fav-quick" data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escJsAttr(w.id)}',event)" title="${isFaved ? '取消收藏' : '添加到收藏夹'}">${isFaved ? '⭐' : '☆'}</div>
@@ -727,7 +727,7 @@ async function openWorldDetail(worldId, worldObj = null) {
     document.getElementById('worldDetailName').textContent = w.name || 'Unknown World';
     document.getElementById('worldDetailBreadcrumbName').textContent = w.name || 'World';
     document.getElementById('worldDetailBreadcrumbAuthor').textContent = w.authorName || 'Unknown';
-    document.getElementById('worldDetailAuthorRow').innerHTML = `by <a href="#" onclick="openFriendProfileById('${w.authorId}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;font-weight:600;">${escHtml(w.authorName||'Unknown')}</a>`;
+    document.getElementById('worldDetailAuthorRow').innerHTML = `by <a href="#" onclick="openFriendProfileById('${escJsAttr(w.authorId)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;font-weight:600;">${escHtml(w.authorName||'Unknown')}</a>`;
     document.getElementById('worldDetailId').textContent = w.id;
     document.getElementById('worldDetailDesc').textContent = w.description || '无描述。';
     document.getElementById('worldDetailCreated').textContent = formatDate(w.created_at);
@@ -792,7 +792,7 @@ async function openWorldDetail(worldId, worldObj = null) {
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${friends.map(f => {
               const trust = getTrustInfo(f.tags||[]);
-              return `<div onclick="openFriendProfileById('${f.id}')" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,0.05);border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.08)';this.style.borderColor='var(--border)'" onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='transparent'">
+              return `<div onclick="openFriendProfileById('${escJsAttr(f.id)}')" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,0.05);border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.08)';this.style.borderColor='var(--border)'" onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='transparent'">
                 <img src="${proxyImg(f.currentAvatarThumbnailImageUrl||f.userIcon||'')}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid ${trust.color}66;">
                 <span style="font-size:0.85em;font-weight:600;color:${trust.color};">${escHtml(f.displayName)}</span>
               </div>`;
@@ -837,7 +837,7 @@ async function openWorldDetail(worldId, worldObj = null) {
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             ${friends.map(f => {
               const trust = getTrustInfo(f.tags||[]);
-              return `<div onclick="openFriendProfileById('${f.id}')" style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(255,255,255,0.04);border-radius:6px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">
+              return `<div onclick="openFriendProfileById('${escJsAttr(f.id)}')" style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(255,255,255,0.04);border-radius:6px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">
                 <img src="${proxyImg(f.currentAvatarThumbnailImageUrl||f.userIcon||'')}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:2px solid ${trust.color}44;">
                 <span style="font-size:0.78em;font-weight:600;color:${trust.color};">${escHtml(f.displayName)}</span>
               </div>`;

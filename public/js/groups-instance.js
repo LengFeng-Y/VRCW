@@ -147,11 +147,11 @@ async function openGroupDetail(groupId) {
       const vis = g.myMember.visibility; // 'visible', 'hidden', 'friends'
       const oppVis = vis === 'visible' ? 'hidden' : 'visible';
       const visText = vis === 'visible' ? '👁️ 个人资料可见' : (vis === 'friends' ? '👥 仅好友可见' : '👻 资料页隐藏');
-      actionHtml += `<button onclick="vrcGroupAction('${groupId}','visibility','${myId}','${oppVis}')" style="background:var(--bg-glass);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:0.75em;color:var(--text-primary);cursor:pointer;" title="点击切换">${visText}</button>`;
-      actionHtml += `<button onclick="vrcGroupAction('${groupId}','leave')" style="background:#ef444422;border:1px solid #ef444444;border-radius:6px;padding:4px 10px;font-size:0.75em;color:#ef4444;cursor:pointer;">🚪 退出群组</button>`;
+      actionHtml += `<button onclick="vrcGroupAction('${escJsAttr(groupId)}','visibility','${escJsAttr(myId)}','${escJsAttr(oppVis)}')" style="background:var(--bg-glass);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:0.75em;color:var(--text-primary);cursor:pointer;" title="点击切换">${visText}</button>`;
+      actionHtml += `<button onclick="vrcGroupAction('${escJsAttr(groupId)}','leave')" style="background:#ef444422;border:1px solid #ef444444;border-radius:6px;padding:4px 10px;font-size:0.75em;color:#ef4444;cursor:pointer;">🚪 退出群组</button>`;
     } else {
       if (g.joinState !== 'closed') {
-        actionHtml += `<button onclick="vrcGroupAction('${groupId}','join')" style="background:var(--accent);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:0.75em;color:#fff;cursor:pointer;font-weight:600;">➕ 申请加入</button>`;
+        actionHtml += `<button onclick="vrcGroupAction('${escJsAttr(groupId)}','join')" style="background:var(--accent);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:0.75em;color:#fff;cursor:pointer;font-weight:600;">➕ 申请加入</button>`;
       }
     }
     document.getElementById('gdActions').innerHTML = actionHtml;

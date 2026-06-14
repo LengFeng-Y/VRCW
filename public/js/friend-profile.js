@@ -206,7 +206,7 @@ function _renderFriendProfileUI(f, modal) {
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
       <button class="btn btn-secondary" style="font-size:0.82em;padding:6px 14px;" onclick="showFriendContextMenu(event)">··· 操作菜单</button>
       ${friendFavBtn}
-      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escHtml(f.id||'')}','_blank')">🔗 VRChat 主页</button>
+      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escJsAttr(f.id||'')}','_blank')">🔗 VRChat 主页</button>
     </div>
   `;
 
@@ -297,7 +297,7 @@ async function _loadFriendProfileGroups(userId, isFriend) {
 
     gSummaryList.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
       ${finalGroups.map(g => `
-        <div class="group-pill" onclick="openGroupDetail('${escHtml(g.groupId)}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.82em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+        <div class="group-pill" onclick="openGroupDetail('${escJsAttr(g.groupId)}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.82em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
           <img src="${proxyImg(g.iconUrl || g.bannerUrl || '')}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;background:rgba(0,0,0,0.2);">
           <div style="display:flex;flex-direction:column;line-height:1.1;max-width:120px;">
             <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(g.name)}</span>
@@ -358,7 +358,7 @@ async function fetchFriendGroups(userId, seq) {
 
     const renderGroup = (g, badge) => {
       const badgeHtml = badge || '';
-      return `<div onclick="openGroupDetail('${g.groupId||g.id}')" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-glass);border-radius:8px;font-size:0.82em;cursor:pointer;border:1px solid var(--border);margin-bottom:6px;">
+      return `<div onclick="openGroupDetail('${escJsAttr(g.groupId||g.id)}')" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-glass);border-radius:8px;font-size:0.82em;cursor:pointer;border:1px solid var(--border);margin-bottom:6px;">
         <img src="${escHtml(proxyImg(g.iconUrl||g.bannerUrl||''))}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;" onerror="this.style.display=\'none\'">
         <div style="flex:1;min-width:0;">
           <div style="font-weight:500;">${escHtml(g.name||'')}${badgeHtml}</div>
@@ -401,7 +401,7 @@ async function fetchFriendWorlds(userId, seq) {
     if (seq != null && window._fpCurrentSeq !== seq) return;
     if (!worlds || !worlds.length) { el.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:rgba(255,255,255,0.3);">暂无公开世界</div>'; return; }
     const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    el.innerHTML = worlds.map(w => `<div class="avatar-card" style="cursor:pointer;" onclick="openWorldDetail('${escHtml(w.id)}')">
+    el.innerHTML = worlds.map(w => `<div class="avatar-card" style="cursor:pointer;" onclick="openWorldDetail('${escJsAttr(w.id)}')">
       <div class="avatar-thumb-wrapper img-loading">
         <img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(proxyImg(w.thumbnailImageUrl||w.imageUrl||''))}" alt="">
         <div class="avatar-name-overlay">${escHtml(w.name||'')}</div>

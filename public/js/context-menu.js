@@ -338,7 +338,7 @@ function toggleFriendFavMenu(event, userId) {
   toggleFavMenuGeneric(event, menu, null, () => {
     if (friendFavGroups.length === 0) return `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载好友分组</div>`;
     return friendFavGroups.map(g =>
-      `<button class="avtrdb-fav-group-btn" onclick="addFriendToFavorite('${escHtml(userId)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>`
+      `<button class="avtrdb-fav-group-btn" onclick="addFriendToFavorite('${escJsAttr(userId)}','${escJsAttr(g.name)}',this)">${escHtml(g.displayName || g.name)}</button>`
     ).join("");
   });
 }

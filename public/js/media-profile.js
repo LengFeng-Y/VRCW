@@ -80,7 +80,7 @@ function makeUploadCard(opts) {
     </div>
     ${isAnimated ? `<label style="font-size:0.78em;color:var(--text-muted);display:flex;align-items:center;gap:8px;margin-top:6px;">动画 FPS：<input type="range" id="fps_${uniqueId}" min="1" max="64" value="12" style="flex:1;"><span id="fpsval_${uniqueId}">12</span></label>` : ''}
     <button class="vrc-upload-btn" id="btn_${uniqueId}" disabled
-      onclick="uploadToVRCStyled('${uniqueId}','${opts.tag}','${opts.refreshPage}')">上传</button>
+      onclick="uploadToVRCStyled('${escJsAttr(uniqueId)}','${escJsAttr(opts.tag)}','${escJsAttr(opts.refreshPage)}')">上传</button>
     <div class="vrc-upload-status" id="status_${uniqueId}"></div>
   </div>`;
 }
@@ -286,7 +286,7 @@ async function fetchPrints(container, gen) {
         const date = p.createdAt ? new Date(p.createdAt).toLocaleDateString('zh-CN') : '';
         return '<div class="print-card" style="position:relative;cursor:pointer;background:#fff;border-radius:4px;padding:10px 10px 20px;box-shadow:0 4px 18px rgba(0,0,0,0.45);transition:transform 0.15s;" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'\'">' +
           '<button title="删除" onclick="event.stopPropagation(); deletePrint(\'' + escJsAttr(p.id) + '\', this)" style="position:absolute;top:6px;right:6px;z-index:3;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:0.8em;line-height:1;">×</button>' +
-          '<img onclick="window.open(\'' + escHtml(imgUrl) + '\',\'_blank\')" src="' + escHtml(imgUrl) + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block;border-radius:2px;" loading="lazy" onerror="this.style.display=\'none\'">' +
+          '<img onclick="window.open(\'' + escJsAttr(imgUrl) + '\',\'_blank\')" src="' + escHtml(imgUrl) + '" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block;border-radius:2px;" loading="lazy" onerror="this.style.display=\'none\'">' +
           '<div style="margin-top:8px;">' +
             '<div style="font-size:0.7em;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:sans-serif;">' + escHtml(world) + '</div>' +
             '<div style="font-size:0.65em;color:#888;font-family:sans-serif;display:flex;justify-content:space-between;">' +

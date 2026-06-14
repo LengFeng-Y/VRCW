@@ -106,7 +106,7 @@ async function fetchMyProfile(forceRefresh = false) {
           if (loc && loc !== 'offline' && loc !== 'private') {
             locRow.style.display = '';
             getLocationDisplay(loc).then(txt => {
-              locEl.innerHTML = `<a href="#" onclick="openInstanceDetail('${escHtml(loc)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a> <button onclick="inviteSelf('${escHtml(loc)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;vertical-align:middle;">📩 邀请自己</button>`;
+              locEl.innerHTML = `<a href="#" onclick="openInstanceDetail('${escJsAttr(loc)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a> <button onclick="inviteSelf('${escJsAttr(loc)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;vertical-align:middle;">📩 邀请自己</button>`;
             }).catch(() => { locEl.textContent = loc; });
           } else if (loc === 'private') {
             locRow.style.display = '';
@@ -230,7 +230,7 @@ function renderMyProfile(u) {
     <div class="stat-section-label">玩家 ID</div>
     <div style="font-size:0.72em;color:var(--text-muted);font-family:monospace;display:flex;align-items:center;gap:6px;margin-top:4px;">
       ${escHtml(u.id||'')}
-      <button onclick="navigator.clipboard.writeText('${escHtml(u.id||'')}').then(()=>this.textContent='✓').catch(()=>{})" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.9em;">复制</button>
+      <button onclick="navigator.clipboard.writeText('${escJsAttr(u.id||'')}').then(()=>this.textContent='✓').catch(()=>{})" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:0.9em;">复制</button>
     </div>
 
     <!-- Action buttons -->
@@ -238,8 +238,8 @@ function renderMyProfile(u) {
       <button class="btn btn-primary" style="padding:6px 14px;font-size:0.82em;" onclick="openEditProfileModal()">✏️ 编辑个人资料</button>
       <button class="btn btn-secondary" style="padding:6px 14px;font-size:0.82em;" onclick="fetchMyProfile(true)">🔄 刷新资料</button>
       <button class="btn btn-secondary" style="padding:6px 14px;font-size:0.82em;" onclick="showSelfContextMenu(event)">··· 操作菜单</button>
-      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escHtml(u.id||'')}','_blank')">🔗 VRChat 主页</button>
-      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="navigator.clipboard.writeText('${escHtml(u.id||'')}').then(()=>this.textContent='✓ 已复制').catch(()=>{})">📋 复制 ID</button>
+      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escJsAttr(u.id||'')}','_blank')">🔗 VRChat 主页</button>
+      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="navigator.clipboard.writeText('${escJsAttr(u.id||'')}').then(()=>this.textContent='✓ 已复制').catch(()=>{})">📋 复制 ID</button>
     </div>
   </div>`;
 
@@ -251,7 +251,7 @@ function renderMyProfile(u) {
       if (u.location && u.location !== 'offline' && u.location !== 'private') {
         locRow.style.display = '';
         getLocationDisplay(u.location).then(txt => {
-          if (locEl) locEl.innerHTML = `<a href="#" onclick="openInstanceDetail('${escHtml(u.location)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a>`;
+          if (locEl) locEl.innerHTML = `<a href="#" onclick="openInstanceDetail('${escJsAttr(u.location)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a>`;
         }).catch(() => { if (locEl) locEl.textContent = u.location; });
       } else if (u.location === 'private') {
         locRow.style.display = '';
@@ -280,7 +280,7 @@ function renderMyProfile(u) {
     if (displayed.length > 0) {
       el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
         ${displayed.map(g => `
-          <div class="group-pill" onclick="openGroupDetail('${escHtml(g.groupId || g.id)}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.85em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+          <div class="group-pill" onclick="openGroupDetail('${escJsAttr(g.groupId || g.id)}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.85em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
             <img src="${proxyImg(g.iconUrl || g.bannerUrl || '')}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;">
             <div style="display:flex;flex-direction:column;line-height:1.1;max-width:120px;">
               <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(g.name)}</span>
@@ -301,7 +301,7 @@ function renderMyProfile(u) {
         filtered.sort((a, b) => (b.isRepresenting ? 1 : 0) - (a.isRepresenting ? 1 : 0));
         el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
           ${filtered.map(g => `
-            <div class="group-pill" onclick="openGroupDetail('${escHtml(g.groupId)}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.85em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
+            <div class="group-pill" onclick="openGroupDetail('${escJsAttr(g.groupId)}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg-glass);border:1px solid var(--border);border-radius:99px;font-size:0.85em;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--bg-glass)'">
               <img src="${proxyImg(g.iconUrl || g.bannerUrl || '')}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;">
               <div style="display:flex;flex-direction:column;line-height:1.1;max-width:120px;">
                 <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(g.name)}</span>
@@ -519,16 +519,16 @@ async function fetchNotifications() {
       const sender = n.senderName || '系统';
       
       let typeLabel = '';
-      let actions = `<button class="btn btn-secondary btn-xs" onclick="seeNotification('${n.id}')">标为已读</button>`;
+      let actions = `<button class="btn btn-secondary btn-xs" onclick="seeNotification('${escJsAttr(n.id)}')">标为已读</button>`;
       
       if (n.type === 'friendRequest') {
         typeLabel = '➕ 好友申请';
-        actions = `<button class="btn btn-primary btn-xs" onclick="handleNotification('${n.id}','accept')">接受</button>
-                   <button class="btn btn-secondary btn-xs" onclick="handleNotification('${n.id}','hide')">忽略</button>`;
+        actions = `<button class="btn btn-primary btn-xs" onclick="handleNotification('${escJsAttr(n.id)}','accept')">接受</button>
+                   <button class="btn btn-secondary btn-xs" onclick="handleNotification('${escJsAttr(n.id)}','hide')">忽略</button>`;
       } else if (n.type === 'groupInvite') {
         typeLabel = '🏘️ 群组邀请';
-        actions = `<button class="btn btn-primary btn-xs" onclick="handleNotification('${n.id}','accept')">接受</button>
-                   <button class="btn btn-secondary btn-xs" onclick="handleNotification('${n.id}','hide')">忽略</button>`;
+        actions = `<button class="btn btn-primary btn-xs" onclick="handleNotification('${escJsAttr(n.id)}','accept')">接受</button>
+                   <button class="btn btn-secondary btn-xs" onclick="handleNotification('${escJsAttr(n.id)}','hide')">忽略</button>`;
       } else if (n.type === 'invite') {
         typeLabel = '✉️ 房间邀请';
       } else if (n.type === 'requestInvite') {
@@ -541,7 +541,7 @@ async function fetchNotifications() {
             <span style="font-size:0.7em;font-weight:700;color:var(--accent-light);">${typeLabel}</span>
             <span style="font-size:0.65em;color:var(--text-muted);">${date}</span>
           </div>
-          <div style="font-size:0.85em;font-weight:500;">来自 <span style="color:var(--text-primary); cursor:pointer;" onclick="openFriendProfileById('${n.senderUserId}')">${escHtml(sender)}</span></div>
+          <div style="font-size:0.85em;font-weight:500;">来自 <span style="color:var(--text-primary); cursor:pointer;" onclick="openFriendProfileById('${escJsAttr(n.senderUserId)}')">${escHtml(sender)}</span></div>
           ${n.message ? `<div style="font-size:0.75em;color:var(--text-secondary);margin-top:4px;background:rgba(255,255,255,0.03);padding:6px;border-radius:4px;">${escHtml(n.message)}</div>` : ''}
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
@@ -795,7 +795,7 @@ function renderFriendList(list) {
       const isMine = myLoc && loc === myLoc;
       const isMineTag = isMine ? ' <span style="font-size:0.85em;background:rgba(255, 255, 255, 0.3);color:#d4d4d8;padding:1px 6px;border-radius:4px;">📍 你也在这里</span>' : '';
       const isPrivateLoc = loc === 'private' || loc.includes('~private');
-      const groupInviteBtn = isPrivateLoc ? '' : `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(loc)}')" style="padding:2px 8px;font-size:0.8em;border-radius:4px;background:#86efac22;color:#86efac;border:1px solid #86efac44;cursor:pointer;">邀请自己</button>`;
+      const groupInviteBtn = isPrivateLoc ? '' : `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escJsAttr(loc)}')" style="padding:2px 8px;font-size:0.8em;border-radius:4px;background:#86efac22;color:#86efac;border:1px solid #86efac44;cursor:pointer;">邀请自己</button>`;
       
       html += `<div class="loc-group-header" id="loc_${loc.split(':')[0]}" data-loc="${escHtml(loc)}" style="display:flex;align-items:center;gap:6px;padding:6px 10px;margin:4px 0 2px;background:rgba(134,239,172,0.06);border-left:2px solid #86efac;border-radius:0 6px 6px 0;font-size:0.75em;color:#86efac;">` +
         `<span>👥 ${friends.length} 位好友在此</span>` +
@@ -881,7 +881,7 @@ function friendCardHtml(f) {
       && f.location.startsWith('wrld_');
     const joinBtn = isJoinable ? `
       <div style="display:flex;gap:4px;margin-bottom:2px;">
-        <button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escHtml(f.location)}')" style="padding:2px 6px;font-size:0.7em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请给自己">📩</button>
+        <button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escJsAttr(f.location)}')" style="padding:2px 6px;font-size:0.7em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请给自己">📩</button>
       </div>` : '';
 
     return `<div class="friend-card" onclick="openFriendProfile(this);" data-friend="${fJson}">
@@ -895,7 +895,7 @@ function friendCardHtml(f) {
           <span style="font-weight:600;color:var(--text-primary);">${getStatusLabel(f)}</span>
           <span style="opacity:0.6;">|</span>
           ${(f.location && f.location !== 'offline' && f.location !== 'private' && f.location.startsWith('wrld_')) 
-              ? `<a href="#" id="${locSpanId}" onclick="openInstanceDetail('${escHtml(f.location)}'); event.stopPropagation(); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;" title="查看实例详情">${escHtml(locationText)}</a>` 
+              ? `<a href="#" id="${locSpanId}" onclick="openInstanceDetail('${escJsAttr(f.location)}'); event.stopPropagation(); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;" title="查看实例详情">${escHtml(locationText)}</a>`
               : `<span>${escHtml((f.state==='online' && f.statusDescription) ? f.statusDescription : locationText)}</span>`}
         </div>
       </div>
@@ -923,4 +923,3 @@ function resolveWorldNames() {
     } catch(e) {}
   });
 }
-

@@ -187,7 +187,7 @@ async function vrcdbFetch(cat, query) {
             : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`}
           <div class="avatar-name-overlay">${escHtml(w.name||'未知世界')}</div>
           <div style="position:absolute;bottom:6px;left:6px;z-index:10;">
-            <div data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escHtml(w.id)}',event)"
+            <div data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escJsAttr(w.id)}',event)"
               style="width:26px;height:26px;border-radius:6px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.85em;" title="${isFaved?'取消收藏':'添加到收藏夹'}">${isFaved?'\u2b50':'\u2606'}</div>
           </div>
           <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:4px;z-index:5;">
@@ -697,12 +697,12 @@ function toggleAvatarFavGridMenu(event, id, name, btn) {
   const menu = document.getElementById("avtrdbFavMenu");
   if (!menu) return;
   toggleFavMenuGeneric(event, menu, btn, () => {
-    let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(visibleAvatars.find(a=>a.id==='${id}'))">📦 保存到本地 (200槽位)</button>`;
+    let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(visibleAvatars.find(a=>a.id==='${escJsAttr(id)}'))">📦 保存到本地 (200槽位)</button>`;
     if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
     else html += favoriteGroups.map(g => {
       const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 50; const full = count >= cap;
       const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
-      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escHtml(id)}','${escHtml(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
+      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escJsAttr(id)}','${escJsAttr(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
     }).join("");
     return html;
   });
