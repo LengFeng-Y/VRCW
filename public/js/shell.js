@@ -100,6 +100,7 @@ async function fetchFavoriteGroups() {
     if (rW.ok) {
       const g = await rW.json();
       worldFavGroups = (g || []).filter(x => x.name && x.name.startsWith('worlds')).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+      if (typeof renderWorldFavGroupButtons === 'function') renderWorldFavGroupButtons();
     }
     // 3. Friends
     const rF = await apiCall("/api/vrc/favorite/groups?type=friend&n=50");

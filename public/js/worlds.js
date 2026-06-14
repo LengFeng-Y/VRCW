@@ -27,7 +27,29 @@ async function initWorldsTab() {
 }
 
 // Bug#3 fix: world favorites - also add "我上传的世界" and handle VRC+ worlds1
+function renderWorldFavGroupButtons(message) {
+  const container = document.getElementById('worldFavGroupList');
+  if (!container) return;
+
+  const vrcPlusNames = new Set(worldFavGroups.filter(g => g.type === 'vrcPlusWorld').map(g => g.name));
+  let html = (worldFavGroups || []).map(g => {
+    const isVrcPlus = vrcPlusNames.has(g.name) || g.name === 'worlds1';
+    const icon = isVrcPlus ? '💎' : '⭐';
+    return makeCatBtn(`${icon} ${escHtml(g.displayName || g.name)}`, `switchWorldCategory('fav_${g.name}')`, `worldCatFav_${g.name}`);
+  }).join('');
+
+  html += makeCatBtn('📤 我上传的世界', "switchWorldCategory('mine')", 'worldCatMine');
+
+  if (message) {
+    html = `<div style="font-size:0.75em;color:var(--text-muted);padding:4px 0 8px;line-height:1.5;">${escHtml(message)}</div>` + html;
+  }
+
+  container.innerHTML = html || '<div style="font-size:0.75em;color:var(--text-muted);padding:4px 0;">无收藏夹</div>';
+}
+
 async function loadWorldFavGroups() {
+  const container = document.getElementById('worldFavGroupList');
+  if (container) container.innerHTML = '<div style="font-size:0.75em;color:var(--text-muted);padding:4px 0;">加载中...</div>';
   try {
     // Fetch both standard world groups AND VRC+ exclusive groups in parallel
     const [r1, r2] = await Promise.all([
@@ -36,23 +58,19 @@ async function loadWorldFavGroups() {
     ]);
     const standard  = r1.ok ? (await r1.json() || []) : [];
     const vrcPlus   = r2.ok ? (await r2.json() || []) : [];
-    worldFavGroups  = [...standard, ...vrcPlus];
+    const groups = [...standard, ...vrcPlus]
+      .filter(g => g && g.name && (g.name.startsWith('worlds') || g.type === 'world' || g.type === 'vrcPlusWorld'))
+      .sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
 
-    const container = document.getElementById('worldFavGroupList');
-    if (!container) return;
-
-    const vrcPlusNames = new Set(vrcPlus.map(g => g.name));
-    let html = worldFavGroups.map(g => {
-      const isVrcPlus = vrcPlusNames.has(g.name);
-      const icon = isVrcPlus ? '💎' : '⭐';
-      return makeCatBtn(`${icon} ${escHtml(g.displayName || g.name)}`, `switchWorldCategory('fav_${g.name}')`, `worldCatFav_${g.name}`);
-    }).join('');
-
-    // Add "我上传的世界" button
-    html += makeCatBtn('📤 我上传的世界', "switchWorldCategory('mine')", 'worldCatMine');
-
-    container.innerHTML = html || '<div style="font-size:0.75em;color:var(--text-muted);padding:4px 0;">无收藏夹</div>';
-  } catch(e) { console.warn('loadWorldFavGroups', e); }
+    worldFavGroups = groups;
+    const failed = [];
+    if (!r1.ok) failed.push('普通收藏夹');
+    if (!r2.ok) failed.push('VRC+ 收藏夹');
+    renderWorldFavGroupButtons(failed.length ? `${failed.join('、')}加载失败，可点刷新重试。` : '');
+  } catch(e) {
+    console.warn('loadWorldFavGroups', e);
+    renderWorldFavGroupButtons('收藏夹加载失败，可点刷新重试。');
+  }
 }
 
 function switchWorldCategory(cat) {
@@ -1189,4 +1207,3 @@ async function toggleWorldFavorite() {
     setTimeout(()=>{ if(statusEl) statusEl.textContent=''; }, 3000);
   }
 }
-
