@@ -1,62 +1,108 @@
-# VRCAM — VRChat 资产管理器 (Workers 版)
+# VRCW - VRChat Web Companion
 
-*[English](README.md) | 简体中文*
+VRCW 是一个运行在 Cloudflare Workers 上的 VRChat 网页伴侣工具，用来集中管理模型、收藏夹、世界、好友、群组、媒体资产、公开模型搜索和上传流程。
 
-这是一个高性能、无服务器（Serverless）架构的 VRChat 模型/资产管理 Web 应用。VRCAM 将 Cloudflare Workers 作为轻量级代理，让你的浏览器能够突破跨域限制，将 `.vrca` 文件直接全速上传至 VRChat 的 S3 存储桶。
+[English](README.md) | 简体中文
 
-## 核心特性
+在线访问：[vrcw.yamadaryo.workers.dev](https://vrcw.yamadaryo.workers.dev)
 
-- 🚀 **浏览器直传 S3**：告别中转服务器带来的带宽瓶颈。你的文件通过你的浏览器直接发送到 VRChat 官方存储库。
-- 🔄 **高级更新模式**：无缝热更新已有模型。VRCAM 会在浏览器内自动修改及对齐 `.vrca` 二进制文件中的 `Blueprint ID`，并重新计算 MD5 和 Rsync（BLAKE2b）签名。
-- 🗂️ **动态收藏夹管理**：完全兼容 VRC+。动态获取你的实际收藏分组，支持查看、搜索与一键"移除收藏"。
-- 🔍 **avtrDB 公开模型搜索**：无需离开应用，直接在内置的「搜索」标签页中检索 [avtrdb.com](https://avtrdb.com) 上的海量公开模型。支持按平台筛选（PC / Quest / Apple / 组合），查看详情（性能评级、模型 ID、上传日期），一键收藏到指定收藏夹，或通过 VRCX 深链接切换模型。
-- 🌐 **跨收藏夹全局搜索**：在收藏夹标签页输入关键词时，会同时搜索你 **所有** 收藏分组的内容，而非仅限当前显示的分组。
-- 💾 **原生文件系统 API**：利用现代浏览器的 File System Access API，下载文件能直接以满速存入你选择的本地文件夹，绕过浏览器缓慢的临时缓存机制。
-- ⚡ **本地急速缓存**：模型列表与元数据通过 IndexedDB 存储在本地，带来极其迅捷的二次加载体验。
-- 🌍 **多语言 UI**：拥有完整的英语、简体中文（中文）和日语（日本語）界面支持。
-- 🛡️ **安全架构保障**：所有 VRChat 凭据和身份验证 Cookie 都只保存在你自己的浏览器中。Cloudflare Worker 仅作为无状态的头部转发器存在，你无需将账号安全托付给任何第三方中心服务器。
+## 功能
 
-## 技术架构
+| 模块 | 功能 |
+| --- | --- |
+| 模型 | 查看自己的模型、模型收藏夹、本地收藏、筛选、下载、清理、编辑/删除，并使用 IndexedDB 优先加载缓存。 |
+| 上传 | 上传 `.vrca` 文件，创建新模型或通过 VRChat file/version 流程更新已有模型。 |
+| 公开搜索 | 从社区公开数据源搜索 Avatar，查看详情，收藏到指定分组，或通过 VRCX 深链打开。 |
+| 好友 | 按在线/离线/收藏分类查看好友，按实例聚合，查看资料、备注、信任/屏蔽/静音状态、邀请、Boop 和右键操作菜单。 |
+| 世界 | 查看最近访问、热门、自己上传的世界，支持普通/VRC+ 世界收藏夹、世界详情、实例、清理失效收藏、添加/移除收藏和本地缓存。 |
+| 群组 | 查看已加入群组、群组详情、VRChat 允许时的当前实例、成员列表，以及加入/退出/资料可见性操作。 |
+| 资产 | 管理 VRC+ 相册图片、拍立得、表情/贴纸、库存/商品和 Avatar Props 等可用资产。 |
+| 设置 | 查看和刷新 IndexedDB 持久缓存、图片 Blob 缓存、加入实例偏好和应用信息。 |
 
-- **前端 (`/public`)**：纯 HTML/JS/CSS 打造。负责处理所有的核心业务逻辑，包括：UI 渲染、IndexedDB 缓存、文件系统 API 交互、`.vrca` 二进制包热修补、BLAKE2b/MD5 哈希计算、S3 分片上传，以及 avtrDB API 集成。
-- **后端 (`worker.js`)**：一个最简化的 Cloudflare Worker。主要用于代理标准的 VRChat API 调用（绕过浏览器 CORS 跨域限制），并在 S3 `PUT` 请求中注入受限的私有头部。avtrDB 搜索直接从浏览器调用其公开 API（无需修改 Worker）。
+## 架构
 
-## 部署指南
+- 前端：`public/` 下的原生 HTML、CSS 和经典 JavaScript。
+- 后端：`worker.js`，Cloudflare Worker，用于代理 VRChat API、转发认证 Cookie、代理图片/下载、代理 S3 上传，以及可选的登录代理转发。
+- 存储：浏览器 IndexedDB，用于列表/详情持久缓存和图片 Blob 缓存。
+- 部署：通过 `wrangler` 使用 Cloudflare Workers Static Assets。
 
-VRCAM 专为 Cloudflare Workers 与 Cloudflare Pages 体系设计（通过 `wrangler` 部署）。
+注意：`public/js/*.js` 是经典脚本，不是 ES module。它们依赖 `public/index.html` 中的加载顺序共享全局变量。
 
-### 环境要求
-- 安装 [Node.js](https://nodejs.org/) 和 npm
-- 拥有一可用的 Cloudflare 账号
+## 本地开发
 
-### 部署步骤
+```bash
+npm install
+npx wrangler dev --port 8787
+```
 
-1. **安装 Wrangler 命令行工具并登录**
-   ```bash
-   npm install -g wrangler
-   wrangler login
-   ```
+然后打开 [http://localhost:8787](http://localhost:8787)。
 
-2. **本地开发调试**
-   ```bash
-   wrangler dev
-   ```
-   随后在浏览器中打开 `http://localhost:8787` 即可体验。
+## 部署
 
-3. **发布到 Cloudflare**
-   ```bash
-   wrangler deploy
-   ```
-   只需这一行命令，即可将 API 代理脚本（`worker.js`）部署为 Worker，并将 `./public` 目录下的所有前端静态文件部署为 Pages 服务。
+```bash
+npx wrangler deploy
+```
 
-## 技术细节（致开发者）
+`wrangler.toml` 已配置 `worker.js` 作为 Worker 入口，并把 `./public` 作为静态资源目录。
 
-- **签名生成机制**：我们利用纯 JavaScript 实现了一套底层哈希逻辑，能够在浏览器端准确生成与 VRChat 官方 Python 端规范完全一致的 Rsync（BLAKE2b）签名。
-- **大文件支持**：所有的 MD5 哈希校验与 S3 文件传输均采用流式分片上传机制，512MB 以上的超大包体依然稳如泰山。
-- **S3 Proxy 方案**：由于现代浏览器在访问 S3 存储桶前发送的 CORS Preflight 请求会拦截部分自定义头部，我们将这部分 `PUT` 请求安全路由至 Worker 的 `/api/s3proxy` 端点进行了转发。
-- **avtrDB 集成**：使用 avtrDB 公开的 `https://api.avtrdb.com/v2/avatar/search` 端点（原生支持 CORS），无需后端改动。平台筛选采用两阶段策略：先通过 `&compatibility=` 参数在服务端预过滤，再在客户端验证每条结果包含所有所需平台。
-- **平台筛选逻辑**：下载页的平台筛选采用**包含式**模型——选择「含 PC + Quest」意味着该模型**至少**支持这两个平台（可以同时支持 Apple）。平台检测优先依赖 `unityPackages[].assetVersion > 0` 字段，以排除 VRChat API 可能返回的空壳占位包。
+## 可选登录代理
+
+VRChat 有时会拒绝 Cloudflare Worker IP 登录，并返回 `error code:1003`。VRCW 支持为 `/api/login` 配置外部登录代理。
+
+Worker 当前读取这两个环境变量：
+
+| 变量 | 值 |
+| --- | --- |
+| `VPS_PROXY_URL` | 你的私有登录代理基础 URL，末尾不要加斜杠。 |
+| `VPS_PROXY_SECRET` | 私有共享密钥，必须和代理服务端配置一致。不要提交到仓库。 |
+
+`VPS_PROXY_URL` 末尾不要加斜杠；Worker 会自动拼接 `/api/1/auth/user`。
+
+### 在 Cloudflare Dashboard 配置
+
+1. 打开 Cloudflare Dashboard。
+2. 进入 Workers & Pages。
+3. 选择 VRCW Worker。
+4. 打开 Settings -> Variables and Secrets。
+5. 添加文本变量 `VPS_PROXY_URL`。
+6. 添加 Secret `VPS_PROXY_SECRET`。
+7. 保存后重新部署。
+
+### 使用 Wrangler 配置
+
+如果希望把 URL 写入配置，可在 `wrangler.toml` 中加入：
+
+```toml
+[vars]
+VPS_PROXY_URL = "https://your-login-proxy.example.com"
+```
+
+然后设置 secret 并部署：
+
+```bash
+npx wrangler secret put VPS_PROXY_SECRET
+npx wrangler deploy
+```
+
+## 目录结构
+
+```text
+public/                 前端 HTML、CSS、JS、manifest、service worker
+worker.js               Cloudflare Worker API 代理和静态资源入口
+wrangler.toml           Cloudflare Worker 部署配置
+vercel_proxy/           可选 Vercel 登录代理
+vps_proxy/              可选自建登录代理示例
+memory.md               Codex 本地项目记忆，不作为发布文档
+```
+
+## 注意事项
+
+- 需要 VRChat 账号登录，并支持应用内使用的 VRChat 2FA 流程。
+- 部分 VRC+ 功能需要有效的 VRC+ 订阅。
+- VRChat API 对此类用途并非官方公开稳定接口，可能随时变更或追加权限限制。
+- 群组实例列表、私人世界、好友限定位置和部分媒体端点可能因为 VRChat 权限返回 403。
+- 本项目是独立个人工具，与 VRChat Inc. 无关联。
 
 ## 开源协议
 
-本项目采用 [MIT 协议](LICENSE) 开源。
+MIT
