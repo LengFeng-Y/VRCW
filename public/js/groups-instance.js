@@ -157,7 +157,7 @@ async function openGroupDetail(groupId) {
     document.getElementById('gdActions').innerHTML = actionHtml;
     
     // Fetch extra data
-    fetchGroupExtraData(groupId);
+    fetchGroupExtraData(groupId, g);
 
   } catch(e) {
     document.getElementById('gdName').textContent = '加载失败: ' + e.message;
@@ -217,17 +217,39 @@ function switchGroupDetailTab(btn, tab) {
   document.getElementById('gdMembers').style.display = tab === 'members' ? '' : 'none';
 }
 
-async function fetchGroupExtraData(groupId) {
-  fetchGroupInstances(groupId);
+async function fetchGroupExtraData(groupId, groupContext = null) {
+  fetchGroupInstances(groupId, groupContext);
   fetchGroupMembers(groupId);
 }
 
-async function fetchGroupInstances(groupId) {
+function renderGroupInstancesForbidden(el, groupId, groupContext) {
+  const isMember = !!(groupContext && groupContext.myMember);
+  const joinState = groupContext && groupContext.joinState;
+  const canRequestJoin = !isMember && joinState !== 'closed';
+  const title = isMember ? 'VRChat 拒绝读取群组实例' : '加入群组后才能查看当前实例';
+  const body = isMember
+    ? '你的账号已在这个群组内，但 VRChat 仍返回 403。通常是该群组实例有角色门槛、你没有对应权限，或 VRChat 暂时不允许 API 读取这组实例。'
+    : '这个群组虽然资料页是公开的，但 VRChat 对“当前实例列表”有额外权限限制；非成员读取 /groups/{groupId}/instances 时会返回 403。';
+  const action = canRequestJoin
+    ? `<button class="btn btn-xs btn-primary" style="margin-top:10px;padding:5px 10px;font-size:0.72rem;" onclick="vrcGroupAction('${escJsAttr(groupId)}','join')">加入/申请加入</button>`
+    : '';
+  el.innerHTML = `<div style="padding:12px;color:var(--text-secondary);font-size:0.82rem;line-height:1.6;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;">
+    <div style="color:var(--text-primary);font-weight:700;margin-bottom:4px;">${escHtml(title)}</div>
+    <div>${escHtml(body)}</div>
+    ${action}
+  </div>`;
+}
+
+async function fetchGroupInstances(groupId, groupContext = null) {
   const el = document.getElementById('gdInstances');
   if(!el) return;
   el.innerHTML = '<div style="padding:10px;color:var(--text-muted);text-align:center;font-size:0.8em;">加载实例中...</div>';
   try {
     const r = await apiCall('/api/vrc/groups/' + groupId + '/instances');
+    if (r.status === 403) {
+      renderGroupInstancesForbidden(el, groupId, groupContext);
+      return;
+    }
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const insts = await r.json();
     if (!insts || !insts.length) {
