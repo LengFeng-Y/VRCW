@@ -66,16 +66,21 @@ async function fetchAvatars(forceRefresh = false) {
   let renderedFromCache = false;
   let cacheIsFresh = false;
   try {
-    const cachedBasics = await idb.get('avatar_basics_' + currentCategory) || [];
+    const cachedBasicsRaw = await idb.get('avatar_basics_' + currentCategory);
+    const cacheExists = Array.isArray(cachedBasicsRaw);
+    const cachedBasics = cacheExists ? cachedBasicsRaw : [];
     const cacheAge = await idb.get('avatar_basics_age_' + currentCategory) || 0;
-    cacheIsFresh = cachedBasics.length > 0 && !forceRefresh && (Date.now() - cacheAge) < AVATARS_CACHE_TTL;
-    if (cachedBasics.length > 0) {
+    cacheIsFresh = cacheExists && (Date.now() - cacheAge) < AVATARS_CACHE_TTL;
+    if (cacheExists) {
       avatars = cachedBasics;
       applyFilters();
       renderedFromCache = true;
       if (!forceRefresh) logMsg(`Loaded ${avatars.length} cached avatars${cacheIsFresh ? '（缓存有效跳过 API）' : ''}`, "info");
-      // Cache fresh enough — skip the API loop
-      if (cacheIsFresh) return;
+      // Favorite groups are IDB-first: startup/background index sync updates
+      // stale favorite caches only when their remote ID index changes. "Mine"
+      // has no cheap index endpoint, so it keeps the TTL-driven refresh path.
+      if (!forceRefresh && currentCategory !== "mine") return;
+      if (!forceRefresh && currentCategory === "mine" && cacheIsFresh) return;
     } else if (grid) {
       grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.4);">加载中...</div>`;
     }
@@ -519,6 +524,8 @@ async function unfavorite(avatarId, avatarName) {
     selectedIds.delete(avatarId);
     // Update IDB cache to reflect removal
     try { await idb.set("avatars_" + currentCategory, avatars); } catch (_) {}
+    try { await idb.set("avatar_basics_" + currentCategory, avatars.map(_avatarBasicFromItem).filter(Boolean)); } catch (_) {}
+    try { await idb.set("avatar_basics_age_" + currentCategory, Date.now()); } catch (_) {}
     
     // Update Modal UI via the shared helper
     if (typeof _refreshDetailAfterFavChange === 'function') {
@@ -592,6 +599,8 @@ async function unfavoriteSelected() {
 
   // Update IDB cache
   try { await idb.set("avatars_" + currentCategory, avatars); } catch (_) {}
+  try { await idb.set("avatar_basics_" + currentCategory, avatars.map(_avatarBasicFromItem).filter(Boolean)); } catch (_) {}
+  try { await idb.set("avatar_basics_age_" + currentCategory, Date.now()); } catch (_) {}
   document.getElementById("statTotal").textContent = visibleAvatars.length;
   // Reflect the *real* remaining selection size — hard-coding 0 hid bugs where
   // the loop forgot to delete from the set.
@@ -718,6 +727,7 @@ async function cleanInvalidFavorites() {
           // grouping for this view is `currentCategory` (the favorite tag the
           // user is currently looking at).
           favoriteIdMap.delete(av.id);
+          await removeAvatarFromFavoriteCache(currentCategory, av.id);
           if (currentCategory && currentCategory !== 'mine' && currentCategory !== 'local') {
             const cur = avatarFavGroupCounts.get(currentCategory) || 0;
             avatarFavGroupCounts.set(currentCategory, Math.max(0, cur - 1));

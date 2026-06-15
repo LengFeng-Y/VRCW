@@ -801,8 +801,12 @@ async function addToFavorite(avtrId, groupName, btn) {
       // Bump the per-group counter so the sidebar "x/50" hint and the
       // disabled-when-full state are accurate without a roundtrip.
       avatarFavGroupCounts.set(groupName, (avatarFavGroupCounts.get(groupName) || 0) + 1);
-      // Invalidate IDB cache for that group so next load fetches fresh
-      try { await idb.set("avatars_" + groupName, null); } catch (_) {}
+      // Keep IDB in step with this local mutation. Normal category switches are
+      // IDB-first; startup index sync handles out-of-band changes.
+      const knownAvatar = visibleAvatars.find(a => a.id === avtrId)
+        || (_currentDetailAvatar && ((_currentDetailAvatar.id || _currentDetailAvatar.vrc_id) === avtrId) ? _currentDetailAvatar : null)
+        || { id: avtrId };
+      await upsertAvatarIntoFavoriteCache(groupName, knownAvatar);
       // INSTANT UI: flip the unified card-fav-quick toggle from ☆ → ⭐
       const card = document.getElementById("card-" + avtrId);
       if (card) {
@@ -860,7 +864,7 @@ async function unfavoriteFromGroup(avtrId, groupName, btn) {
     if (tags) { tags.delete(groupName); if (tags.size === 0) avatarFavTagMap.delete(avtrId); }
     const cur = avatarFavGroupCounts.get(groupName) || 0;
     avatarFavGroupCounts.set(groupName, Math.max(0, cur - 1));
-    try { await idb.set('avatars_' + groupName, null); } catch (_) {}
+    await removeAvatarFromFavoriteCache(groupName, avtrId);
     if (statusEl) { statusEl.style.color = 'var(--success)'; statusEl.textContent = `✓ 已从 ${groupName} 移除`; }
     // Flip the card star back
     const card = document.getElementById('card-' + avtrId);

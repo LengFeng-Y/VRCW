@@ -73,8 +73,8 @@ async function loadWorldFavGroups() {
   try {
     // Fetch both standard world groups AND VRC+ exclusive groups in parallel
     const [r1, r2] = await Promise.all([
-      apiCall('/api/vrc/favorite/groups?type=world&n=50'),
-      apiCall('/api/vrc/favorite/groups?type=vrcPlusWorld&n=50')
+      apiCall('/api/vrc/favorite/groups?type=world&n=50', { noAbort: true }),
+      apiCall('/api/vrc/favorite/groups?type=vrcPlusWorld&n=50', { noAbort: true })
     ]);
     const standard  = r1.ok ? (await r1.json() || []) : [];
     const vrcPlus   = r2.ok ? (await r2.json() || []) : [];
@@ -85,7 +85,7 @@ async function loadWorldFavGroups() {
     worldFavGroups = groups;
     const failed = [];
     if (!r1.ok) failed.push('普通收藏夹');
-    if (!r2.ok) failed.push('VRC+ 收藏夹');
+    if (!r2.ok && r2.status !== 403 && r2.status !== 404) failed.push('VRC+ 收藏夹');
     renderWorldFavGroupButtons(failed.length ? `${failed.join('、')}加载失败，可点刷新重试。` : '');
   } catch(e) {
     console.warn('loadWorldFavGroups', e);
@@ -106,7 +106,7 @@ function switchWorldCategory(cat) {
   const btn = document.getElementById(btnId);
   if (btn) { btn.classList.remove('btn-secondary'); btn.classList.add('active','btn-primary'); }
 
-  fetchWorlds(cat, cat.startsWith('fav_'));
+  fetchWorlds(cat, false);
   });
 }
 
@@ -142,17 +142,22 @@ async function fetchWorlds(category, forceRefresh = false) {
   const WORLDS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
   let cacheIsFresh = false;
   try {
-    const cachedBasics = await idb.get('world_basics_' + category) || [];
+    const cachedBasicsRaw = await idb.get('world_basics_' + category);
+    const cacheExists = Array.isArray(cachedBasicsRaw);
+    const cachedBasics = cacheExists ? cachedBasicsRaw : [];
     const cacheAge = await idb.get('world_basics_age_' + category) || 0;
-    cacheIsFresh = cachedBasics.length > 0 && (Date.now() - cacheAge) < WORLDS_CACHE_TTL;
+    cacheIsFresh = cacheExists && (Date.now() - cacheAge) < WORLDS_CACHE_TTL;
 
-    if (cachedBasics.length > 0) {
+    if (cacheExists) {
       allWorlds = cachedBasics;
       filterWorlds();
-      const freshLabel = forceRefresh ? '缓存(刷新中)' : (cacheIsFresh ? '缓存' : '缓存(刷新中)');
+      const freshLabel = forceRefresh ? '缓存(刷新中)' : (category.startsWith('fav_') || cacheIsFresh ? '缓存' : '缓存(刷新中)');
       if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界 (${freshLabel})`;
       worldLogMsg(`⚡ 从缓存加载了 ${cachedBasics.length} 个世界${cacheIsFresh && !forceRefresh ? '，缓存有效跳过API' : ''}`, 'info');
 
+      // Favorite groups are IDB-first: startup/background index sync updates
+      // stale favorite caches only when their remote ID index changes.
+      if (!forceRefresh && category.startsWith('fav_')) return;
       // If cache is still fresh, skip API refresh entirely — saves 87+ requests
       if (cacheIsFresh && !forceRefresh) return;
     } else {
@@ -494,6 +499,7 @@ async function quickWorldFav(worldId, event) {
         if (removedGroup) {
           const c = worldFavGroupCounts.get(removedGroup) || 0;
           worldFavGroupCounts.set(removedGroup, Math.max(0, c - 1));
+          await removeWorldFromFavoriteCache(removedGroup, worldId);
         }
         if (currentWorldCategory.startsWith('fav_')) {
           allWorlds = allWorlds.filter(w => w.id !== worldId);
@@ -545,7 +551,8 @@ async function quickWorldFav(worldId, event) {
           // Bump the per-group counter so the dropdown limit/disabled state
           // stays accurate without waiting for a refresh.
           worldFavGroupCounts.set(g.name, (worldFavGroupCounts.get(g.name) || 0) + 1);
-          idb.set('world_basics_age_fav_' + g.name, 0).catch(()=>{});
+          const knownWorld = allWorlds.find(w => w.id === worldId) || currentWorldDetail || { id: worldId };
+          await upsertWorldIntoFavoriteCache(g.name, knownWorld);
         } else { btn.textContent = '☆'; showToast('收藏失败', 'error'); }
       } catch(e) { btn.textContent = '☆'; }
     };
@@ -610,6 +617,9 @@ async function unfavoriteSelectedWorlds() {
       const resp = await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
       if (!resp.ok) throw new Error(await resp.text());
       worldFavoriteIdMap.delete(wid);
+      if (currentWorldCategory && currentWorldCategory.startsWith('fav_')) {
+        await removeWorldFromFavoriteCache(currentWorldCategory.slice(4), wid);
+      }
       allWorlds = allWorlds.filter(w => w.id !== wid);
       selectedWorldIds.delete(wid);
       const card = document.getElementById('world-card-' + wid);
@@ -651,6 +661,10 @@ async function cleanInvalidWorlds() {
         if (!fid) { fail++; worldLogMsg(`⚠ ${w.name}: 找不到收藏 ID`, 'error'); continue; }
         try {
           await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
+          worldFavoriteIdMap.delete(w.id);
+          if (currentWorldCategory && currentWorldCategory.startsWith('fav_')) {
+            await removeWorldFromFavoriteCache(currentWorldCategory.slice(4), w.id);
+          }
           success++;
           worldLogMsg(`✓ 已移除失效世界: ${w.name || w.id}`, 'success');
         } catch(e) { fail++; worldLogMsg(`✗ 移除失败: ${e.message}`, 'error'); }
@@ -1177,11 +1191,7 @@ async function addWorldToFavorite(worldId, groupName, btn) {
       // and the disabled-when-full state stay accurate without a full re-sync.
       worldFavGroupCounts.set(groupName, (worldFavGroupCounts.get(groupName) || 0) + 1);
       if (statusEl) { statusEl.textContent = `✓ 已收藏到 ${groupName}`; statusEl.style.color='var(--success)'; }
-      // Invalidate the favorite group's TTL cache (`world_basics_age_fav_<group>`).
-      // The previous code wrote `worlds_<group>` which isn't a key anyone reads
-      // — the actual IDB keys are `world_basics_<cat>` / `world_basics_age_<cat>`,
-      // so the next time the user opened that group they got the stale list.
-      try { await idb.set('world_basics_age_fav_' + groupName, 0); } catch (_) {}
+      await upsertWorldIntoFavoriteCache(groupName, currentWorldDetail || { id: worldId });
     } else {
       const err = await r.json().catch(() => ({}));
       if (statusEl) { statusEl.textContent = `✗ 失败: ${err.error?.message || r.status}`; statusEl.style.color='var(--error)'; }
@@ -1248,6 +1258,7 @@ async function toggleWorldFavorite() {
       if (removedGroup) {
         const c = worldFavGroupCounts.get(removedGroup) || 0;
         worldFavGroupCounts.set(removedGroup, Math.max(0, c - 1));
+        await removeWorldFromFavoriteCache(removedGroup, w.id);
       }
       if (statusEl) { statusEl.textContent='✓ 已取消收藏'; statusEl.style.color='var(--text-muted)'; }
       if (currentWorldCategory && currentWorldCategory.startsWith('fav_')) {

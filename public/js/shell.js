@@ -6,34 +6,47 @@
  * 函数声明会提升为全局，跨文件调用没问题；请勿改为 type="module"。
  */
 // ── Sync All Favorites Globally ──
+let avatarFavoriteIndexByGroup = new Map();
+let worldFavoriteIndexByGroup = new Map();
+
+function _rememberFavoriteIndex(map, groupName, itemId) {
+  if (!groupName || !itemId) return;
+  let ids = map.get(groupName);
+  if (!ids) { ids = []; map.set(groupName, ids); }
+  ids.push(itemId);
+}
+
 async function syncAllFavoriteIds() {
   try {
-    // Clear maps to prevent accumulation on sync/refresh
-    favoriteIdMap.clear();
-    avatarFavTagMap.clear();
-    worldFavoriteIdMap.clear();
-    avatarFavGroupCounts.clear();
-    worldFavGroupCounts.clear();
-    friendFavoriteIdMap.clear();
+    const nextFavoriteIdMap = new Map();
+    const nextAvatarFavTagMap = new Map();
+    const nextWorldFavoriteIdMap = new Map();
+    const nextAvatarFavGroupCounts = new Map();
+    const nextWorldFavGroupCounts = new Map();
+    const nextFriendFavoriteIdMap = new Map();
+    const nextAvatarFavoriteIndexByGroup = new Map();
+    const nextWorldFavoriteIndexByGroup = new Map();
 
 
 
     // 1. Avatars
     let offset = 0;
     while (true) {
-      const resp = await apiCall(`/api/vrc/favorites?type=avatar&n=100&offset=${offset}`);
-      if (!resp.ok) break;
+      const resp = await apiCall(`/api/vrc/favorites?type=avatar&n=100&offset=${offset}`, { noAbort: true });
+      if (!resp.ok) throw new Error(`Avatar favorites HTTP ${resp.status}`);
       const favs = await resp.json();
-      if (!favs || favs.length === 0 || favs.error) break;
-       favs.forEach((f) => {
-        favoriteIdMap.set(f.favoriteId, f.id);
+      if (!favs || favs.length === 0) break;
+      if (favs.error) throw new Error('Avatar favorites returned error');
+      favs.forEach((f) => {
+        nextFavoriteIdMap.set(f.favoriteId, f.id);
         const tag = f.tags?.[0];
         if (tag) {
-          avatarFavGroupCounts.set(tag, (avatarFavGroupCounts.get(tag) || 0) + 1);
+          nextAvatarFavGroupCounts.set(tag, (nextAvatarFavGroupCounts.get(tag) || 0) + 1);
+          _rememberFavoriteIndex(nextAvatarFavoriteIndexByGroup, tag, f.favoriteId);
           // Track which group(s) this avatar is favorited into
-          const existing = avatarFavTagMap.get(f.favoriteId);
+          const existing = nextAvatarFavTagMap.get(f.favoriteId);
           if (existing) existing.add(tag);
-          else avatarFavTagMap.set(f.favoriteId, new Set([tag]));
+          else nextAvatarFavTagMap.set(f.favoriteId, new Set([tag]));
         }
       });
       if (favs.length < 100) break;
@@ -44,14 +57,21 @@ async function syncAllFavoriteIds() {
     for (const worldFavType of ['world', 'vrcPlusWorld']) {
       offset = 0;
       while (true) {
-        const resp = await apiCall(`/api/vrc/favorites?type=${worldFavType}&n=100&offset=${offset}`);
-        if (!resp.ok) break;
+        const resp = await apiCall(`/api/vrc/favorites?type=${worldFavType}&n=100&offset=${offset}`, { noAbort: true });
+        if (!resp.ok) {
+          if (worldFavType === 'vrcPlusWorld' && (resp.status === 403 || resp.status === 404)) break;
+          throw new Error(`${worldFavType} favorites HTTP ${resp.status}`);
+        }
         const favs = await resp.json();
-        if (!favs || favs.length === 0 || favs.error) break;
+        if (!favs || favs.length === 0) break;
+        if (favs.error) throw new Error(`${worldFavType} favorites returned error`);
         favs.forEach((f) => {
-          worldFavoriteIdMap.set(f.favoriteId, f.id);
+          nextWorldFavoriteIdMap.set(f.favoriteId, f.id);
           const tag = f.tags?.[0];
-          if (tag) worldFavGroupCounts.set(tag, (worldFavGroupCounts.get(tag) || 0) + 1);
+          if (tag) {
+            nextWorldFavGroupCounts.set(tag, (nextWorldFavGroupCounts.get(tag) || 0) + 1);
+            _rememberFavoriteIndex(nextWorldFavoriteIndexByGroup, tag, f.favoriteId);
+          }
         });
 
         if (favs.length < 100) break;
@@ -59,30 +79,49 @@ async function syncAllFavoriteIds() {
       }
     }
     // 3. Friends — store as { favoriteId, tags } to match the per-category refresh
-    // shape (friends.js:443). Previously this site stored a bare string and the
-    // refresh path stored an object, breaking toggleFriendFavorite (which read
-    // it as a string) after any tab refresh.
-    offset = 0;
-    while (true) {
-      const resp = await apiCall(`/api/vrc/favorites?type=friend&n=100&offset=${offset}`);
-      if (!resp.ok) break;
-      const favs = await resp.json();
-      if (!favs || favs.length === 0 || favs.error) break;
-      favs.forEach((f) => {
-        const tag = f.tags?.[0] || 'group_0';
-        const existing = friendFavoriteIdMap.get(f.favoriteId);
-        if (existing && existing.tags) {
-          if (!existing.tags.includes(tag)) existing.tags.push(tag);
-        } else {
-          friendFavoriteIdMap.set(f.favoriteId, { favoriteId: f.id, tags: [tag] });
-        }
-      });
-      if (favs.length < 100) break;
-      offset += 100;
+    // shape (friends.js:443). Friend favorites are not part of the persistent
+    // avatar/world cache rewrite, so a friend-only failure should not block the
+    // startup IDB index sync.
+    let friendSyncFailed = false;
+    try {
+      offset = 0;
+      while (true) {
+        const resp = await apiCall(`/api/vrc/favorites?type=friend&n=100&offset=${offset}`, { noAbort: true });
+        if (!resp.ok) throw new Error(`Friend favorites HTTP ${resp.status}`);
+        const favs = await resp.json();
+        if (!favs || favs.length === 0) break;
+        if (favs.error) throw new Error('Friend favorites returned error');
+        favs.forEach((f) => {
+          const tag = f.tags?.[0] || 'group_0';
+          const existing = nextFriendFavoriteIdMap.get(f.favoriteId);
+          if (existing && existing.tags) {
+            if (!existing.tags.includes(tag)) existing.tags.push(tag);
+          } else {
+            nextFriendFavoriteIdMap.set(f.favoriteId, { favoriteId: f.id, tags: [tag] });
+          }
+        });
+        if (favs.length < 100) break;
+        offset += 100;
+      }
+    } catch (e) {
+      friendSyncFailed = true;
+      console.warn("Friend favorite sync failed", e);
     }
+
+    favoriteIdMap = nextFavoriteIdMap;
+    avatarFavTagMap = nextAvatarFavTagMap;
+    worldFavoriteIdMap = nextWorldFavoriteIdMap;
+    avatarFavGroupCounts = nextAvatarFavGroupCounts;
+    worldFavGroupCounts = nextWorldFavGroupCounts;
+    if (!friendSyncFailed) friendFavoriteIdMap = nextFriendFavoriteIdMap;
+    avatarFavoriteIndexByGroup = nextAvatarFavoriteIndexByGroup;
+    worldFavoriteIndexByGroup = nextWorldFavoriteIndexByGroup;
+
     logMsg(`✅ 已同步收藏状态 (模型:${favoriteIdMap.size} 世界:${worldFavoriteIdMap.size} 好友:${friendFavoriteIdMap.size})`, "info");
+    return true;
   } catch (e) {
     console.warn("Failed to sync favorite IDs", e);
+    return false;
   }
 }
 
@@ -90,22 +129,25 @@ async function syncAllFavoriteIds() {
 async function fetchFavoriteGroups() {
   try {
     // 1. Avatars
-    const rAv = await apiCall("/api/vrc/favorite/groups?type=avatar&n=50");
+    const rAv = await apiCall("/api/vrc/favorite/groups?type=avatar&n=50", { noAbort: true });
     if (rAv.ok) {
       const g = await rAv.json();
       favoriteGroups = (g || []).filter(x => x.name && x.name.startsWith('avatars')).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
       renderFavoriteGroupButtons();
-      preloadAllFavorites(favoriteGroups.map(x => x.name));
+      // Startup cache refresh is driven by syncAvatarFavoriteCachesByIndex():
+      // compare the remote favorite index with IDB first, then refresh only
+      // changed groups. Avoid TTL-only preloading that would re-fetch unchanged
+      // groups simply because the local age expired.
     }
     // 2. Worlds
-    const rW = await apiCall("/api/vrc/favorite/groups?type=world&n=50");
+    const rW = await apiCall("/api/vrc/favorite/groups?type=world&n=50", { noAbort: true });
     if (rW.ok) {
       const g = await rW.json();
       worldFavGroups = (g || []).filter(x => x.name && (x.name.startsWith('worlds') || x.name.startsWith('vrcPlusWorlds'))).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
       if (typeof renderWorldFavGroupButtons === 'function') renderWorldFavGroupButtons();
     }
     // 3. Friends
-    const rF = await apiCall("/api/vrc/favorite/groups?type=friend&n=50");
+    const rF = await apiCall("/api/vrc/favorite/groups?type=friend&n=50", { noAbort: true });
     if (rF.ok) {
       const g = await rF.json();
       friendFavGroups = (g || []).filter(x => x.name && (x.name.startsWith('group_') || x.name==='friends')).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
@@ -128,6 +170,296 @@ function renderFriendFavGroupButtons() {
   ).join('');
 }
 
+function _idsMatchSet(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
+function _avatarBasicFromItem(av) {
+  const id = av && (av.id || av.vrc_id);
+  if (!id) return null;
+  return {
+    id,
+    name: av.name,
+    thumbnailImageUrl: av.thumbnailImageUrl || av.image_url,
+    imageUrl: av.imageUrl || av.image_url,
+    releaseStatus: av.releaseStatus,
+    authorId: av.authorId || av.author_id || av.author?.id,
+    tags: av.tags
+  };
+}
+
+function _worldBasicFromItem(w) {
+  if (!w || !w.id) return null;
+  return {
+    id: w.id,
+    name: w.name,
+    thumbnailImageUrl: w.thumbnailImageUrl,
+    imageUrl: w.imageUrl,
+    authorName: w.authorName,
+    authorId: w.authorId,
+    occupants: w.occupants,
+    releaseStatus: w.releaseStatus,
+    isInvalid: w.isInvalid
+  };
+}
+
+async function _removeFromListCache(fullKey, basicsKey, ageKey, itemId) {
+  let changed = false;
+  try {
+    const basics = await idb.get(basicsKey);
+    if (Array.isArray(basics)) {
+      const nextBasics = basics.filter(item => item && (item.id || item.vrc_id) !== itemId);
+      if (nextBasics.length !== basics.length) {
+        await idb.set(basicsKey, nextBasics);
+        changed = true;
+      }
+    }
+  } catch (_) {}
+
+  if (fullKey) {
+    try {
+      const full = await idb.get(fullKey);
+      if (Array.isArray(full)) {
+        const nextFull = full.filter(item => item && (item.id || item.vrc_id) !== itemId);
+        if (nextFull.length !== full.length) await idb.set(fullKey, nextFull);
+      }
+    } catch (_) {}
+  }
+
+  if (changed && ageKey) {
+    try { await idb.set(ageKey, Date.now()); } catch (_) {}
+  }
+  return changed;
+}
+
+async function _upsertIntoListCache(fullKey, basicsKey, ageKey, item, toBasic) {
+  const basic = toBasic(item);
+  if (!basic || !basic.id) {
+    if (ageKey) {
+      try { await idb.set(ageKey, 0); } catch (_) {}
+    }
+    return false;
+  }
+
+  try {
+    const basics = await idb.get(basicsKey);
+    if (Array.isArray(basics)) {
+      const nextBasics = basics.filter(existing => existing && existing.id !== basic.id);
+      nextBasics.unshift(basic);
+      await idb.set(basicsKey, nextBasics);
+      if (ageKey) await idb.set(ageKey, Date.now());
+    } else if (ageKey) {
+      await idb.set(ageKey, 0);
+    }
+  } catch (_) {}
+
+  if (fullKey) {
+    try {
+      const full = await idb.get(fullKey);
+      if (Array.isArray(full)) {
+        const fullItem = item.id ? item : Object.assign({}, item, { id: basic.id });
+        const nextFull = full.filter(existing => existing && (existing.id || existing.vrc_id) !== basic.id);
+        nextFull.unshift(fullItem);
+        await idb.set(fullKey, nextFull);
+      }
+    } catch (_) {}
+  }
+  return true;
+}
+
+async function removeAvatarFromFavoriteCache(groupName, avatarId) {
+  if (!groupName || !avatarId) return;
+  await _removeFromListCache(
+    'avatars_' + groupName,
+    'avatar_basics_' + groupName,
+    'avatar_basics_age_' + groupName,
+    avatarId
+  );
+}
+
+async function upsertAvatarIntoFavoriteCache(groupName, av) {
+  if (!groupName || !av) return;
+  await _upsertIntoListCache(
+    'avatars_' + groupName,
+    'avatar_basics_' + groupName,
+    'avatar_basics_age_' + groupName,
+    av,
+    _avatarBasicFromItem
+  );
+}
+
+async function removeWorldFromFavoriteCache(groupName, worldId) {
+  if (!groupName || !worldId) return;
+  await _removeFromListCache(
+    null,
+    'world_basics_fav_' + groupName,
+    'world_basics_age_fav_' + groupName,
+    worldId
+  );
+}
+
+async function upsertWorldIntoFavoriteCache(groupName, world) {
+  if (!groupName || !world) return;
+  await _upsertIntoListCache(
+    null,
+    'world_basics_fav_' + groupName,
+    'world_basics_age_fav_' + groupName,
+    world,
+    _worldBasicFromItem
+  );
+}
+
+async function _fetchWorldFavoriteIndex(groupName) {
+  const favType = typeof _worldFavTypeForGroup === 'function'
+    ? _worldFavTypeForGroup(groupName)
+    : (String(groupName || '').startsWith('vrcPlusWorlds') ? 'vrcPlusWorld' : 'world');
+  const ids = [];
+  let offset = 0;
+  while (true) {
+    const resp = await apiCall(`/api/vrc/favorites?type=${favType}&tag=${groupName}&n=100&offset=${offset}`, { noAbort: true });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const favs = await resp.json();
+    if (!Array.isArray(favs) || favs.length === 0 || favs.error) break;
+    favs.forEach((f) => {
+      if (f.favoriteId) {
+        ids.push(f.favoriteId);
+        if (f.id) worldFavoriteIdMap.set(f.favoriteId, f.id);
+      }
+    });
+    if (favs.length < 100) break;
+    offset += 100;
+  }
+  return ids;
+}
+
+async function _fetchWorldBasicsByIds(ids, seqToken) {
+  const all = [];
+  const CONCURRENCY = 8;
+  for (let i = 0; i < ids.length; i += CONCURRENCY) {
+    if (seqToken && seqToken.cancelled) return all;
+    const chunk = ids.slice(i, i + CONCURRENCY);
+    const results = await Promise.allSettled(chunk.map((wid) =>
+      apiCall(`/api/vrc/worlds/${wid}`, { noAbort: true }).then(async (res) => {
+        if (res.status === 404 || res.status === 403) return { id: wid, name: '失效世界 (Invalid World)', isInvalid: true };
+        return res.ok ? res.json() : { id: wid, name: '加载失败', isInvalid: true };
+      })
+    ));
+    results.forEach((r) => { if (r.status === 'fulfilled') all.push(r.value); });
+  }
+  return all.map(w => ({
+    id: w.id,
+    name: w.name,
+    thumbnailImageUrl: w.thumbnailImageUrl,
+    imageUrl: w.imageUrl,
+    authorName: w.authorName,
+    authorId: w.authorId,
+    occupants: w.occupants,
+    releaseStatus: w.releaseStatus,
+    isInvalid: w.isInvalid
+  }));
+}
+
+async function _fetchAvatarFavoritesForGroup(groupName) {
+  let offset = 0;
+  let all = [];
+  while (true) {
+    const resp = await apiCall(`/api/vrc/avatars/favorites?n=100&offset=${offset}&tag=${groupName}`, { noAbort: true });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const batch = await resp.json();
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    all = all.concat(batch);
+    if (batch.length < 100) break;
+    offset += 100;
+  }
+  return all;
+}
+
+async function syncAvatarFavoriteCachesByIndex() {
+  try {
+    if (!Array.isArray(favoriteGroups) || favoriteGroups.length === 0) return;
+    for (const g of favoriteGroups) {
+      if (!g || !g.name) continue;
+      try {
+        const remoteIds = avatarFavoriteIndexByGroup.get(g.name) || [];
+        const cachedBasicsRaw = await idb.get('avatar_basics_' + g.name);
+        const cachedBasics = Array.isArray(cachedBasicsRaw) ? cachedBasicsRaw : null;
+        const cachedIds = (cachedBasics || []).map(a => a && a.id).filter(Boolean);
+
+        if (cachedBasics && _idsMatchSet(cachedIds, remoteIds)) {
+          await idb.set('avatar_basics_age_' + g.name, Date.now());
+          continue;
+        }
+
+        const full = remoteIds.length ? await _fetchAvatarFavoritesForGroup(g.name) : [];
+        const basics = full.map(a => ({
+          id: a.id,
+          name: a.name,
+          thumbnailImageUrl: a.thumbnailImageUrl,
+          imageUrl: a.imageUrl,
+          releaseStatus: a.releaseStatus,
+          authorId: a.authorId,
+          tags: a.tags
+        }));
+        await idb.set('avatars_' + g.name, full);
+        await idb.set('avatar_basics_' + g.name, basics);
+        await idb.set('avatar_basics_age_' + g.name, Date.now());
+        if (currentTab === 'download' && currentCategory === g.name) {
+          avatars = basics;
+          applyFilters();
+        }
+      } catch (e) {
+        console.warn('syncAvatarFavoriteCachesByIndex', g.name, e);
+      }
+    }
+  } catch (e) {
+    console.warn('syncAvatarFavoriteCachesByIndex failed', e);
+  }
+}
+
+async function syncWorldFavoriteCachesByIndex() {
+  try {
+    if (typeof loadWorldFavGroups === 'function') await loadWorldFavGroups();
+    if (!Array.isArray(worldFavGroups) || worldFavGroups.length === 0) return;
+
+    const seqToken = { cancelled: false };
+    for (const g of worldFavGroups) {
+      if (!g || !g.name) continue;
+      const category = 'fav_' + g.name;
+      try {
+        const remoteIds = worldFavoriteIndexByGroup.has(g.name)
+          ? (worldFavoriteIndexByGroup.get(g.name) || [])
+          : await _fetchWorldFavoriteIndex(g.name);
+        worldFavGroupCounts.set(g.name, remoteIds.length);
+        const cachedBasicsRaw = await idb.get('world_basics_' + category);
+        const cachedBasics = Array.isArray(cachedBasicsRaw) ? cachedBasicsRaw : null;
+        const cachedIds = (cachedBasics || []).map(w => w && w.id).filter(Boolean);
+
+        if (cachedBasics && _idsMatchSet(cachedIds, remoteIds)) {
+          await idb.set('world_basics_age_' + category, Date.now());
+          continue;
+        }
+
+        const basics = remoteIds.length ? await _fetchWorldBasicsByIds(remoteIds, seqToken) : [];
+        await idb.set('world_basics_' + category, basics);
+        await idb.set('world_basics_age_' + category, Date.now());
+        if (currentTab === 'worlds' && currentWorldCategory === category) {
+          allWorlds = basics;
+          filterWorlds();
+        }
+      } catch (e) {
+        console.warn('syncWorldFavoriteCachesByIndex', g.name, e);
+      }
+    }
+    if (typeof renderWorldFavGroupButtons === 'function') renderWorldFavGroupButtons();
+  } catch (e) {
+    console.warn('syncWorldFavoriteCachesByIndex failed', e);
+  }
+}
+
 async function preloadAllFavorites(groups) {
   // Delay to not compete with the initial fetchAvatars on login
   await new Promise((r) => setTimeout(r, 3000));
@@ -143,9 +475,10 @@ async function preloadAllFavorites(groups) {
       let offset = 0;
       let allFetched = [];
       while (true) {
-        const resp = await apiCall(
-          `/api/vrc/avatars/favorites?n=100&offset=${offset}&tag=${g}`,
-        );
+          const resp = await apiCall(
+            `/api/vrc/avatars/favorites?n=100&offset=${offset}&tag=${g}`,
+            { noAbort: true }
+          );
         if (!resp.ok) break;
         const batch = await resp.json();
         if (!batch || batch.length === 0) break;

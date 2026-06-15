@@ -291,14 +291,15 @@ function showMainApp() {
     }
   }).catch(() => {});
 
-  // 2. Background syncs (don't block UI; switchTab handles the current tab below)
-  syncAllFavoriteIds();
+  // 2. Background index syncs (don't block UI; tab views render from IDB first).
+  // These compare lightweight remote indexes with IDB caches and only refresh
+  // changed buckets, instead of forcing full detail reloads on every site open.
   queueBackgroundTask(async () => {
-    if (worldsLoaded) await fetchWorlds(currentWorldCategory, false);
-    // initWorldsTab is implicitly triggered when user opens the worlds tab
-  });
-  queueBackgroundTask(async () => {
+    const indexOk = await syncAllFavoriteIds();
     await fetchFavoriteGroups(); // populates the favorite-group sidebar buttons
+    if (!indexOk) return;
+    if (typeof syncAvatarFavoriteCachesByIndex === 'function') await syncAvatarFavoriteCachesByIndex();
+    if (typeof syncWorldFavoriteCachesByIndex === 'function') await syncWorldFavoriteCachesByIndex();
   });
   queueBackgroundTask(async () => {
     // Keep the friends mini-profile fresh in the sidebar even if user starts on
@@ -312,9 +313,8 @@ function showMainApp() {
   //    cold load the main grid stays empty until the user clicks a different tab.
   const initialTab = currentTab || "download";
   currentTab = "";
-  // Signal to switchTab that this is a full page load — force API refresh
-  // even if the basics cache TTL hasn't expired yet.
-  window._isInitialLoad = true;
+  // Startup cache freshness is handled by the background index sync above; the
+  // active tab should use the same IDB-first path as normal tab switches.
+  window._isInitialLoad = false;
   switchTab(initialTab);
 }
-
