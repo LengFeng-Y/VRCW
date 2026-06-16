@@ -15,9 +15,9 @@ const APP_BUILD_LABEL = "Workers Edition";
 const APP_CACHE_VERSION = (() => {
   try {
     const src = document.currentScript?.src || "";
-    return new URL(src, location.href).searchParams.get("v") || "64";
+    return new URL(src, location.href).searchParams.get("v") || "65";
   } catch (_) {
-    return "64";
+    return "65";
   }
 })();
 const API_BASE = location.origin; // Worker serves from same origin

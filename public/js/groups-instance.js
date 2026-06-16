@@ -240,6 +240,73 @@ function renderGroupInstancesForbidden(el, groupId, groupContext) {
   </div>`;
 }
 
+function normalizeGroupInstanceInfo(i) {
+  const world = i && i.world ? i.world : {};
+  const rawInstance = String(
+    (i && (i.location || i.locationId || i.id || i.instanceId || i.instanceName)) || ''
+  );
+  const colonIndex = rawInstance.indexOf(':');
+  const worldId = (i && (i.worldId || i.world_id)) || world.id || (colonIndex > 0 ? rawInstance.slice(0, colonIndex) : '');
+  const instancePart = colonIndex >= 0 ? rawInstance.slice(colonIndex + 1) : rawInstance;
+  const instanceShortId = instancePart.split('~')[0] || instancePart || '';
+  const params = {};
+  instancePart.replace(/~([^~()]+)(?:\(([^)]*)\))?/g, (_, key, value) => {
+    params[key] = value == null ? true : value;
+    return '';
+  });
+
+  const regionCode = String((i && i.region) || params.region || '').toLowerCase();
+  const regionLabel = ({
+    us: 'US',
+    use: 'US East',
+    usw: 'US West',
+    eu: 'Europe',
+    jp: 'Japan'
+  })[regionCode] || (regionCode ? regionCode.toUpperCase() : '');
+
+  const groupAccess = String((i && (i.groupAccessType || i.group_access_type)) || params.groupAccessType || '').toLowerCase();
+  const groupAccessLabel = ({
+    public: '\u7fa4\u7ec4\u516c\u5f00',
+    members: '\u7fa4\u7ec4\u6210\u5458',
+    friends: '\u7fa4\u7ec4\u597d\u53cb',
+    private: '\u7fa4\u7ec4\u79c1\u5bc6'
+  })[groupAccess] || (groupAccess ? `\u7fa4\u7ec4 ${groupAccess}` : '');
+
+  let accessLabel = groupAccessLabel;
+  if (!accessLabel) {
+    const accessRaw = String((i && (i.accessType || i.type || i.privacy)) || '').toLowerCase();
+    if (instancePart.includes('~private') || accessRaw === 'private') accessLabel = '\u79c1\u5bc6';
+    else if (instancePart.includes('~friends+') || instancePart.includes('~hidden') || instancePart.includes('canRequestInvite')) accessLabel = '\u597d\u53cb+';
+    else if (instancePart.includes('~friends') || accessRaw === 'friends') accessLabel = '\u597d\u53cb';
+    else if (params.group) accessLabel = '\u7fa4\u7ec4';
+    else accessLabel = '\u516c\u5f00';
+  }
+
+  const numberFrom = (...vals) => {
+    for (const val of vals) {
+      if (Array.isArray(val)) return val.length;
+      if (typeof val === 'number' && Number.isFinite(val)) return val;
+      if (typeof val === 'string' && val.trim() !== '' && Number.isFinite(Number(val))) return Number(val);
+    }
+    return null;
+  };
+  const occupants = numberFrom(i && i.n_users, i && i.userCount, i && i.user_count, i && i.playerCount, i && i.players, i && i.users) || 0;
+  const capacity = numberFrom(i && i.capacity, world.capacity, i && i.worldCapacity) || 0;
+  const location = rawInstance.startsWith('wrld_') ? rawInstance : (worldId && instancePart ? `${worldId}:${instancePart}` : '');
+  const isJoinable = location.startsWith('wrld_') && !instancePart.includes('~private');
+
+  return {
+    worldName: world.name || (i && i.worldName) || '\u672a\u77e5\u4e16\u754c',
+    instanceShortId,
+    regionLabel,
+    accessLabel,
+    occupants,
+    capacity,
+    location,
+    isJoinable
+  };
+}
+
 async function fetchGroupInstances(groupId, groupContext = null) {
   const el = document.getElementById('gdInstances');
   if(!el) return;
@@ -257,16 +324,22 @@ async function fetchGroupInstances(groupId, groupContext = null) {
       return;
     }
     el.innerHTML = insts.map(i => {
-      const region = { us: '🇺🇸', use: '🇺🇸', eu: '🇪🇺', jp: '🇯🇵' }[i.region] || '🌐';
-      const wName = (i.world && i.world.name) || i.worldName || '未知世界';
-      const wCap  = (i.world && i.world.capacity) || i.capacity || 0;
+      const info = normalizeGroupInstanceInfo(i || {});
+      const metaParts = [
+        info.regionLabel,
+        info.instanceShortId ? `#${info.instanceShortId}` : '',
+        info.accessLabel
+      ].filter(Boolean);
+      const joinButton = info.isJoinable
+        ? `<button class="btn btn-xs btn-primary" style="padding:4px 8px;font-size:0.7em;" onclick="inviteSelf('${escJsAttr(info.location)}')">加入</button>`
+        : `<button class="btn btn-xs btn-primary" style="padding:4px 8px;font-size:0.7em;" disabled>加入</button>`;
       return `<div class="group-instance-card">
         <div class="inst-info">
-          <div class="inst-name">${escHtml(wName)}</div>
-          <div class="inst-meta">${region} ${escHtml(i.instanceId)} · ${escHtml(i.accessType)}</div>
+          <div class="inst-name">${escHtml(info.worldName)}</div>
+          <div class="inst-meta">${metaParts.map(part => `<span>${escHtml(part)}</span>`).join('')}</div>
         </div>
-        <div class="inst-occupants">${i.n_users||0} / ${wCap}</div>
-        <button class="btn btn-xs btn-primary" style="padding:4px 8px;font-size:0.7em;" onclick="inviteSelf('${escJsAttr(i.worldId + ':' + i.instanceId)}')">加入</button>
+        <div class="inst-occupants">${info.occupants} / ${info.capacity || '?'}</div>
+        ${joinButton}
       </div>`;
     }).join('');
   } catch(e) {

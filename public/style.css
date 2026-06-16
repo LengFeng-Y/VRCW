@@ -3163,6 +3163,7 @@ select.input-field {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .inst-name {
@@ -3172,9 +3173,19 @@ select.input-field {
 }
 
 .inst-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   font-size: 0.65rem;
   color: var(--text-muted);
-  font-family: monospace;
+  min-width: 0;
+}
+
+.inst-meta span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inst-occupants {
