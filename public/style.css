@@ -1614,6 +1614,17 @@ select.input-field {
   font-weight: 600;
 }
 
+.link-like {
+  color: var(--accent-light);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-like:hover {
+  color: var(--text-primary);
+}
+
 /* ── avtrDB platform badges ── */
 .avtrdb-badge {
   display: inline-block;

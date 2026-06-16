@@ -166,6 +166,62 @@ async function performSingleAvatarRecovery(id) {
   return data ? (data.name || data.displayName) : null;
 }
 
+function avatarIdOf(av) {
+  return av?.vrc_id || av?.id || av?.avatarId || "";
+}
+
+function isUsefulAvatarSnapshot(av) {
+  const id = avatarIdOf(av);
+  if (!id) return false;
+  const name = av?.name || av?.avatarName || av?.lastKnownName || "";
+  const thumb = av?.thumbnailImageUrl || av?.imageUrl || av?.image_url || av?.lastKnownThumbnailImageUrl || av?.lastKnownImageUrl || "";
+  const hasDates = !!(av?.created_at || av?.createdAt || av?.updated_at || av?.updatedAt);
+  return !!(name || thumb || hasDates || av?.description);
+}
+
+async function rememberAvatarDetailSnapshot(av) {
+  const id = avatarIdOf(av);
+  if (!id || !isUsefulAvatarSnapshot(av)) return;
+  const snapshot = Object.assign({}, av, {
+    id,
+    cachedAt: Date.now()
+  });
+  try { await idb.set('avatar_detail_' + id, snapshot); } catch (_) {}
+  const name = snapshot.name || snapshot.avatarName || snapshot.lastKnownName;
+  if (name && !String(name).startsWith('失效模型')) persistName(id, name);
+}
+
+async function findCachedAvatarSnapshot(id) {
+  if (!id) return null;
+  try {
+    const direct = await idb.get('avatar_detail_' + id);
+    if (direct && isUsefulAvatarSnapshot(direct)) return Object.assign({ id }, direct, { source: direct.source || 'local-detail-cache' });
+
+    const keys = await idb.keys();
+    const fullKeys = keys.filter(k => typeof k === 'string' && k.startsWith('avatars_'));
+    for (const key of fullKeys) {
+      const list = await idb.get(key);
+      if (!Array.isArray(list)) continue;
+      const hit = list.find(a => avatarIdOf(a) === id);
+      if (hit && isUsefulAvatarSnapshot(hit)) return Object.assign({ id }, hit, { source: key });
+    }
+
+    const basicKeys = keys.filter(k => typeof k === 'string' && k.startsWith('avatar_basics_'));
+    for (const key of basicKeys) {
+      const list = await idb.get(key);
+      if (!Array.isArray(list)) continue;
+      const hit = list.find(a => avatarIdOf(a) === id);
+      if (hit && isUsefulAvatarSnapshot(hit)) return Object.assign({ id }, hit, { source: key });
+    }
+
+    const knownName = window._localNameMap?.get(id);
+    if (knownName) return { id, name: knownName, source: 'persistent_avatar_names' };
+  } catch (e) {
+    console.warn('findCachedAvatarSnapshot failed', e);
+  }
+  return null;
+}
+
 
 // ── Unified Platform/Performance Helper ──
 function getAvatarPlatforms(av) {
@@ -1182,4 +1238,3 @@ async function apiCall(path, options = {}) {
     throw err;
   }
 }
-

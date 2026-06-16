@@ -123,6 +123,28 @@ function _worldFavTypeForGroup(groupName) {
   return String(groupName || '').startsWith('vrcPlusWorlds') ? 'vrcPlusWorld' : 'world';
 }
 
+function _worldBasicForWorldsCache(w) {
+    if (!w || !w.id) return null;
+    return {
+        id: w.id,
+        name: w.name,
+        thumbnailImageUrl: w.thumbnailImageUrl,
+        imageUrl: w.imageUrl,
+        authorName: w.authorName,
+        authorId: w.authorId,
+        occupants: w.occupants,
+        releaseStatus: w.releaseStatus,
+        isInvalid: !!w.isInvalid
+    };
+}
+
+async function _saveWorldBasicsForCurrentCategory(cat = currentWorldCategory) {
+    if (!cat) return;
+    const basics = (allWorlds || []).map(_worldBasicForWorldsCache).filter(Boolean);
+    await idb.set('world_basics_' + cat, basics);
+    await idb.set('world_basics_age_' + cat, Date.now());
+}
+
 async function fetchWorlds(category, forceRefresh = false) {
   const seq = ++currentWorldFetchSeq;
   currentWorldCategory = category;
@@ -291,19 +313,7 @@ async function fetchWorlds(category, forceRefresh = false) {
 }
 
 function saveWorldBasics(cat) {
-    const basics = allWorlds.map(w => ({
-        id: w.id,
-        name: w.name,
-        thumbnailImageUrl: w.thumbnailImageUrl,
-        imageUrl: w.imageUrl,
-        authorName: w.authorName,
-        authorId: w.authorId,
-        occupants: w.occupants,
-        releaseStatus: w.releaseStatus,  // needed for private-non-own cleanup filter
-        isInvalid: w.isInvalid
-    }));
-    idb.set('world_basics_' + cat, basics).catch(()=>{});
-    idb.set('world_basics_age_' + cat, Date.now()).catch(()=>{}); // TTL timestamp
+    _saveWorldBasicsForCurrentCategory(cat).catch(()=>{});
 }
 
 async function cleanupInvalidWorlds() {
@@ -325,18 +335,34 @@ async function cleanupInvalidWorlds() {
         invalidItems: invalid,
         privateNonOwnItems: privateNonOwn,
         invalidLabel: item => item.name || '失效世界',
-        onConfirm: async (toDelete) => {
-            let count = 0, fail = 0;
+        onConfirm: async (toDelete, ctx) => {
+            let count = 0, fail = 0, done = 0;
             for (const w of toDelete) {
+                if (ctx?.isCancelled?.()) break;
                 const favId = worldFavoriteIdMap.get(w.id);
                 if (favId) {
-                    const r = await apiCall(`/api/vrc/favorites/${favId}`, { method: 'DELETE' });
-                    if (r.ok) { worldFavoriteIdMap.delete(w.id); count++; }
-                    else fail++;
+                    try {
+                        const r = await apiCall(`/api/vrc/favorites/${favId}`, { method: 'DELETE' });
+                        if (r.ok) {
+                            worldFavoriteIdMap.delete(w.id);
+                            if (currentWorldCategory && currentWorldCategory.startsWith('fav_')) {
+                                await removeWorldFromFavoriteCache(currentWorldCategory.slice(4), w.id);
+                            }
+                            count++;
+                        } else {
+                            fail++;
+                        }
+                    } catch (_) {
+                        fail++;
+                    }
                 } else fail++;
+                done++;
+                ctx?.updateProgress?.(done, toDelete.length);
                 await new Promise(r => setTimeout(r, 200));
             }
-            showToast(`清理完毕：成功 ${count} 个，失败 ${fail} 个`, fail > 0 ? 'error' : 'success');
+            const cancelled = ctx?.isCancelled?.();
+            showToast(`${cancelled ? '已停止清理' : '清理完毕'}：成功 ${count} 个，失败 ${fail} 个`, count > 0 ? 'success' : (cancelled ? 'info' : 'error'));
+            try { await _saveWorldBasicsForCurrentCategory(); } catch(_) {}
             fetchWorlds(currentWorldCategory, true);
         }
     });
@@ -653,12 +679,19 @@ async function cleanInvalidWorlds() {
     invalidItems: invalid,
     privateNonOwnItems: [],
     invalidLabel: item => item.name || '失效世界',
-    onConfirm: async (toDelete) => {
+    onConfirm: async (toDelete, ctx) => {
       worldLogMsg(`🗑️ 开始清理 ${toDelete.length} 个失效世界...`, 'info');
-      let success = 0, fail = 0;
+      let success = 0, fail = 0, done = 0;
       for (const w of toDelete) {
+        if (ctx?.isCancelled?.()) break;
         const fid = worldFavoriteIdMap.get(w.id);
-        if (!fid) { fail++; worldLogMsg(`⚠ ${w.name}: 找不到收藏 ID`, 'error'); continue; }
+        if (!fid) {
+          fail++;
+          done++;
+          ctx?.updateProgress?.(done, toDelete.length);
+          worldLogMsg(`⚠ ${w.name}: 找不到收藏 ID`, 'error');
+          continue;
+        }
         try {
           await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
           worldFavoriteIdMap.delete(w.id);
@@ -668,10 +701,13 @@ async function cleanInvalidWorlds() {
           success++;
           worldLogMsg(`✓ 已移除失效世界: ${w.name || w.id}`, 'success');
         } catch(e) { fail++; worldLogMsg(`✗ 移除失败: ${e.message}`, 'error'); }
+        done++;
+        ctx?.updateProgress?.(done, toDelete.length);
         await new Promise(r => setTimeout(r, 200));
       }
-      worldLogMsg(`✅ 清理完毕：成功 ${success}，失败 ${fail}`, success > 0 ? 'success' : 'error');
-      try { await idb.set('world_basics_' + currentWorldCategory, []); } catch(_) {}
+      const cancelled = ctx?.isCancelled?.();
+      worldLogMsg(`${cancelled ? '⏹ 已停止清理' : '✅ 清理完毕'}：成功 ${success}，失败 ${fail}`, success > 0 ? 'success' : (cancelled ? 'info' : 'error'));
+      try { await _saveWorldBasicsForCurrentCategory(); } catch(_) {}
       fetchWorlds(currentWorldCategory, true);
     }
   });

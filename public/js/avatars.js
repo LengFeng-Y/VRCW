@@ -52,6 +52,102 @@ let fetchSeq = 0; // Track latest fetch to avoid stale renders
 // TTL: skip the API refresh entirely when basics cache is younger than this.
 // Tab switches pass forceRefresh=false → fast path; the 🔄 button passes true.
 const AVATARS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function _avatarBasicFromItem(a) {
+  if (!a || !a.id) return null;
+  return {
+    id: a.id,
+    name: a.name,
+    thumbnailImageUrl: a.thumbnailImageUrl,
+    imageUrl: a.imageUrl,
+    releaseStatus: a.releaseStatus,
+    authorId: a.authorId,
+    tags: a.tags,
+    isInvalid: !!a.isInvalid,
+    invalidReason: a.invalidReason,
+    lastKnownName: a.lastKnownName,
+    lastKnownThumbnailImageUrl: a.lastKnownThumbnailImageUrl,
+    lastKnownImageUrl: a.lastKnownImageUrl
+  };
+}
+
+function _markAvatarInvalidFromCache(av, status) {
+  const name = av?.name && !String(av.name).startsWith('失效模型') ? av.name : (av?.lastKnownName || '');
+  const thumb = av?.thumbnailImageUrl || av?.imageUrl || av?.lastKnownThumbnailImageUrl || av?.lastKnownImageUrl || '';
+  return Object.assign({}, av || {}, {
+    id: av?.id,
+    name: name || '失效模型 (Invalid / Deleted)',
+    releaseStatus: 'unavailable',
+    isInvalid: true,
+    invalidReason: status ? `HTTP ${status}` : 'unavailable',
+    lastKnownName: name || av?.lastKnownName || '',
+    lastKnownThumbnailImageUrl: av?.lastKnownThumbnailImageUrl || av?.thumbnailImageUrl || '',
+    lastKnownImageUrl: av?.lastKnownImageUrl || av?.imageUrl || '',
+    thumbnailImageUrl: thumb,
+    imageUrl: av?.imageUrl || av?.lastKnownImageUrl || thumb
+  });
+}
+
+function _isAvatarInvalid(av) {
+  return !!(av && (av.isInvalid || !av.name || av.releaseStatus === 'hidden' || av.releaseStatus === 'unavailable'));
+}
+
+async function _verifyFavoriteAvatarCache(groupName, seq, opts = {}) {
+  if (!groupName || groupName === 'mine' || groupName === 'local') return;
+  const list = Array.isArray(opts.source) ? opts.source : avatars;
+  if (!Array.isArray(list) || list.length === 0) return;
+  const CONCURRENCY = opts.concurrency || 12;
+  let changed = false;
+  let verified = 0;
+  const next = list.map(a => Object.assign({}, a));
+
+  const verifyOne = async (av) => {
+    if (!av || !av.id) return null;
+    try {
+      const r = await apiCall(`/api/vrc/avatars/${av.id}`, { noAbort: true });
+      if (r.ok) {
+        const full = await r.json().catch(() => null);
+        if (full && full.id) return Object.assign({}, av, full, { isInvalid: false, invalidReason: '' });
+        return av;
+      }
+      if (r.status === 404 || r.status === 403) return _markAvatarInvalidFromCache(av, r.status);
+      return av;
+    } catch (_) {
+      return av;
+    }
+  };
+
+  for (let i = 0; i < next.length; i += CONCURRENCY) {
+    if (seq && seq !== fetchSeq) return;
+    const chunk = next.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(chunk.map(verifyOne));
+    results.forEach((fresh, offset) => {
+      if (!fresh) return;
+      const idx = i + offset;
+      if (JSON.stringify(_avatarBasicFromItem(next[idx])) !== JSON.stringify(_avatarBasicFromItem(fresh))) changed = true;
+      next[idx] = fresh;
+      verified++;
+    });
+    if (opts.onProgress) opts.onProgress(verified, next.length);
+  }
+
+  if (!changed) {
+    await idb.set("avatar_basics_age_" + groupName, Date.now()).catch(()=>{});
+    return;
+  }
+
+  await idb.set("avatars_" + groupName, next).catch(()=>{});
+  await idb.set("avatar_basics_" + groupName, next.map(_avatarBasicFromItem).filter(Boolean)).catch(()=>{});
+  await idb.set("avatar_basics_age_" + groupName, Date.now()).catch(()=>{});
+
+  if (!seq || (seq === fetchSeq && currentCategory === groupName)) {
+    avatars = next.map(_avatarBasicFromItem).filter(Boolean);
+    applyFilters();
+    const invalidCount = avatars.filter(_isAvatarInvalid).length;
+    if (invalidCount > 0) logMsg(`⚠ 发现 ${invalidCount} 个失效模型，已更新缓存`, 'error');
+  }
+}
+
 async function fetchAvatars(forceRefresh = false) {
   const seq = ++currentGlobalFetchSeq;
   fetchSeq = seq; 
@@ -79,7 +175,10 @@ async function fetchAvatars(forceRefresh = false) {
       // Favorite groups are IDB-first: startup/background index sync updates
       // stale favorite caches only when their remote ID index changes. "Mine"
       // has no cheap index endpoint, so it keeps the TTL-driven refresh path.
-      if (!forceRefresh && currentCategory !== "mine") return;
+      if (!forceRefresh && currentCategory !== "mine") {
+        _verifyFavoriteAvatarCache(currentCategory, seq).catch(e => console.warn('verify favorite avatars failed', e));
+        return;
+      }
       if (!forceRefresh && currentCategory === "mine" && cacheIsFresh) return;
     } else if (grid) {
       grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.4);">加载中...</div>`;
@@ -156,15 +255,7 @@ async function fetchAvatars(forceRefresh = false) {
     applyFilters();
     
     // Save basics only
-    const basics = allFetched.map(a => ({
-      id: a.id,
-      name: a.name,
-      thumbnailImageUrl: a.thumbnailImageUrl,
-      imageUrl: a.imageUrl,
-      releaseStatus: a.releaseStatus,
-      authorId: a.authorId,  // needed for private-non-own cleanup filter
-      tags: a.tags
-    }));
+    const basics = allFetched.map(_avatarBasicFromItem).filter(Boolean);
     idb.set("avatar_basics_" + currentCategory, basics).catch(()=>{});
     idb.set("avatar_basics_age_" + currentCategory, Date.now()).catch(()=>{});
     logMsg(`✅ Sync complete: ${avatars.length} avatars`, "success");
@@ -233,10 +324,7 @@ async function fetchAvatars(forceRefresh = false) {
            if (idx !== -1) avatars[idx] = Object.assign(avatars[idx], a);
         });
         // Save basics with fresh data
-        const freshBasics = avatars.map(a => ({
-          id: a.id, name: a.name, thumbnailImageUrl: a.thumbnailImageUrl, imageUrl: a.imageUrl,
-          releaseStatus: a.releaseStatus, authorId: a.authorId, tags: a.tags
-        }));
+        const freshBasics = avatars.map(_avatarBasicFromItem).filter(Boolean);
         idb.set("avatar_basics_" + currentCategory, freshBasics).catch(()=>{});
         idb.set("avatar_basics_age_" + currentCategory, Date.now()).catch(()=>{});
       }
@@ -660,6 +748,12 @@ function _showCleanupModal(opts) {
       </div>
 
       <div id="cuProgress" style="display:none;font-size:0.85em;color:var(--accent-light);text-align:center;padding:10px;background:rgba(255, 255, 255, 0.08);border-radius:8px;border:1px solid rgba(255, 255, 255, 0.2);">\u5904\u7406\u4e2d...</div>
+      <div id="cuProgressBar" class="progress-bar-container" style="margin-bottom:0;">
+        <div class="progress-bar-track">
+          <div id="cuProgressFill" class="progress-bar-fill"></div>
+        </div>
+        <div id="cuProgressText" class="progress-text">0%</div>
+      </div>
 
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">
         <button id="cuCancel" class="btn btn-secondary" style="padding:8px 22px;">\u53d6\u6d88</button>
@@ -672,7 +766,22 @@ function _showCleanupModal(opts) {
   modal.style.zIndex = modalZTop();
   lockBodyScroll();
 
-  const closeModal = () => { modal.remove(); unlockBodyScroll(); };
+  const state = { running: false, cancelled: false };
+  const closeModal = () => {
+    if (state.running) {
+      state.cancelled = true;
+      const cancelBtn = document.getElementById('cuCancel');
+      if (cancelBtn) {
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = '正在停止...';
+      }
+      const prog = document.getElementById('cuProgress');
+      if (prog) prog.textContent = '正在停止，当前请求结束后会退出';
+      return;
+    }
+    modal.remove();
+    unlockBodyScroll();
+  };
   document.getElementById('cuClose').onclick = closeModal;
   document.getElementById('cuCancel').onclick = closeModal;
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
@@ -682,14 +791,37 @@ function _showCleanupModal(opts) {
     const toDelete = [...invalidItems, ...(includePrivate ? privateNonOwnItems : [])];
     if (!toDelete.length) { closeModal(); return; }
 
+    state.running = true;
     document.getElementById('cuConfirm').disabled = true;
-    document.getElementById('cuCancel').disabled = true;
+    document.getElementById('cuClose').disabled = true;
+    const cancelBtn = document.getElementById('cuCancel');
+    if (cancelBtn) cancelBtn.textContent = '停止';
     const prog = document.getElementById('cuProgress');
+    const bar = document.getElementById('cuProgressBar');
+    const fill = document.getElementById('cuProgressFill');
+    const txt = document.getElementById('cuProgressText');
     prog.style.display = '';
+    bar?.classList.add('active');
     prog.textContent = `\u5904\u7406\u4e2d 0 / ${toDelete.length}...`;
+    if (fill) fill.style.width = '0%';
+    if (txt) txt.textContent = '0%';
 
-    await onConfirm(toDelete);
-    closeModal();
+    const updateProgress = (done, total, label) => {
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      if (fill) fill.style.width = pct + '%';
+      if (txt) txt.textContent = pct + '%';
+      prog.textContent = label || `\u5904\u7406\u4e2d ${done} / ${total}...`;
+    };
+
+    try {
+      await onConfirm(toDelete, {
+        isCancelled: () => state.cancelled,
+        updateProgress
+      });
+    } finally {
+      state.running = false;
+      closeModal();
+    }
   };
 }
 
@@ -715,11 +847,17 @@ async function cleanInvalidFavorites() {
     invalidItems: invalid,
     privateNonOwnItems: privateNonOwn,
     invalidLabel: item => item.name || '失效/无名模型',
-    onConfirm: async (toDelete) => {
-      let success = 0, fail = 0;
+    onConfirm: async (toDelete, ctx) => {
+      let success = 0, fail = 0, done = 0;
       for (const av of toDelete) {
+        if (ctx?.isCancelled?.()) break;
         const fid = favoriteIdMap.get(av.id);
-        if (!fid) { fail++; continue; }
+        if (!fid) {
+          fail++;
+          done++;
+          ctx?.updateProgress?.(done, toDelete.length);
+          continue;
+        }
         try {
           await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
           // Cleanup the per-avatar state so the sidebar group counter and the
@@ -734,10 +872,16 @@ async function cleanInvalidFavorites() {
           }
           success++;
         } catch(e) { fail++; }
+        done++;
+        ctx?.updateProgress?.(done, toDelete.length);
         await new Promise(r => setTimeout(r, 200));
       }
-      logMsg(`✅ 清理完毕：成功移除 ${success} 个，失败 ${fail} 个`, success > 0 ? 'success' : 'error');
-      try { await idb.set('avatar_basics_' + currentCategory, []); } catch(_) {}
+      const cancelled = ctx?.isCancelled?.();
+      logMsg(`${cancelled ? '⏹ 已停止清理' : '✅ 清理完毕'}：成功移除 ${success} 个，失败 ${fail} 个`, success > 0 ? 'success' : (cancelled ? 'info' : 'error'));
+      try {
+        await idb.set('avatar_basics_' + currentCategory, avatars.map(_avatarBasicFromItem).filter(Boolean));
+        await idb.set('avatar_basics_age_' + currentCategory, Date.now());
+      } catch(_) {}
       fetchAvatars(true);
     }
   });

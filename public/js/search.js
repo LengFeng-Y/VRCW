@@ -16,6 +16,11 @@ let avtrdbCurrentQuery = "";
 let avtrdbCurrentPlatform = "";
 let avtrdbDebounceTimer = null;
 let avtrdbTotalLoaded = 0;
+let avtrdbMatchField = (function () {
+  try { return normalizeAvtrdbMatchField(localStorage.getItem('vrcw_avtrdb_match_field')); }
+  catch (_) { return 'all'; }
+})();
+let _avtrdbDisplayOrder = [];
 // The avatar object currently shown in the detail modal. Set by displayAvatarDetail()
 // so the "save to local" fav-menu button has something to pass to saveToLocalFavorite().
 // (Fixes a ReferenceError: the inline onclick referenced an undefined `currentAvatarDetail`.)
@@ -26,6 +31,11 @@ let _currentDetailAvatar = null;
 // the fav-menu button through this.
 function saveCurrentDetailToLocal() {
   if (_currentDetailAvatar) saveToLocalFavorite(_currentDetailAvatar);
+}
+
+function normalizeAvtrdbMatchField(field) {
+  const allowed = new Set(['all', 'title', 'author', 'tags', 'desc']);
+  return allowed.has(field) ? field : 'all';
 }
 
 // Builds the favorite group list HTML with checkmarks for groups where the avatar
@@ -69,12 +79,14 @@ function _buildFavGroupListHtml(favList, id) {
 
 function onSearchCategoryChange() {
   const cat = document.getElementById("searchCategory")?.value;
-  const platWrap = document.querySelector(".search-platform-select");
+  const platWrap = document.getElementById("platGlassSelect")?.closest(".search-platform-select");
+  const fieldWrap = document.getElementById("fieldGlassSelect")?.closest(".search-platform-select");
   const searchInput = document.getElementById("avtrdbSearch");
 
   // Show platform filter for avatars and worlds; hide for users/groups
   const showPlatform = cat === "avatars" || cat === "worlds";
   if (platWrap) platWrap.style.visibility = showPlatform ? "visible" : "hidden";
+  if (fieldWrap) fieldWrap.style.visibility = cat === "avatars" ? "visible" : "hidden";
 
   // Update placeholder text based on category
   const placeholders = {
@@ -110,6 +122,7 @@ async function doAvtrdbSearch() {
   _avtrdbHasMore = false;
   _avtrdbDedupMap = new Map();
   _avtrdbRenderMap = new Map();
+  _avtrdbDisplayOrder = [];
 
   const grid = document.getElementById("avtrdbGrid");
   grid.classList.remove('search-user-grid', 'search-group-grid', 'search-world-grid');
@@ -243,6 +256,11 @@ let avtrdbSortMode = (function () {
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('#avtrdbSortBtns .sort-chip').forEach(b =>
     b.classList.toggle('active', b.dataset.sort === avtrdbSortMode));
+  document.querySelectorAll('#fieldGlassSelect .glass-option').forEach(b =>
+    b.classList.toggle('selected', b.dataset.field === avtrdbMatchField));
+  const activeField = document.querySelector(`#fieldGlassSelect .glass-option[data-field="${avtrdbMatchField}"]`);
+  const fieldLabel = document.querySelector('#fieldGlassSelect .selected-label');
+  if (activeField && fieldLabel) fieldLabel.textContent = activeField.textContent;
 });
 
 function setAvtrdbSort(mode) {
@@ -251,7 +269,21 @@ function setAvtrdbSort(mode) {
   try { localStorage.setItem('vrcw_avtrdb_sort', mode); } catch (_) {}
   document.querySelectorAll('#avtrdbSortBtns .sort-chip').forEach(b =>
     b.classList.toggle('active', b.dataset.sort === mode));
-  _rerenderAvtrdbGrid(); // re-sort already-collected results, no refetch
+  _rerenderAvtrdbGrid({ preserveOrder: false }); // explicit sort change may reorder
+}
+
+function setAvtrdbMatchField(field) {
+  if (!field) field = document.getElementById('avtrdbMatchField')?.value || 'all';
+  field = normalizeAvtrdbMatchField(field);
+  if (avtrdbMatchField === field) return;
+  avtrdbMatchField = field || 'all';
+  try { localStorage.setItem('vrcw_avtrdb_match_field', avtrdbMatchField); } catch (_) {}
+  document.querySelectorAll('#fieldGlassSelect .glass-option').forEach(b =>
+    b.classList.toggle('selected', b.dataset.field === avtrdbMatchField));
+  const activeField = document.querySelector(`#fieldGlassSelect .glass-option[data-field="${avtrdbMatchField}"]`);
+  const fieldLabel = document.querySelector('#fieldGlassSelect .selected-label');
+  if (activeField && fieldLabel) fieldLabel.textContent = activeField.textContent;
+  _rerenderAvtrdbGrid({ preserveOrder: false });
 }
 
 // Build one normalized avatar card element from a collected record.
@@ -279,7 +311,7 @@ function _buildAvtrdbCard(av) {
       <div class="avatar-name-overlay">${escHtml(av.name || "未知模型")}</div>
     </div>
     <div style="padding:8px 6px 4px;font-size:0.7em;color:rgba(255,255,255,0.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-      by ${escHtml(av.author?.name || av.authorName || "Unknown")}
+      by ${av.author?.id ? `<span class="link-like" onclick="event.stopPropagation(); openFriendProfileById('${escJsAttr(av.author.id)}')">${escHtml(av.author?.name || av.authorName || "Unknown")}</span>` : escHtml(av.author?.name || av.authorName || "Unknown")}
     </div>
     <div class="card-plat-badges" style="padding:0 6px 10px;display:flex;gap:4px;flex-wrap:wrap;">${platBadges}</div>
   `;
@@ -311,60 +343,90 @@ function _buildAvtrdbCard(av) {
   return card;
 }
 
+function _refreshAvtrdbCard(av) {
+  if (!av?.vrc_id) return;
+  _avtrdbRenderMap.delete(av.vrc_id);
+}
+
+function _avtrdbTextMatchesField(av, q, field) {
+  const query = String(q || '').trim().toLowerCase();
+  if (!query) return true;
+  const name = String(av.name || av.avatarName || '').toLowerCase();
+  const author = String(av.author?.name || av.authorName || '').toLowerCase();
+  const tags = Array.isArray(av.tags) ? av.tags.join(' ').toLowerCase() : '';
+  const desc = String(av.description || '').toLowerCase();
+  if (field === 'title') return name.includes(query);
+  if (field === 'author') return author.includes(query);
+  if (field === 'tags') return tags.includes(query);
+  if (field === 'desc') return desc.includes(query);
+  return name.includes(query) || author.includes(query) || tags.includes(query) || desc.includes(query);
+}
+
+function _avtrdbSortItems(items) {
+  if (avtrdbSortMode === 'name') {
+    return items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+  }
+  if (avtrdbSortMode === 'newest') {
+    return items.sort((a, b) => new Date(b.updated_at || b.updatedAt || b.created_at || b.createdAt || 0)
+                       - new Date(a.updated_at || a.updatedAt || a.created_at || a.createdAt || 0));
+  }
+  items.forEach(av => {
+    av._rel = relevanceScore(av, avtrdbCurrentQuery);
+    av._qual = qualityScore(av);
+  });
+  return items.sort((a, b) => (b._rel - a._rel) || (b._qual - a._qual)
+    || String(a.name || '').localeCompare(String(b.name || '')));
+}
+
 // Score + sort all collected records, then (re)render the grid in order.
 // This is the core of the relevance ranking: results are ordered by how well
 // they match the query, with quality/recency as tiebreakers.
-function _rerenderAvtrdbGrid() {
+function _rerenderAvtrdbGrid(opts = {}) {
   const grid = document.getElementById("avtrdbGrid");
   const stats = document.getElementById("avtrdbStats");
   if (!grid) return;
+  const preserveOrder = !!opts.preserveOrder;
 
   const requiredPlats = avtrdbCurrentPlatform ? avtrdbCurrentPlatform.split("+") : [];
   const q = avtrdbCurrentQuery;
 
-  // Collect candidates, applying the platform filter
   let items = Array.from(_avtrdbDedupMap.values()).filter(av => {
     if (!av.vrc_id) return false;
     if (requiredPlats.length > 0) {
       const r = getAvatarPlatforms(av);
       if (!requiredPlats.every(p => r.has(p))) return false;
     }
+    if (!_avtrdbTextMatchesField(av, q, avtrdbMatchField)) return false;
     return true;
   });
 
-  // Sort
-  if (avtrdbSortMode === 'name') {
-    items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
-  } else if (avtrdbSortMode === 'newest') {
-    items.sort((a, b) => new Date(b.updated_at || b.updatedAt || b.created_at || b.createdAt || 0)
-                       - new Date(a.updated_at || a.updatedAt || a.created_at || a.createdAt || 0));
-  } else { // relevance (default)
-    items.forEach(av => {
-      av._rel = relevanceScore(av, q);
-      av._qual = qualityScore(av);
-    });
-    items.sort((a, b) => (b._rel - a._rel) || (b._qual - a._qual)
-      || String(a.name || '').localeCompare(String(b.name || '')));
+  if (!preserveOrder) {
+    items = _avtrdbSortItems(items);
+    _avtrdbDisplayOrder = items.map(av => av.vrc_id);
+  } else if (_avtrdbDisplayOrder.length) {
+    const order = new Map(_avtrdbDisplayOrder.map((id, idx) => [id, idx]));
+    items.sort((a, b) => (order.get(a.vrc_id) ?? 1e9) - (order.get(b.vrc_id) ?? 1e9));
+  } else {
+    items = _avtrdbSortItems(items);
+    _avtrdbDisplayOrder = items.map(av => av.vrc_id);
   }
 
-  // Render in sorted order, reusing already-built card elements where possible
   const frag = document.createDocumentFragment();
   for (const av of items) {
     let card = _avtrdbRenderMap.get(av.vrc_id);
     if (!card) card = _buildAvtrdbCard(av);
-    frag.appendChild(card); // appendChild moves existing nodes into new order
+    frag.appendChild(card);
   }
   grid.innerHTML = '';
   grid.appendChild(frag);
 
-  // Lazy-load thumbnails that use data-src (none here — search uses direct src), no-op safe
   const platLabelMap = { pc:"PC", android:"Quest", ios:"Apple", "pc+android":"PC + Quest", "pc+android+ios":"PC + Quest + Apple" };
   const platLabel = avtrdbCurrentPlatform ? (platLabelMap[avtrdbCurrentPlatform] || avtrdbCurrentPlatform) : "全平台";
   const sortLabel = { relevance: '相关度', newest: '最新', name: '名称' }[avtrdbSortMode] || '相关度';
+  const fieldLabel = { all: '全部字段', title: '标题', author: '作者', tags: 'Tag', desc: '描述' }[avtrdbMatchField] || '全部字段';
   avtrdbTotalLoaded = items.length;
-  if (stats) stats.textContent = `已显示 ${items.length} 个结果（${platLabel} · 按${sortLabel}排序）${_avtrdbHasMore ? " · 还有更多" : " · 全部加载完毕"}`;
+  if (stats) stats.textContent = `已显示 ${items.length} 个结果（${platLabel} · ${fieldLabel} · 按${sortLabel}排序）${_avtrdbHasMore ? " · 还有更多" : " · 全部加载完毕"}`;
 }
-
 async function avtrdbFetch(append, _signal) {
   // Use the signal from the caller or fall back to the global tab abort signal
   const signal = _signal || currentTabAbortController?.signal;
@@ -374,6 +436,8 @@ async function avtrdbFetch(append, _signal) {
 
   const requiredPlats = avtrdbCurrentPlatform ? avtrdbCurrentPlatform.split("+") : [];
   const dedupMap = _avtrdbDedupMap;   // persistent global across Load More
+  const batchIds = new Set();
+  const changedIds = new Set();
 
   // Collect-only aggregator: dedup + keep the RICHEST record per id.
   // Rendering is deferred until all sources settle, so we can sort by relevance.
@@ -389,14 +453,28 @@ async function avtrdbFetch(append, _signal) {
       if (richness(av) > richness(existing)) {
         // Adopt richer record but keep any fields the old one had
         dedupMap.set(id, Object.assign({}, existing, av));
+        changedIds.add(id);
       } else {
-        if (av.description && !existing.description) existing.description = av.description;
-        if (Array.isArray(av.tags)) existing.tags = [...new Set([...(existing.tags || []), ...av.tags])];
-        if (!existing.image_url && (av.image_url || av.imageUrl)) existing.image_url = av.image_url || av.imageUrl;
+        let changed = false;
+        if (av.description && !existing.description) {
+          existing.description = av.description;
+          changed = true;
+        }
+        if (Array.isArray(av.tags)) {
+          const mergedTags = [...new Set([...(existing.tags || []), ...av.tags])];
+          if (mergedTags.length !== (existing.tags || []).length) changed = true;
+          existing.tags = mergedTags;
+        }
+        if (!existing.image_url && (av.image_url || av.imageUrl)) {
+          existing.image_url = av.image_url || av.imageUrl;
+          changed = true;
+        }
+        if (changed) changedIds.add(id);
       }
       return;
     }
     dedupMap.set(id, av);
+    batchIds.add(id);
   };
 
   // Loading spinner on fresh search
@@ -478,8 +556,17 @@ async function avtrdbFetch(append, _signal) {
       return;
     }
 
-    // Score, sort, render
-    _rerenderAvtrdbGrid();
+    // Score, sort, render. Load More must not reshuffle cards the user has
+    // already scanned, so only append newly discovered IDs to the locked order.
+    if (append) {
+      const newItems = _avtrdbSortItems([...batchIds].map(id => dedupMap.get(id)).filter(Boolean))
+        .filter(av => !_avtrdbDisplayOrder.includes(av.vrc_id));
+      _avtrdbDisplayOrder.push(...newItems.map(av => av.vrc_id));
+      changedIds.forEach(id => _refreshAvtrdbCard(dedupMap.get(id)));
+      _rerenderAvtrdbGrid({ preserveOrder: true });
+    } else {
+      _rerenderAvtrdbGrid();
+    }
     window._avtrdbLoadMoreTarget = null;
     loadMoreBtn.style.display = _avtrdbHasMore ? "inline-block" : "none";
 
@@ -507,6 +594,7 @@ function displayAvatarDetail(av) {
   }
   if (!name || name === 'Unknown') name = `Model ${id.substring(5, 13)}`;
   const author = av.author?.name || av.authorName || "Unknown";
+  const authorId = av.author?.id || av.authorId || "";
   const desc = av.description || "";
   let thumb = av.image_url || av.thumbnailImageUrl || av.imageUrl || "";
   
@@ -521,7 +609,14 @@ function displayAvatarDetail(av) {
   // 2. Populate UI
   document.getElementById("avtrdbDetailImg").src = thumb;
   document.getElementById("avtrdbDetailName").textContent = name;
-  document.getElementById("avtrdbDetailAuthor").textContent = author;
+  const authorEl = document.getElementById("avtrdbDetailAuthor");
+  if (authorEl) {
+    if (authorId) {
+      authorEl.innerHTML = `by <span class="link-like" onclick="openFriendProfileById('${escJsAttr(authorId)}')">${escHtml(author)}</span>`;
+    } else {
+      authorEl.textContent = `by ${author}`;
+    }
+  }
   document.getElementById("avtrdbDetailId").textContent = id;
 
   const fmt = d => d ? new Date(d).toLocaleString("zh-CN", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }) : "-";
@@ -559,7 +654,12 @@ function displayAvatarDetail(av) {
   const relEl = document.getElementById("avtrdbDetailRelease");
   if (relRow && relEl) {
     const rs = av.releaseStatus || av.release_status || "";
-    if (rs === 'public') {
+    if (av.isInvalid || rs === 'unavailable' || rs === 'hidden') {
+      relEl.textContent = '🚫 已失效';
+      relEl.style.background = 'var(--error)';
+      relEl.style.color = '#fff';
+      relRow.style.display = '';
+    } else if (rs === 'public') {
       relEl.textContent = '🌐 Public';
       relEl.style.background = 'var(--success)';
       relEl.style.color = '#052e16';
@@ -632,6 +732,9 @@ function displayAvatarDetail(av) {
   modal.classList.remove("hidden");
   if (modal.dataset.scrollLocked !== '1') { lockBodyScroll(); modal.dataset.scrollLocked = '1'; }
   modal.style.zIndex = modalZTop();
+  if (!av.isInvalid && typeof rememberAvatarDetailSnapshot === 'function') {
+    rememberAvatarDetailSnapshot(av).catch(() => {});
+  }
 }
 
 async function openAvtrdbDetail(av) {
@@ -678,9 +781,102 @@ async function openAvtrdbDetail(av) {
   }
 }
 
-function openLocalDetail(id) { 
-  const av = visibleAvatars.find(a => a.id === id);
-  if (av) displayAvatarDetail(av); 
+async function openLocalDetail(id) {
+  const av = visibleAvatars.find(a => a.id === id) || avatars.find(a => a.id === id) || { id };
+  displayAvatarDetail(av);
+
+  try {
+    const r = await apiCall(`/api/vrc/avatars/${id}`);
+    if (r.ok) {
+      const full = await r.json();
+      if (full && full.id) {
+        const merged = Object.assign({}, av, full, { isInvalid: false, invalidReason: '' });
+        const vidx = visibleAvatars.findIndex(a => a.id === id);
+        if (vidx !== -1) visibleAvatars[vidx] = merged;
+        const aidx = avatars.findIndex(a => a.id === id);
+        if (aidx !== -1) avatars[aidx] = Object.assign({}, avatars[aidx], merged);
+        displayAvatarDetail(merged);
+      }
+      return;
+    }
+
+    if (r.status === 404 || r.status === 403) {
+      const cached = typeof findCachedAvatarSnapshot === 'function' ? await findCachedAvatarSnapshot(id) : null;
+      const invalid = Object.assign(
+        {},
+        cached || {},
+        av,
+        cached || {},
+        {
+          id,
+          isInvalid: true,
+          releaseStatus: 'unavailable',
+          invalidReason: `HTTP ${r.status}`,
+          name: (cached?.name || cached?.avatarName || av.name || av.lastKnownName || '失效模型 (Invalid / Deleted)'),
+          thumbnailImageUrl: cached?.thumbnailImageUrl || cached?.imageUrl || cached?.image_url || av.thumbnailImageUrl || av.imageUrl || '',
+          imageUrl: cached?.imageUrl || cached?.thumbnailImageUrl || cached?.image_url || av.imageUrl || av.thumbnailImageUrl || ''
+        }
+      );
+      displayAvatarDetail(invalid);
+      recoverInvalidAvatarDetailFromPublicSources(id, invalid, { persist: false }).catch(() => {});
+    }
+  } catch (_) {
+    const cached = typeof findCachedAvatarSnapshot === 'function' ? await findCachedAvatarSnapshot(id) : null;
+    if (cached) displayAvatarDetail(Object.assign({}, av, cached));
+  }
+}
+
+async function recoverInvalidAvatarDetailFromPublicSources(id, baseAv, opts = {}) {
+  if (!id) return null;
+  const cached = typeof findCachedAvatarSnapshot === 'function' ? await findCachedAvatarSnapshot(id) : null;
+  let merged = Object.assign({}, baseAv || {}, cached || {}, { id, isInvalid: true, releaseStatus: 'unavailable' });
+
+  const mergeCandidate = (candidate) => {
+    if (!candidate) return;
+    const candidateId = candidate.id || candidate.vrc_id || candidate.avatarId;
+    if (candidateId && candidateId !== id) return;
+    if (candidate.name && (!merged.name || merged.name.startsWith('失效模型'))) merged.name = candidate.name;
+    if (candidate.avatarName && !merged.name) merged.name = candidate.avatarName;
+    if (candidate.thumbnailImageUrl && !merged.thumbnailImageUrl) merged.thumbnailImageUrl = candidate.thumbnailImageUrl;
+    if (candidate.imageUrl && !merged.imageUrl) merged.imageUrl = candidate.imageUrl;
+    if (candidate.image_url && !merged.imageUrl) merged.imageUrl = candidate.image_url;
+    if (candidate.image_url && !merged.thumbnailImageUrl) merged.thumbnailImageUrl = candidate.image_url;
+    if (candidate.created_at && !merged.created_at) merged.created_at = candidate.created_at;
+    if (candidate.createdAt && !merged.created_at) merged.created_at = candidate.createdAt;
+    if (candidate.updated_at && !merged.updated_at) merged.updated_at = candidate.updated_at;
+    if (candidate.updatedAt && !merged.updated_at) merged.updated_at = candidate.updatedAt;
+    if (candidate.description && !merged.description) merged.description = candidate.description;
+  };
+
+  try {
+    const endpoints = [
+      `/api/proxy?url=${encodeURIComponent(`https://avtr.cute.bet/search?search=${id}`)}`,
+      `/api/proxy?url=${encodeURIComponent(`https://api.avtrdb.com/v2/avatar/search?query=${id}&page_size=1`)}`,
+      `/api/proxy?url=${encodeURIComponent(`https://vrcx.vrcdb.com/avatars/Avatar/VRCX?avatarId=${id}`)}`
+    ];
+
+    for (const url of endpoints) {
+      try {
+        const r = await apiCall(url, { noAbort: true });
+        if (!r.ok) continue;
+        const data = await r.json().catch(() => null);
+        const list = Array.isArray(data) ? data : (data?.avatars || data?.results || []);
+        const hit = (list || []).find(x => x.id === id || x.vrc_id === id || x.avatarId === id) || (Array.isArray(data) ? null : data);
+        mergeCandidate(hit);
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  merged.name = merged.name || merged.avatarName || `失效模型 ${id.substring(5, 13)}`;
+  merged.thumbnailImageUrl = merged.thumbnailImageUrl || merged.imageUrl || '';
+  merged.imageUrl = merged.imageUrl || merged.thumbnailImageUrl || '';
+  merged.invalidReason = merged.invalidReason || 'HTTP 404';
+  if (opts.persist && typeof rememberAvatarDetailSnapshot === 'function') {
+    await rememberAvatarDetailSnapshot(merged);
+  }
+  const modal = document.getElementById("avtrdbDetailModal");
+  if (modal && !modal.classList.contains("hidden")) displayAvatarDetail(merged);
+  return merged;
 }
 
 
