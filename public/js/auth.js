@@ -300,12 +300,12 @@ function showMainApp() {
     if (!indexOk) return;
     if (typeof syncAvatarFavoriteCachesByIndex === 'function') await syncAvatarFavoriteCachesByIndex();
     if (typeof syncWorldFavoriteCachesByIndex === 'function') await syncWorldFavoriteCachesByIndex();
-  });
+  }, 'startup-favorite-index-sync');
   queueBackgroundTask(async () => {
     // Keep the friends mini-profile fresh in the sidebar even if user starts on
     // the avatars tab. Use forceRefresh=false so existing cache renders first.
     await fetchMyProfile(false);
-  });
+  }, 'startup-my-profile');
 
   // 3. Trigger initial tab load. The same-tab guard in switchTab would fire if
   //    currentTab already equals the target; bypass it by clearing first so the

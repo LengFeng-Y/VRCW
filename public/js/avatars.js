@@ -38,7 +38,7 @@ function switchCategory(cat) {
   document.getElementById("appSidebar")?.classList.remove("open");
   document.getElementById("sidebarOverlay")?.classList.remove("active");
 
-  runPriorityTask(() => fetchAvatars());
+  runPriorityTask(async () => { await fetchAvatars(); });
 }
 
 // ── Selected Count Helper ──

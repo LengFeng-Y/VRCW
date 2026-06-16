@@ -29,7 +29,7 @@ function makeCatBtn(text, onclick, id) {
 
 function switchFriendCategory(cat) {
   currentFriendCategory = cat;
-  runPriorityTask(() => {
+  runPriorityTask(async () => {
     document.querySelectorAll('#friendsPanel .cat-btn, #friendsPanel .category-btn').forEach(b => {
     b.classList.remove('active','btn-primary');
     b.classList.add('btn-secondary');
@@ -51,16 +51,16 @@ function switchFriendCategory(cat) {
 
   if (cat === 'myprofile') {
     if (myView) myView.style.display = 'block';
-    fetchMyProfile();
+    await fetchMyProfile();
   } else if (cat === 'modlog') {
     if (logView) logView.style.display = 'flex';
-    renderModerationLog();
+    await renderModerationLog();
   } else if (cat === 'notifications') {
     if (notifyView) notifyView.style.display = 'flex';
-    fetchNotifications();
+    await fetchNotifications();
     } else {
       if (listView) listView.style.display = 'flex';
-      fetchCurrentFriendCategory();
+      await fetchCurrentFriendCategory();
     }
   });
 }

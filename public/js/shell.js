@@ -546,6 +546,7 @@ function renderFavoriteGroupButtons() {
 // still running, releasing background tasks too early. Counter-based version
 // below is reentrant-safe.
 let _priorityDepth = 0;
+const backgroundTaskKeys = new Set();
 async function runPriorityTask(taskFn) {
   currentGlobalFetchSeq++;
   _priorityDepth++;
@@ -566,22 +567,26 @@ async function runPriorityTask(taskFn) {
   }
 }
 
-function queueBackgroundTask(taskFn) {
-  backgroundLoadQueue.push(taskFn);
+function queueBackgroundTask(taskFn, key = '') {
+  if (key && backgroundTaskKeys.has(key)) return;
+  if (key) backgroundTaskKeys.add(key);
+  backgroundLoadQueue.push({ taskFn, key });
   if (!isPriorityTaskRunning) processBackgroundQueue();
 }
 
 async function processBackgroundQueue() {
   if (isPriorityTaskRunning || !backgroundLoadQueue.length) return;
-  const task = backgroundLoadQueue.shift();
-  if (task) {
-    try { await task(); } catch(e){}
+  const item = backgroundLoadQueue.shift();
+  if (item) {
+    try { await item.taskFn(); } catch(e){}
+    if (item.key) backgroundTaskKeys.delete(item.key);
     setTimeout(processBackgroundQueue, 500);
   }
 }
 
 function clearBackgroundQueue() {
   backgroundLoadQueue.length = 0;
+  backgroundTaskKeys.clear();
 }
 
 // ── Tabs ──
@@ -622,23 +627,23 @@ function switchTab(tab) {
     // forceRefresh=false: render cache immediately, then silently re-fetch in
     // background. The dedicated 🔄 refresh buttons inside each tab pass true.
     if (tab === "friends") {
-      if (!friendsLoaded) initFriendsTab();
-      else fetchCurrentFriendCategory(false);
+      if (!friendsLoaded) await initFriendsTab();
+      else await fetchCurrentFriendCategory(false);
     }
     if (tab === "worlds") {
-      if (!worldsLoaded) initWorldsTab();
-      else fetchWorlds(currentWorldCategory, false);
+      if (!worldsLoaded) await initWorldsTab();
+      else await fetchWorlds(currentWorldCategory, false);
     }
-    if (tab === "groups") loadGroupsPage('mine');
+    if (tab === "groups") await loadGroupsPage('mine');
     if (tab === "download") {
       // On initial page load (F5/login), always refresh from API so users
       // see up-to-date data. Subsequent tab switches use cached fast path.
       const force = !!window._isInitialLoad;
       window._isInitialLoad = false;
-      fetchAvatars(force);
+      await fetchAvatars(force);
     }
-    if (tab === 'assets') initAssetsTab?.();
-    if (tab === 'settings') loadCacheStats();
+    if (tab === 'assets') await initAssetsTab?.();
+    if (tab === 'settings') await loadCacheStats();
   });
 }
 

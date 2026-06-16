@@ -95,7 +95,7 @@ async function loadWorldFavGroups() {
 
 function switchWorldCategory(cat) {
   currentWorldCategory = cat;
-  runPriorityTask(() => {
+  runPriorityTask(async () => {
     document.querySelectorAll('#worldsPanel .cat-btn, #worldsPanel .category-btn').forEach(b => {
     b.classList.remove('active','btn-primary');
     b.classList.add('btn-secondary');
@@ -106,7 +106,7 @@ function switchWorldCategory(cat) {
   const btn = document.getElementById(btnId);
   if (btn) { btn.classList.remove('btn-secondary'); btn.classList.add('active','btn-primary'); }
 
-  fetchWorlds(cat, false);
+  await fetchWorlds(cat, false);
   });
 }
 

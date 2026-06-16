@@ -15,9 +15,9 @@ const APP_BUILD_LABEL = "Workers Edition";
 const APP_CACHE_VERSION = (() => {
   try {
     const src = document.currentScript?.src || "";
-    return new URL(src, location.href).searchParams.get("v") || "66";
+    return new URL(src, location.href).searchParams.get("v") || "67";
   } catch (_) {
-    return "66";
+    return "67";
   }
 })();
 const API_BASE = location.origin; // Worker serves from same origin
@@ -1213,6 +1213,7 @@ function applyI18n(root = document) {
 let currentTabAbortController = null;
 
 const apiCache = new Map();
+const inFlightGetRequests = new Map();
 // Endpoints whose data changes constantly — never serve these from the 5s
 // micro-cache or the UI shows stale notifications / online state after actions.
 const NO_CACHE_PATTERNS = [
@@ -1222,6 +1223,7 @@ const NO_CACHE_PATTERNS = [
   "/invite",
 ];
 const API_MICRO_CACHE_MS = 15000;
+const API_SLOW_LOG_MS = 2500;
 async function apiCall(path, options = {}) {
   const isGet = !options.method || options.method === 'GET';
   const cacheKey = path + (options.body || '');
@@ -1234,6 +1236,10 @@ async function apiCall(path, options = {}) {
     if (Date.now() - entry.time < API_MICRO_CACHE_MS) {
       return entry.resp.clone();
     }
+  }
+  if (cacheable && inFlightGetRequests.has(cacheKey)) {
+    const shared = await inFlightGetRequests.get(cacheKey);
+    return shared.clone();
   }
 
   const headers = options.headers || {};
@@ -1249,8 +1255,18 @@ async function apiCall(path, options = {}) {
     options.signal = currentTabAbortController.signal;
   }
   
+  const startedAt = Date.now();
+  const requestPromise = fetch(`${API_BASE}${path}`, { ...options, headers });
+  if (cacheable) {
+    inFlightGetRequests.set(cacheKey, requestPromise.then(resp => resp.clone()));
+  }
+
   try {
-    const resp = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    const resp = await requestPromise;
+    const elapsed = Date.now() - startedAt;
+    if (elapsed > API_SLOW_LOG_MS) {
+      console.debug('[api slow]', `${elapsed}ms`, path);
+    }
     // Update auth from response
     const newAuth = resp.headers.get("X-VRC-Auth");
     if (newAuth) {
@@ -1277,5 +1293,7 @@ async function apiCall(path, options = {}) {
       });
     }
     throw err;
+  } finally {
+    if (cacheable) inFlightGetRequests.delete(cacheKey);
   }
 }
