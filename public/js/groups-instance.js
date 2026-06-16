@@ -377,7 +377,7 @@ async function fetchGroupMembers(groupId, token = null) {
       const fJson = escAttrJson(u);
       return `
         <div class="group-member-card" onclick="openFriendProfile(this)" data-friend="${fJson}" style="cursor:pointer;">
-          <img src="${escHtml(proxyImg(u.userIcon || u.profilePicOverrideThumbnail || u.currentAvatarThumbnailImageUrl || ''))}" class="member-avatar" onerror="this.onerror=null; this.src='data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=='">
+          <img src="${escHtml(getUserThumbUrl(u))}" class="member-avatar" onerror="this.onerror=null; this.src='${escHtml(blankAvatarDataUrl(u.displayName || u.username || '?'))}';">
           <div class="member-info">
             <div class="member-name" title="${escHtml(u.displayName || '')}">${escHtml(u.displayName || 'Unknown')}</div>
             <div class="member-role">${escHtml(m.roleNames?.[0] || 'Member')}</div>
@@ -617,6 +617,33 @@ async function fetchMutualGroups(userId, containerId) {
   }
 }
 
+function blankAvatarDataUrl(label = '?') {
+  const initial = String(label || '?').trim().charAt(0).toUpperCase() || '?';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><rect width="80" height="80" rx="40" fill="#27272a"/><text x="40" y="48" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="700" fill="#d4d4d8">${escHtml(initial)}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function getUserThumbUrl(u) {
+  if (!u) return blankAvatarDataUrl();
+  const cached = u.id && (allFriends || []).find(f => f.id === u.id);
+  const candidates = [
+    u.profilePicOverrideThumbnail,
+    u.profilePicOverride,
+    u.userIcon,
+    u.currentAvatarThumbnailImageUrl,
+    u.currentAvatarImageUrl,
+    u.currentAvatarAssetUrl,
+    u.avatarThumbnailImageUrl,
+    cached?.profilePicOverrideThumbnail,
+    cached?.profilePicOverride,
+    cached?.userIcon,
+    cached?.currentAvatarThumbnailImageUrl,
+    cached?.currentAvatarImageUrl
+  ].filter(Boolean);
+  const raw = candidates.find(url => typeof url === 'string' && !url.startsWith('file_')) || '';
+  return raw ? proxyImg(raw) : blankAvatarDataUrl(u.displayName || u.username || '?');
+}
+
 async function fetchMutualFriends(userId, containerId, seq) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -641,10 +668,10 @@ async function fetchMutualFriends(userId, containerId, seq) {
     const renderUser = u => {
       const safeJson = escAttrJson(u);
       const t = getTrustInfo(u.tags || []);
-      const thumb = proxyImg(u.profilePicOverrideThumbnail || u.userIcon || u.currentAvatarThumbnailImageUrl || '');
+      const thumb = getUserThumbUrl(u);
       return `
         <div class="group-member-card" onclick="openFriendProfile(this);" data-friend="${safeJson}" style="cursor:pointer;width:100%;max-width:none;">
-          <img src="${escHtml(thumb)}" class="member-avatar" onerror="this.onerror=null; this.src='data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=='">
+          <img src="${escHtml(thumb)}" class="member-avatar" onerror="this.onerror=null; this.src='${escHtml(blankAvatarDataUrl(u.displayName || u.username || '?'))}';">
           <div class="member-info">
             <div class="member-name" style="color:${t.color};" title="${escHtml(u.displayName || '')}">${escHtml(u.displayName || 'Unknown')}</div>
             <div class="member-role">${t.text || 'User'}</div>
@@ -686,10 +713,10 @@ async function fetchMutualFriendsFallback(userId, el) {
   const renderUser = u => {
     const safeJson = escAttrJson(u);
     const t = getTrustInfo(u.tags || []);
-    const thumb = proxyImg(u.profilePicOverrideThumbnail || u.userIcon || u.currentAvatarThumbnailImageUrl || '');
+    const thumb = getUserThumbUrl(u);
     return `
       <div class="group-member-card" onclick="openFriendProfile(this);" data-friend="${safeJson}" style="cursor:pointer;width:100%;max-width:none;">
-        <img src="${escHtml(thumb)}" class="member-avatar" onerror="this.onerror=null; this.src='data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=='">
+        <img src="${escHtml(thumb)}" class="member-avatar" onerror="this.onerror=null; this.src='${escHtml(blankAvatarDataUrl(u.displayName || u.username || '?'))}';">
         <div class="member-info">
           <div class="member-name" style="color:${t.color};" title="${escHtml(u.displayName || '')}">${escHtml(u.displayName || 'Unknown')}</div>
           <div class="member-role">${t.text || 'User'}</div>
