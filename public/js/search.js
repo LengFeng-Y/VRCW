@@ -579,7 +579,7 @@ async function avtrdbFetch(append, _signal) {
 
 
 
-function displayAvatarDetail(av) {
+function displayAvatarDetail(av, opts = {}) {
   const modal = document.getElementById("avtrdbDetailModal");
   if (!modal) return;
   _currentDetailAvatar = av; // remember for the fav-menu "save to local" action
@@ -731,13 +731,16 @@ function displayAvatarDetail(av) {
 
   modal.classList.remove("hidden");
   if (modal.dataset.scrollLocked !== '1') { lockBodyScroll(); modal.dataset.scrollLocked = '1'; }
-  modal.style.zIndex = modalZTop();
+  if (!opts.preserveZ) modal.style.zIndex = modalZTop();
   if (!av.isInvalid && typeof rememberAvatarDetailSnapshot === 'function') {
     rememberAvatarDetailSnapshot(av).catch(() => {});
   }
 }
 
 async function openAvtrdbDetail(av) {
+  bumpUiEpoch();
+  const detailToken = makeUiToken('avatarDetail', av.vrc_id || av.id || '');
+  window._avatarDetailActiveToken = detailToken;
   displayAvatarDetail(av); // Show immediately with available data
 
   const id = av.vrc_id || av.id;
@@ -751,6 +754,7 @@ async function openAvtrdbDetail(av) {
     const avtrUrl = `/api/proxy?url=${encodeURIComponent(`https://api.avtrdb.com/v2/avatar/search?query=${id}&page_size=1`)}`;
 
     const tryPatch = (data) => {
+      if (!isUiTokenCurrent(detailToken)) return;
       if (!data) return;
       const created = data.created_at || data.createdAt;
       const updated = data.updated_at || data.updatedAt;
@@ -768,12 +772,14 @@ async function openAvtrdbDetail(av) {
 
     // Fire both in parallel, patch as soon as either returns
     fetch(cuteUrl).then(r => r.json()).then(data => {
+      if (!isUiTokenCurrent(detailToken)) return;
       const list = Array.isArray(data) ? data : (data?.avatars || []);
       const match = list.find(x => x.id === id) || (list.length === 1 ? list[0] : null) || (list.length > 0 ? list[0] : null);
       tryPatch(match);
     }).catch(() => {});
 
     fetch(avtrUrl).then(r => r.json()).then(data => {
+      if (!isUiTokenCurrent(detailToken)) return;
       const list = data?.avatars || [];
       const match = list.find(x => x.vrc_id === id);
       tryPatch(match);
@@ -782,6 +788,9 @@ async function openAvtrdbDetail(av) {
 }
 
 async function openLocalDetail(id) {
+  bumpUiEpoch();
+  const detailToken = makeUiToken('avatarDetail', id);
+  window._avatarDetailActiveToken = detailToken;
   const av = visibleAvatars.find(a => a.id === id) || avatars.find(a => a.id === id) || { id };
   displayAvatarDetail(av);
 
@@ -789,19 +798,21 @@ async function openLocalDetail(id) {
     const r = await apiCall(`/api/vrc/avatars/${id}`);
     if (r.ok) {
       const full = await r.json();
+      if (!isUiTokenCurrent(detailToken)) return;
       if (full && full.id) {
         const merged = Object.assign({}, av, full, { isInvalid: false, invalidReason: '' });
         const vidx = visibleAvatars.findIndex(a => a.id === id);
         if (vidx !== -1) visibleAvatars[vidx] = merged;
         const aidx = avatars.findIndex(a => a.id === id);
         if (aidx !== -1) avatars[aidx] = Object.assign({}, avatars[aidx], merged);
-        displayAvatarDetail(merged);
+        displayAvatarDetail(merged, { preserveZ: true });
       }
       return;
     }
 
     if (r.status === 404 || r.status === 403) {
       const cached = typeof findCachedAvatarSnapshot === 'function' ? await findCachedAvatarSnapshot(id) : null;
+      if (!isUiTokenCurrent(detailToken)) return;
       const invalid = Object.assign(
         {},
         cached || {},
@@ -817,12 +828,12 @@ async function openLocalDetail(id) {
           imageUrl: cached?.imageUrl || cached?.thumbnailImageUrl || cached?.image_url || av.imageUrl || av.thumbnailImageUrl || ''
         }
       );
-      displayAvatarDetail(invalid);
-      recoverInvalidAvatarDetailFromPublicSources(id, invalid, { persist: false }).catch(() => {});
+      displayAvatarDetail(invalid, { preserveZ: true });
+      recoverInvalidAvatarDetailFromPublicSources(id, invalid, { persist: false, token: detailToken }).catch(() => {});
     }
   } catch (_) {
     const cached = typeof findCachedAvatarSnapshot === 'function' ? await findCachedAvatarSnapshot(id) : null;
-    if (cached) displayAvatarDetail(Object.assign({}, av, cached));
+    if (cached && isUiTokenCurrent(detailToken)) displayAvatarDetail(Object.assign({}, av, cached), { preserveZ: true });
   }
 }
 
@@ -875,12 +886,16 @@ async function recoverInvalidAvatarDetailFromPublicSources(id, baseAv, opts = {}
     await rememberAvatarDetailSnapshot(merged);
   }
   const modal = document.getElementById("avtrdbDetailModal");
-  if (modal && !modal.classList.contains("hidden")) displayAvatarDetail(merged);
+  if ((!opts.token || isUiTokenCurrent(opts.token)) && modal && !modal.classList.contains("hidden")) {
+    displayAvatarDetail(merged, { preserveZ: true });
+  }
   return merged;
 }
 
 
 function closeAvtrdbDetail() {
+  bumpUiEpoch();
+  window._avatarDetailActiveToken = null;
   const modal = document.getElementById("avtrdbDetailModal");
   if (modal) {
     modal.classList.add("hidden");

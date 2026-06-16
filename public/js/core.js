@@ -15,9 +15,9 @@ const APP_BUILD_LABEL = "Workers Edition";
 const APP_CACHE_VERSION = (() => {
   try {
     const src = document.currentScript?.src || "";
-    return new URL(src, location.href).searchParams.get("v") || "65";
+    return new URL(src, location.href).searchParams.get("v") || "66";
   } catch (_) {
-    return "65";
+    return "66";
   }
 })();
 const API_BASE = location.origin; // Worker serves from same origin
@@ -32,6 +32,7 @@ let currentTab = "download"; // Track active tab
 let currentUserId = ""; // Current logged-in user's VRChat ID
 let currentGlobalFetchSeq = 0; // Sequence to abort stale background tasks globally
 let currentWorldFetchSeq  = 0; // Separate seq for world fetches — not shared with friend syncs
+let currentUiEpoch = 0; // Bumped when the foreground UI changes; stale async tails must not repaint.
 let selectedWorldIds = new Set(); // Selected world IDs for batch operations
 let isPriorityTaskRunning = false; // "Foveated" loading lock
 let backgroundLoadQueue = []; // Queue for deferred non-visible tasks
@@ -48,6 +49,22 @@ let friendFavoriteIdMap = new Map(); // userId -> favoriteId
 window._localNameMap = new Map(); // GLOBAL CACHE: avatarId -> name (for recovery)
 let localAvatarFavs = []; // Local favorites collection (max 200)
 let localAvatarIdMap = new Map(); // avatarId -> true (for UI binary check)
+
+function bumpUiEpoch() {
+  currentUiEpoch += 1;
+  return currentUiEpoch;
+}
+
+function makeUiToken(scope, id) {
+  return { epoch: currentUiEpoch, scope, id: id || '' };
+}
+
+function isUiTokenCurrent(token) {
+  return !!token
+    && token.epoch === currentUiEpoch
+    && token.scope
+    && window[`_${token.scope}ActiveToken`] === token;
+}
 
 function renderAppVersionInfo() {
   const versionLabel = `v${APP_CACHE_VERSION}`;
@@ -1204,15 +1221,17 @@ const NO_CACHE_PATTERNS = [
   "/instances/",
   "/invite",
 ];
+const API_MICRO_CACHE_MS = 15000;
 async function apiCall(path, options = {}) {
   const isGet = !options.method || options.method === 'GET';
   const cacheKey = path + (options.body || '');
   const cacheable = isGet && !NO_CACHE_PATTERNS.some(p => path.includes(p));
 
-  // Return from memory cache if recent (5 seconds) to prevent burst requests
+  // Return from memory cache if recent to prevent burst requests when users
+  // quickly bounce between panels or detail modals on slow VRChat responses.
   if (cacheable && apiCache.has(cacheKey)) {
     const entry = apiCache.get(cacheKey);
-    if (Date.now() - entry.time < 5000) {
+    if (Date.now() - entry.time < API_MICRO_CACHE_MS) {
       return entry.resp.clone();
     }
   }
@@ -1242,6 +1261,9 @@ async function apiCall(path, options = {}) {
     // Cache GET responses
     if (cacheable && resp.ok) {
       apiCache.set(cacheKey, { resp: resp.clone(), time: Date.now() });
+    }
+    if (!isGet && resp.ok) {
+      apiCache.clear();
     }
 
     return resp;

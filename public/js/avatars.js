@@ -912,7 +912,7 @@ async function openLocalDetail(id) {
       if (aidx !== -1) avatars[aidx] = Object.assign({}, avatars[aidx], full);
       // Re-render the (still-open) modal with complete data.
       const modal = document.getElementById("avtrdbDetailModal");
-      if (modal && !modal.classList.contains("hidden")) displayAvatarDetail(merged);
+      if (modal && !modal.classList.contains("hidden")) displayAvatarDetail(merged, { preserveZ: true });
     }
   } catch (_) { /* network blip — basics view stays */ }
 }

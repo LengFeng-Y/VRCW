@@ -252,6 +252,9 @@ function _renderFriendProfileUI(f, modal) {
 }
 
 function closeFriendProfile() {
+  bumpUiEpoch();
+  window._fpSeq = (window._fpSeq || 0) + 1;
+  window._fpCurrentSeq = window._fpSeq;
   const modal = document.getElementById('friendProfileModal');
   if (modal) {
     modal.classList.add('hidden');

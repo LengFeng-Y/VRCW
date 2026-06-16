@@ -580,6 +580,10 @@ async function processBackgroundQueue() {
   }
 }
 
+function clearBackgroundQueue() {
+  backgroundLoadQueue.length = 0;
+}
+
 // ── Tabs ──
 function switchTab(tab) {
   // No-op when already on this tab. Re-clicking the active nav item used to
@@ -608,6 +612,8 @@ function switchTab(tab) {
 
   // If already on this tab, skip the abort+reload dance entirely
   if (isSameTab) return;
+  bumpUiEpoch();
+  clearBackgroundQueue();
 
   runPriorityTask(async () => {
     if (currentTabAbortController) currentTabAbortController.abort();

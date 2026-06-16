@@ -746,6 +746,9 @@ function switchWorldDetailTab(tab) {
 async function openWorldDetail(worldId, worldObj = null) {
   const modal = document.getElementById('worldDetailModal');
   if (!modal) return;
+  bumpUiEpoch();
+  const detailToken = makeUiToken('worldDetail', worldId);
+  window._worldDetailActiveToken = detailToken;
 
   // Show the modal FIRST so the user sees something immediately,
   // even if subsequent setup throws.
@@ -770,6 +773,7 @@ async function openWorldDetail(worldId, worldObj = null) {
     const r = await apiCall(`/api/vrc/worlds/${worldId}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const w = await r.json();
+    if (!isUiTokenCurrent(detailToken)) return;
     currentWorldDetail = w;
 
     // Fill Basic Info
@@ -942,12 +946,15 @@ async function openWorldDetail(worldId, worldObj = null) {
     }
   } catch(e) {
     if (isAbortError(e)) return;
+    if (!isUiTokenCurrent(detailToken)) return;
     document.getElementById('worldDetailName').textContent = '加载失败';
     document.getElementById('worldDetailInstances').innerHTML = `<div style="color:var(--error);padding:8px;">${escHtml(e.message)}</div>`;
   }
 }
 
 function closeWorldDetail() {
+  bumpUiEpoch();
+  window._worldDetailActiveToken = null;
   const modal = document.getElementById('worldDetailModal');
   if (modal) {
     modal.classList.add('hidden');
