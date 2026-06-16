@@ -11,6 +11,15 @@
  */
 
 // ── Config ──
+const APP_BUILD_LABEL = "Workers Edition";
+const APP_CACHE_VERSION = (() => {
+  try {
+    const src = document.currentScript?.src || "";
+    return new URL(src, location.href).searchParams.get("v") || "64";
+  } catch (_) {
+    return "64";
+  }
+})();
 const API_BASE = location.origin; // Worker serves from same origin
 let vrcAuth = localStorage.getItem("vrc_auth") || "";
 let avatars = [];
@@ -39,6 +48,16 @@ let friendFavoriteIdMap = new Map(); // userId -> favoriteId
 window._localNameMap = new Map(); // GLOBAL CACHE: avatarId -> name (for recovery)
 let localAvatarFavs = []; // Local favorites collection (max 200)
 let localAvatarIdMap = new Map(); // avatarId -> true (for UI binary check)
+
+function renderAppVersionInfo() {
+  const versionLabel = `v${APP_CACHE_VERSION}`;
+  const sidebarBadge = document.getElementById('appVersionBadge');
+  if (sidebarBadge) sidebarBadge.textContent = versionLabel;
+  document.querySelectorAll('[data-app-version]').forEach(el => { el.textContent = versionLabel; });
+  document.querySelectorAll('[data-app-build]').forEach(el => { el.textContent = APP_BUILD_LABEL; });
+}
+
+document.addEventListener('DOMContentLoaded', renderAppVersionInfo);
 
 // ── Global Avatar Lookup Queue (Strict Rate Limiting & 429 Backoff) ──
 const avatarLookupQueue = {

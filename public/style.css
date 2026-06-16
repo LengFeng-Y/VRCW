@@ -151,9 +151,17 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
 }
 
 .app-version {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  margin-left: 6px;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 2px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 600;
 }
 
 .header-right {
@@ -1153,6 +1161,156 @@ select.input-field {
   text-align: right;
 }
 
+/* ── Settings / About ── */
+.settings-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  max-width: 760px;
+  margin-bottom: 18px;
+}
+
+.settings-page-head h2 {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.settings-page-head p {
+  max-width: 560px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.about-version-pill {
+  flex-shrink: 0;
+  padding: 6px 11px;
+  border: 1px solid rgba(74, 222, 128, 0.28);
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.08);
+  color: var(--success);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.about-panel {
+  max-width: 760px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.about-product {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.about-logo-mark {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--border-hover);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03));
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.about-product-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.about-product-subtitle {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.about-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.about-meta-item {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.about-meta-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.about-meta-item strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.about-section {
+  max-width: 760px;
+  margin-top: 16px;
+}
+
+.about-section-title {
+  margin-bottom: 9px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.about-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.about-chip-row span {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.about-link-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--accent-light);
+  text-decoration: none;
+  font-size: 0.84rem;
+  transition: border-color var(--transition), background var(--transition), color var(--transition);
+}
+
+.about-link-card:hover {
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+}
+
 /* ── Login ── */
 .login-container {
   display: flex;
@@ -1239,6 +1397,27 @@ select.input-field {
 }
 
 @media (max-width: 768px) {
+  .settings-page-head {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .about-version-pill {
+    align-self: flex-start;
+  }
+
+  .about-panel {
+    padding: 14px;
+  }
+
+  .about-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .about-product {
+    align-items: flex-start;
+  }
+
   .upload-panel.active {
     padding: 16px 12px;
   }
