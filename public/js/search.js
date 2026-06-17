@@ -286,6 +286,15 @@ function setAvtrdbMatchField(field) {
   _rerenderAvtrdbGrid({ preserveOrder: false });
 }
 
+function authorLinkHtml(authorName, authorId) {
+  const name = authorName || "Unknown";
+  const target = authorId || (name && name !== "Unknown" ? name : "");
+  if (target) {
+    return `<span class="link-like" onclick="event.stopPropagation(); openFriendProfileById('${escJsAttr(target)}')">${escHtml(name)}</span>`;
+  }
+  return escHtml(name);
+}
+
 // Build one normalized avatar card element from a collected record.
 function _buildAvtrdbCard(av) {
   const id = av.vrc_id;
@@ -311,7 +320,7 @@ function _buildAvtrdbCard(av) {
       <div class="avatar-name-overlay">${escHtml(av.name || "未知模型")}</div>
     </div>
     <div style="padding:8px 6px 4px;font-size:0.7em;color:rgba(255,255,255,0.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-      by ${av.author?.id ? `<span class="link-like" onclick="event.stopPropagation(); openFriendProfileById('${escJsAttr(av.author.id)}')">${escHtml(av.author?.name || av.authorName || "Unknown")}</span>` : escHtml(av.author?.name || av.authorName || "Unknown")}
+      by ${authorLinkHtml(av.author?.name || av.authorName || "Unknown", av.author?.id || av.authorId || "")}
     </div>
     <div class="card-plat-badges" style="padding:0 6px 10px;display:flex;gap:4px;flex-wrap:wrap;">${platBadges}</div>
   `;
@@ -618,13 +627,7 @@ function displayAvatarDetail(av, opts = {}) {
   document.getElementById("avtrdbDetailImg").src = thumb;
   document.getElementById("avtrdbDetailName").textContent = name;
   const authorEl = document.getElementById("avtrdbDetailAuthor");
-  if (authorEl) {
-    if (authorId) {
-      authorEl.innerHTML = `by <span class="link-like" onclick="openFriendProfileById('${escJsAttr(authorId)}')">${escHtml(author)}</span>`;
-    } else {
-      authorEl.textContent = `by ${author}`;
-    }
-  }
+  if (authorEl) authorEl.innerHTML = `by ${authorLinkHtml(author, authorId)}`;
   document.getElementById("avtrdbDetailId").textContent = id;
 
   const fmt = d => d ? new Date(d).toLocaleString("zh-CN", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }) : "-";
