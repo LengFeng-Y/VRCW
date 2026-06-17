@@ -17,7 +17,7 @@ const APP_CACHE_VERSION = (() => {
     const src = document.currentScript?.src || "";
     return new URL(src, location.href).searchParams.get("v") || "80";
   } catch (_) {
-    return "81";
+    return "82";
   }
 })();
 const API_BASE = location.origin; // Worker serves from same origin

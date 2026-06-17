@@ -3,6 +3,44 @@
  * Resident shared UI controls used by multiple classic scripts and inline handlers.
  */
 
+function resetGlassSelectOptions(opts) {
+  if (!opts) return;
+  opts.style.position = '';
+  opts.style.top = '';
+  opts.style.left = '';
+  opts.style.right = '';
+  opts.style.width = '';
+}
+
+function positionGlassSelectOptions(el) {
+  const opts = el.querySelector('.glass-select-options');
+  if (!opts) return;
+
+  const r = el.getBoundingClientRect();
+  const width = Math.max(r.width, 160);
+
+  if (el.closest('.search-box-glass')) {
+    // Search bar lives inside a blurred glass container. In Chromium,
+    // backdrop-filter can become a containing block for position: fixed,
+    // which double-applies the search bar offset on desktop and sends the
+    // dropdown off-screen. Keep search dropdowns anchored to their select.
+    opts.style.position = 'absolute';
+    opts.style.top = 'calc(100% + 10px)';
+    opts.style.left = '0';
+    opts.style.right = 'auto';
+    opts.style.width = width + 'px';
+    return;
+  }
+
+  const margin = 8;
+  const left = Math.max(margin, Math.min(r.left, window.innerWidth - width - margin));
+  opts.style.position = 'fixed';
+  opts.style.top = (r.bottom + 4) + 'px';
+  opts.style.left = left + 'px';
+  opts.style.right = 'auto';
+  opts.style.width = width + 'px';
+}
+
 function toggleGlassSelect(e, el) {
   e.stopPropagation();
   const isNowActive = !el.classList.contains('active');
@@ -10,26 +48,16 @@ function toggleGlassSelect(e, el) {
   document.querySelectorAll('.glass-select.active').forEach(s => {
     if (s !== el) {
       s.classList.remove('active');
-      const o = s.querySelector('.glass-select-options');
-      if (o) { o.style.position = ''; o.style.top = ''; o.style.left = ''; o.style.width = ''; }
+      resetGlassSelectOptions(s.querySelector('.glass-select-options'));
     }
   });
 
   el.classList.toggle('active', isNowActive);
 
   if (isNowActive) {
-    const opts = el.querySelector('.glass-select-options');
-    if (opts) {
-      const r = el.getBoundingClientRect();
-      opts.style.position = 'fixed';
-      opts.style.top = (r.bottom + 4) + 'px';
-      opts.style.left = r.left + 'px';
-      opts.style.width = Math.max(r.width, 160) + 'px';
-      opts.style.right = '';
-    }
+    positionGlassSelectOptions(el);
   } else {
-    const opts = el.querySelector('.glass-select-options');
-    if (opts) { opts.style.position = ''; opts.style.top = ''; opts.style.left = ''; opts.style.width = ''; }
+    resetGlassSelectOptions(el.querySelector('.glass-select-options'));
   }
 }
 
@@ -54,8 +82,7 @@ function selectGlassOption(e, el, val, callbackName) {
   select.querySelectorAll('.glass-option').forEach(opt => opt.classList.remove('selected'));
   el.classList.add('selected');
   select.classList.remove('active');
-  const opts = select.querySelector('.glass-select-options');
-  if (opts) { opts.style.position = ''; opts.style.top = ''; opts.style.left = ''; opts.style.width = ''; }
+  resetGlassSelectOptions(select.querySelector('.glass-select-options'));
 
   if (callbackName && typeof window[callbackName] === 'function') {
     window[callbackName]();
@@ -65,8 +92,7 @@ function selectGlassOption(e, el, val, callbackName) {
 document.addEventListener('click', () => {
   document.querySelectorAll('.glass-select').forEach(s => {
     s.classList.remove('active');
-    const o = s.querySelector('.glass-select-options');
-    if (o) { o.style.position = ''; o.style.top = ''; o.style.left = ''; o.style.width = ''; }
+    resetGlassSelectOptions(s.querySelector('.glass-select-options'));
   });
 });
 
