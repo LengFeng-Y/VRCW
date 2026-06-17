@@ -15,12 +15,45 @@ const APP_BUILD_LABEL = "Workers Edition";
 const APP_CACHE_VERSION = (() => {
   try {
     const src = document.currentScript?.src || "";
-    return new URL(src, location.href).searchParams.get("v") || "68";
+    return new URL(src, location.href).searchParams.get("v") || "80";
   } catch (_) {
-    return "68";
+    return "81";
   }
 })();
 const API_BASE = location.origin; // Worker serves from same origin
+const VRCW = (() => {
+  const existing = window.VRCW || {};
+  const registry = existing.registry || {};
+  const services = existing.services || {};
+  const modules = existing.modules || {};
+  const runtime = existing.runtime || {};
+  const loadedScripts = existing.loadedScripts || new Map();
+
+  function registerService(name, service) {
+    if (!name || !service) return service;
+    services[name] = Object.freeze({ ...(services[name] || {}), ...service });
+    return services[name];
+  }
+
+  function registerModule(name, module) {
+    if (!name || !module) return module;
+    modules[name] = Object.freeze({ ...(modules[name] || {}), ...module });
+    return modules[name];
+  }
+
+  return Object.assign(existing, {
+    version: `v${APP_CACHE_VERSION}`,
+    build: APP_BUILD_LABEL,
+    registry,
+    services,
+    modules,
+    runtime,
+    loadedScripts,
+    registerService,
+    registerModule,
+  });
+})();
+window.VRCW = VRCW;
 let vrcAuth = localStorage.getItem("vrc_auth") || "";
 let avatars = [];
 let selectedIds = new Set();
@@ -72,9 +105,56 @@ function renderAppVersionInfo() {
   if (sidebarBadge) sidebarBadge.textContent = versionLabel;
   document.querySelectorAll('[data-app-version]').forEach(el => { el.textContent = versionLabel; });
   document.querySelectorAll('[data-app-build]').forEach(el => { el.textContent = APP_BUILD_LABEL; });
+  document.documentElement.dataset.vrcwVersion = versionLabel;
+  document.documentElement.dataset.vrcwServices = Object.keys(VRCW.services).sort().join(',');
+  document.documentElement.dataset.vrcwModules = Object.keys(VRCW.modules).sort().join(',');
+  document.documentElement.dataset.vrcwLazyScripts = Array.from(VRCW.loadedScripts.keys()).sort().join(',');
 }
 
 document.addEventListener('DOMContentLoaded', renderAppVersionInfo);
+
+function scriptUrlWithVersion(src) {
+  const url = new URL(src, location.href);
+  if (!url.searchParams.has('v')) url.searchParams.set('v', APP_CACHE_VERSION);
+  return url.pathname + url.search;
+}
+
+function loadScriptOnce(src) {
+  const versionedSrc = scriptUrlWithVersion(src);
+  if (VRCW.loadedScripts.has(versionedSrc)) return VRCW.loadedScripts.get(versionedSrc);
+
+  const existing = Array.from(document.scripts).find((script) => {
+    if (!script.src) return false;
+    const u = new URL(script.src, location.href);
+    return u.pathname + u.search === versionedSrc;
+  });
+  if (existing) {
+    const loaded = Promise.resolve(existing);
+    VRCW.loadedScripts.set(versionedSrc, loaded);
+    renderAppVersionInfo();
+    return loaded;
+  }
+
+  const promise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = versionedSrc;
+    script.defer = true;
+    script.dataset.vrcwLazy = '1';
+    script.onload = () => {
+      renderAppVersionInfo();
+      resolve(script);
+    };
+    script.onerror = () => {
+      VRCW.loadedScripts.delete(versionedSrc);
+      renderAppVersionInfo();
+      reject(new Error(`Failed to load ${versionedSrc}`));
+    };
+    document.body.appendChild(script);
+  });
+  VRCW.loadedScripts.set(versionedSrc, promise);
+  renderAppVersionInfo();
+  return promise;
+}
 
 // ── Global Avatar Lookup Queue (Strict Rate Limiting & 429 Backoff) ──
 const avatarLookupQueue = {
@@ -1224,10 +1304,30 @@ const NO_CACHE_PATTERNS = [
 ];
 const API_MICRO_CACHE_MS = 15000;
 const API_SLOW_LOG_MS = 2500;
+
+function _apiAuthBucket() {
+  const raw = vrcAuth || '';
+  if (!raw) return 'anon';
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = ((hash << 5) - hash + raw.charCodeAt(i)) | 0;
+  }
+  return `auth:${Math.abs(hash)}`;
+}
+
+function clearApiMemoryCache() {
+  apiCache.clear();
+  inFlightGetRequests.clear();
+}
+
 async function apiCall(path, options = {}) {
-  const isGet = !options.method || options.method === 'GET';
-  const cacheKey = path + (options.body || '');
-  const cacheable = isGet && !NO_CACHE_PATTERNS.some(p => path.includes(p));
+  const method = options.method || 'GET';
+  const isGet = method === 'GET';
+  const wantsNoStore = options.cache === 'no-store' || options.noCache === true;
+  const requestBody = options.json !== undefined ? JSON.stringify(options.json) : options.body;
+  const cacheBodyKey = typeof requestBody === 'string' ? requestBody : '';
+  const cacheKey = `${_apiAuthBucket()}::${path}::${cacheBodyKey}`;
+  const cacheable = isGet && !wantsNoStore && !NO_CACHE_PATTERNS.some(p => path.includes(p));
 
   // Return from memory cache if recent to prevent burst requests when users
   // quickly bounce between panels or detail modals on slow VRChat responses.
@@ -1242,21 +1342,21 @@ async function apiCall(path, options = {}) {
     return shared.clone();
   }
 
-  const headers = options.headers || {};
+  const headers = { ...(options.headers || {}) };
   if (vrcAuth) headers["X-VRC-Auth"] = vrcAuth;
-  if (options.json) {
+  if (options.json !== undefined) {
     headers["Content-Type"] = "application/json";
-    options.body = JSON.stringify(options.json);
-    delete options.json;
   }
   
   // Attach current tab's abort signal unless explicitly overridden
-  if (!options.signal && !options.noAbort && currentTabAbortController) {
-    options.signal = currentTabAbortController.signal;
-  }
+  const signal = options.signal || (!options.noAbort && currentTabAbortController ? currentTabAbortController.signal : undefined);
   
   const startedAt = Date.now();
-  const requestPromise = fetch(`${API_BASE}${path}`, { ...options, headers });
+  const fetchOptions = { ...options, method, headers, body: requestBody, signal };
+  delete fetchOptions.json;
+  delete fetchOptions.noAbort;
+  delete fetchOptions.noCache;
+  const requestPromise = fetch(`${API_BASE}${path}`, fetchOptions);
   if (cacheable) {
     inFlightGetRequests.set(cacheKey, requestPromise.then(resp => resp.clone()));
   }
@@ -1270,6 +1370,7 @@ async function apiCall(path, options = {}) {
     // Update auth from response
     const newAuth = resp.headers.get("X-VRC-Auth");
     if (newAuth) {
+      if (newAuth !== vrcAuth) clearApiMemoryCache();
       vrcAuth = newAuth;
       localStorage.setItem("vrc_auth", vrcAuth);
     }
@@ -1297,3 +1398,22 @@ async function apiCall(path, options = {}) {
     if (cacheable) inFlightGetRequests.delete(cacheKey);
   }
 }
+
+VRCW.registerService('api', {
+  call: apiCall,
+  clearMemoryCache: clearApiMemoryCache,
+  getAuthBucket: _apiAuthBucket,
+});
+
+VRCW.registerService('ui', {
+  bumpEpoch: bumpUiEpoch,
+  makeToken: makeUiToken,
+  isTokenCurrent: isUiTokenCurrent,
+  renderVersion: renderAppVersionInfo,
+});
+
+VRCW.registerModule('core', {
+  apiCall,
+  clearApiMemoryCache,
+  renderAppVersionInfo,
+});

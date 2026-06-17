@@ -22,6 +22,16 @@ const MAX_CONCURRENT_IMAGES = 12;
 const loadedImageUrls = new Set();
 const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
+function imageCacheKey(src) {
+  if (!src || !src.includes('/api/image')) return src || '';
+  try {
+    const u = new URL(src, location.href);
+    return `${u.searchParams.get('bucket') || _apiAuthBucket()}::${u.searchParams.get('url') || src}`;
+  } catch (_) {
+    return src;
+  }
+}
+
 function processImageQueue() {
   while (runningLoads < MAX_CONCURRENT_IMAGES && imageQueue.length > 0) {
     runningLoads++;
@@ -36,7 +46,7 @@ function processImageQueue() {
     }
 
     const wrapper = img.parentElement;
-    const cacheKey = src.includes('url=') ? decodeURIComponent(src.split('url=')[1].split('&')[0]) : src;
+    const cacheKey = imageCacheKey(src);
 
     // Called on successful load or permanent failure
     const finishLoad = (success) => {
@@ -66,7 +76,7 @@ function processImageQueue() {
       processImageQueue();
     };
 
-    img.onload = () => { loadedImageUrls.add(src); finishLoad(true); };
+    img.onload = () => { loadedImageUrls.add(cacheKey); finishLoad(true); };
     img.onerror = () => {
       const retryCount = parseInt(img.dataset.retry || '0');
       if (retryCount < 2 && !img.dataset.cancelled) {
@@ -209,10 +219,10 @@ function prefetchThumbnails(avatarList) {
     .filter(u => u && (u.includes("api.vrchat.cloud") || u.includes("files.vrchat.cloud")));
 
   // Skip URLs already in the browser's memory cache
-  const proxyUrls = rawUrls.map(u =>
-    `${API_BASE}/api/image?url=${encodeURIComponent(u)}&auth=${encodeURIComponent(vrcAuth || "")}`
+  const cacheKeys = rawUrls.map(u =>
+    imageCacheKey(`${API_BASE}/api/image?url=${encodeURIComponent(u)}&auth=${encodeURIComponent(vrcAuth || "")}&bucket=${encodeURIComponent(_apiAuthBucket())}`)
   );
-  const uncached = rawUrls.filter((_, i) => !loadedImageUrls.has(proxyUrls[i]));
+  const uncached = rawUrls.filter((_, i) => !loadedImageUrls.has(cacheKeys[i]));
   if (!uncached.length) return;
 
   // Chunk into batches of 40 (CF Worker subrequest limit; keep headroom for cache ops)
@@ -221,7 +231,7 @@ function prefetchThumbnails(avatarList) {
     const batch = uncached.slice(i, i + BATCH_SIZE);
     apiCall("/api/images/prefetch", {
       method: "POST",
-      json: { urls: batch },
+      json: { urls: batch, bucket: _apiAuthBucket() },
     })
       .then(r => r.json())
       .then(d => {
@@ -231,3 +241,5 @@ function prefetchThumbnails(avatarList) {
   }
 }
 
+VRCW.registerModule('images', { imageCacheKey, processImageQueue, prefetchThumbnails });
+renderAppVersionInfo();

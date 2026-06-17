@@ -1,197 +1,7 @@
-/*
- * VRCW — assets-groups.js
- * 全局导航/资产(钱包/商店/库存/道具/相册/表情)/群组列表
- *
- * 注意：本项目为「经典脚本」(非 ES module)，全部按顺序加载、共享全局作用域。
- * 函数声明会提升为全局，跨文件调用没问题；请勿改为 type="module"。
+﻿/*
+ * VRCW - assets-groups.js
+ * Heavy assets/economy panel logic. Global nav and groups live in groups-shell.js.
  */
-
-// ── Global Nav Sidebar Toggle ──
-function toggleGlobalNav() {
-  const nav     = document.getElementById("globalNav");
-  const navCol  = document.getElementById("globalNavCollapsed");
-  if (!nav || !navCol) return;
-  const isOpen = !nav.classList.contains("hidden");
-  nav.classList.toggle("hidden", isOpen);
-  navCol.classList.toggle("hidden", !isOpen);
-  try { localStorage.setItem("navCollapsed", isOpen ? "1" : "0"); } catch(_) {}
-}
-document.addEventListener("DOMContentLoaded", () => {
-  try {
-    if (localStorage.getItem("navCollapsed") === "1") {
-      document.getElementById("globalNav")?.classList.add("hidden");
-      document.getElementById("globalNavCollapsed")?.classList.remove("hidden");
-    }
-  } catch(_) {}
-});
-
-// ══════════════════════════════════════════════
-// 💰 Assets & Economy Panel 
-// ══════════════════════════════════════════════
-
-// ════════════════ VRC Upload Functions ════════════════
-
-// Helper: extract best image URL from a VRChat File object's versions array
-function extractFileVersionUrl(f) {
-  if (!f || !f.versions || !f.versions.length) return '';
-  // Find the latest version with status=complete and a file URL
-  for (let i = f.versions.length - 1; i >= 0; i--) {
-    const v = f.versions[i];
-    if (v.status === 'complete' && v.file && v.file.url) return v.file.url;
-  }
-  // Fallback: any version with a file URL
-  for (let i = f.versions.length - 1; i >= 0; i--) {
-    const v = f.versions[i];
-    if (v.file && v.file.url) return v.file.url;
-  }
-  return '';
-}
-
-async function uploadToVRC(tag, fileInput, onDone) {
-  if (!fileInput || !fileInput.files || !fileInput.files[0]) {
-    showToast('请选择一个图片文件', 'info');
-    return;
-  }
-  const file = fileInput.files[0];
-  if (!file.type.startsWith('image/')) {
-    showToast('仅支持图片文件 (PNG/JPEG/WebP)', 'error');
-    return;
-  }
-  // Size limits: icon/gallery < 10MB, emoji/sticker < 10MB and must be < 1024×1024
-  const MAX_SIZE = 10 * 1024 * 1024;
-  if (file.size > MAX_SIZE) {
-    showToast('文件过大！VRChat 限制图片最大 10MB。', 'error');
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('tag', tag);
-
-  const statusEl = document.getElementById('uploadStatus_' + tag);
-  if (statusEl) { statusEl.textContent = '上传中...'; statusEl.style.color = 'var(--text-muted)'; }
-
-  try {
-    // Route through apiCall so the freshest in-memory vrcAuth is used (not a
-    // possibly-stale localStorage copy) and response auth gets updated. FormData
-    // body intentionally has no Content-Type set — the browser adds the multipart boundary.
-    const r = await apiCall('/api/vrc/file/image', {
-      method: 'POST',
-      body: formData,
-    });
-    if (!r.ok) {
-      const errText = await r.text().catch(() => '');
-      throw new Error('HTTP ' + r.status + ': ' + errText.substring(0, 200));
-    }
-    if (statusEl) { statusEl.textContent = '✅ 上传成功！'; statusEl.style.color = 'var(--success)'; }
-    fileInput.value = '';
-    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 4000);
-    if (onDone) onDone();
-  } catch(e) {
-    if (statusEl) { statusEl.textContent = '❌ ' + e.message; statusEl.style.color = 'var(--error)'; }
-    console.error('Upload failed:', e);
-  }
-}
-
-
-// ════════════════ Groups Tab ════════════════
-
-function switchGroupsCategory(cat) {
-  document.querySelectorAll('#groupsPanel .cat-btn').forEach(b => {
-    b.classList.remove('active', 'btn-primary');
-    b.classList.add('btn-secondary');
-  });
-  const btn = document.getElementById('gpCat' + cat.charAt(0).toUpperCase() + cat.slice(1));
-  if (btn) { btn.classList.remove('btn-secondary'); btn.classList.add('active', 'btn-primary'); }
-  loadGroupsPage(cat);
-}
-
-async function loadGroupsPage(cat) {
-  const area = document.getElementById('groupsContentArea');
-  if (!area) return;
-  area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">加载中...</div>';
-  try {
-    if (cat === 'search') {
-      area.innerHTML = '<h2 style="font-size:1.2rem;margin-bottom:12px;">🔍 搜索群组</h2>' +
-        '<div style="display:flex;gap:8px;margin-bottom:16px;">' +
-          '<input type="text" id="groupSearchInput" class="input-field" placeholder="输入群组名称或 shortCode..." style="flex:1;">' +
-          '<button class="btn btn-primary" onclick="searchGroups()">搜索</button>' +
-        '</div>' +
-        '<div id="groupSearchResults"></div>';
-      return;
-    }
-    const me = await (await apiCall('/api/vrc/auth/user')).json();
-    const r = await apiCall('/api/vrc/users/' + me.id + '/groups');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const groups = await r.json();
-    
-    let filtered = groups || [];
-    let title = '';
-    if (cat === 'mine') {
-      // Created by me: check ownerId
-      filtered = filtered.filter(g => g.ownerId === me.id || g.userId === me.id);
-      title = "👑 我创建的群组 (" + filtered.length + ")";
-    } else {
-      // Joined: not created by me
-      filtered = filtered.filter(g => g.ownerId !== me.id && g.userId !== me.id);
-      title = '📋 已加入的群组 (' + filtered.length + ')';
-    }
-    
-    if (!filtered.length) {
-      area.innerHTML = '<h2 style="font-size:1.2rem;margin-bottom:12px;">' + title + '</h2><div style="color:var(--text-muted);">暂无群组</div>';
-      return;
-    }
-    
-    area.innerHTML = '<h2 style="font-size:1.2rem;margin-bottom:16px;">' + title + '</h2>';
-    area.innerHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">' +
-      filtered.map(g => {
-        const icon = proxyImg(g.iconUrl || g.bannerUrl || '');
-        return '<div onclick="openGroupDetail(\'' + escJsAttr(g.groupId || g.id) + '\')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;cursor:pointer;">' +
-          '<img src="' + escHtml(icon) + '" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
-          '<div style="flex:1;min-width:0;">' +
-            '<div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(g.name || '') + '</div>' +
-            '<div style="font-size:0.75em;color:var(--text-muted);">.' + escHtml(g.shortCode || '') + ' · 👥 ' + (g.memberCount || 0) + '</div>' +
-          '</div>' +
-        '</div>';
-      }).join('') +
-    '</div>';
-  } catch(e) {
-    if (isAbortError(e)) return;
-    area.innerHTML = '<div style="color:var(--error);padding:20px;">加载失败: ' + e.message + '</div>';
-  }
-}
-
-async function searchGroups() {
-  const input = document.getElementById('groupSearchInput');
-  const results = document.getElementById('groupSearchResults');
-  if (!input || !results) return;
-  const q = input.value.trim();
-  if (!q) return;
-  results.innerHTML = '<div style="color:var(--text-muted);">搜索中...</div>';
-  try {
-    const r = await apiCall('/api/vrc/groups?query=' + encodeURIComponent(q) + '&n=20');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const groups = await r.json();
-    if (!groups || !groups.length) {
-      results.innerHTML = '<div style="color:var(--text-muted);">未找到结果</div>';
-      return;
-    }
-    results.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">' +
-      groups.map(g => {
-        const icon = proxyImg(g.iconUrl || g.bannerUrl || '');
-        return '<div onclick="openGroupDetail(\'' + escJsAttr(g.id || '') + '\')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;cursor:pointer;">' +
-          '<img src="' + escHtml(icon) + '" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
-          '<div style="flex:1;min-width:0;">' +
-            '<div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(g.name || '') + '</div>' +
-            '<div style="font-size:0.75em;color:var(--text-muted);">.' + escHtml(g.shortCode || '') + ' · 👥 ' + (g.memberCount || 0) + '</div>' +
-          '</div>' +
-        '</div>';
-      }).join('') +
-    '</div>';
-  } catch(e) {
-    results.innerHTML = '<div style="color:var(--error);">搜索失败: ' + e.message + '</div>';
-  }
-}
 
 function initAssetsTab() {
   document.querySelectorAll('#assetsPanel .cat-btn').forEach(b => b.classList.remove('active', 'btn-primary'));
@@ -554,3 +364,17 @@ async function fetchProps(container, gen) {
   }
 }
 
+
+VRCW.registerModule('assets', {
+  initAssetsTab,
+  switchAssetsPage,
+  fetchBalance,
+  fetchStore,
+  fetchTransactions,
+  fetchSubscriptions,
+  fetchEmoji,
+  fetchInventory,
+  equipInventoryItem,
+  fetchProps,
+});
+renderAppVersionInfo();

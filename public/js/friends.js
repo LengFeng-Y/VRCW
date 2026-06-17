@@ -631,16 +631,6 @@ async function openFriendProfileById(userId) {
   } catch(e) {}
 }
 
-function friendLogMsg(msg, type) {
-  const el = document.getElementById('friendConsole');
-  if (!el) return;
-  const line = document.createElement('div');
-  line.className = 'log-' + (type || 'info');
-  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
-}
-
 function filterFriends() {
   const q      = (document.getElementById('friendSearch')?.value||'').toLowerCase().trim();
   const sortBy = document.getElementById('friendSortBy')?.value || 'status';
@@ -923,3 +913,6 @@ function resolveWorldNames() {
     } catch(e) {}
   });
 }
+
+VRCW.registerModule('friends', { initFriendsTab, switchFriendCategory, fetchMyProfile, renderMyProfile, fetchCurrentFriendCategory, fetchNotifications, handleNotification, seeNotification, seeAllNotifications, updateNotificationBadge, openFriendProfileById, filterFriends, renderFriendList, friendCardHtml, resolveWorldNames });
+renderAppVersionInfo();

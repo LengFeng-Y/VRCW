@@ -738,3 +738,6 @@ async function fetchMutualFriendsFallback(userId, el) {
 
 
 // ═══════════════════════════════════════════════════════════
+
+VRCW.registerModule('groupsInstance', { loadMyGroups, openGroupDetail, closeGroupDetail, vrcGroupAction, switchGroupDetailTab, fetchGroupExtraData, fetchGroupInstances, fetchGroupMembers, fetchInstanceOccupancy, openInstanceDetail, closeInstanceDetail, fetchMutualGroups, fetchMutualFriends });
+renderAppVersionInfo();

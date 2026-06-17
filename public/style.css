@@ -389,6 +389,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
 }
 
 .search-category-select,
+.search-match-field-select,
 .search-platform-select {
   display: flex;
   align-items: center;
@@ -2836,16 +2837,19 @@ select.input-field {
     padding: 12px 10px;
   }
 
-  /* Search bar: 2-row compact grid on mobile */
+  /* Search bar: compact, non-overlapping grid on mobile.
+     Row 1 keeps the three selectors and search button visible; row 2 gives
+     the text input the full width so field/platform filters never stack. */
   .search-container-premium {
     padding: 8px 6px 4px;
   }
 
   .search-box-glass {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(92px, 1fr) minmax(88px, 1fr) minmax(94px, 1fr) 48px;
     grid-template-rows: auto auto;
-    border-radius: 24px; /* increased from 12px for better premium look */
+    align-items: stretch;
+    border-radius: 24px;
     padding: 8px;
     gap: 6px;
     background: var(--bg-glass);
@@ -2853,42 +2857,50 @@ select.input-field {
     -webkit-backdrop-filter: none !important;
   }
 
-  /* Row 1: category + platform side by side */
   .search-category-select {
     grid-column: 1;
     grid-row: 1;
-    width: auto;
+    min-width: 0;
+    border: none;
+    border-bottom: none;
+  }
+
+  .search-match-field-select {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
     border: none;
     border-bottom: none;
   }
 
   .search-platform-select {
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 1;
-    width: auto;
+    min-width: 0;
     border: none;
     border-bottom: none;
   }
 
-  /* Row 2: text input + search button */
   .search-box-glass input {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 2;
-    width: auto;
+    width: 100%;
+    min-width: 0;
     padding: 10px 12px;
     font-size: 0.9em;
     background: rgba(255,255,255,0.04);
-    border-radius: 8px;
+    border-radius: 12px;
   }
 
   .search-btn-premium {
-    grid-column: 2;
-    grid-row: 2;
-    width: auto;
+    grid-column: 4;
+    grid-row: 1;
+    width: 100%;
+    min-width: 0;
     margin-top: 0;
-    border-radius: 8px;
+    border-radius: 16px;
     justify-content: center;
-    padding: 10px 12px;
+    padding: 10px 0;
   }
 
   /* Hide text label on search button, keep icon only */
@@ -2900,13 +2912,23 @@ select.input-field {
     display: none;
   }
 
-  .search-box-glass .glass-select {
-    width: 100%;
+  .search-box-glass .glass-select,
+  .search-box-glass .glass-select[style] {
+    width: 100% !important;
+    min-width: 0 !important;
   }
 
   .search-box-glass .glass-select-trigger {
+    min-width: 0;
     padding: 10px 8px;
     font-size: 0.75rem;
+  }
+
+  .search-box-glass .selected-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .glass-select-options {

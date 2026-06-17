@@ -11,7 +11,7 @@
 | 运行脚本 | `vrc-proxy.py` (Python3 + requests + WARP SOCKS5) |
 | systemd 服务 | `vrc-proxy.service`（开机自启） |
 | CF 环境变量 `VPS_PROXY_URL` | `http://YOUR_VPS_IP:6790` |
-| CF 环境变量 `VPS_PROXY_SECRET` | `YOUR_SECRET_HERE` |
+| CF 环境变量 `VPS_PROXY_SECRET` | 通过 Secret/env var 配置，不要写入文件 |
 | WARP 出口 | `socks5h://127.0.0.1:40000`（Cloudflare WARP proxy 模式） |
 
 ## 工作原理
@@ -68,7 +68,7 @@ systemctl start vrc-proxy.service
 ### 验证是否正常
 ```bash
 curl -s -w "\nHTTP: %{http_code}" http://localhost:6790/api/1/auth/user \
-  -H "x-proxy-secret: YOUR_SECRET_HERE" \
+  -H "x-proxy-secret: $VPS_PROXY_SECRET" \
   -H "Authorization: Basic dGVzdDp0ZXN0" \
   -H "User-Agent: VRChat/1.24.0 Win32"
 # 应返回 {"error":{"message":"Invalid Username/Email or Password","status_code":401}} HTTP: 401
@@ -79,7 +79,7 @@ curl -s -w "\nHTTP: %{http_code}" http://localhost:6790/api/1/auth/user \
 在 Cloudflare 后台 Workers & Pages → vrcw → Settings → Variables and Secrets 设置：
 
 - **VPS_PROXY_URL**（纯文本）：`http://YOUR_VPS_IP:6790`（末尾无斜杠）
-- **VPS_PROXY_SECRET**（密钥）：`YOUR_SECRET_HERE`
+- **VPS_PROXY_SECRET**（密钥）：通过 Secret/env var 配置，不要写入文件
 
 设置后务必点 **Save and deploy** 触发重新部署，否则不生效。
 也可以在本地运行 `npx wrangler deploy` 触发新部署。

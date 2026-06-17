@@ -1,10 +1,11 @@
 import http.server
 import json
+import os
 import requests
 import socket
 
 PORT = 6790
-SECRET = "YOUR_SECRET_HERE"
+SECRET = os.environ.get("VPS_PROXY_SECRET", "")
 WARP_PROXIES = {
     'http': 'socks5h://127.0.0.1:40000',
     'https': 'socks5h://127.0.0.1:40000',
@@ -43,6 +44,9 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({"error": msg}).encode())
 
     def handle_proxy(self):
+        if not SECRET:
+            self.send_error_response(500, "VPS_PROXY_SECRET is not configured")
+            return
         if self.headers.get('x-proxy-secret') != SECRET:
             self.send_error_response(403, "Forbidden")
             return

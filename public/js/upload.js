@@ -975,84 +975,13 @@ async function startUpload() {
 
 // ── avtrDB Public Avatar Search ──
 // ── Custom Glass Select Managers ──
-function toggleGlassSelect(e, el) {
-  e.stopPropagation();
-  const isNowActive = !el.classList.contains('active');
-
-  // Close all others and reset their fixed styles
-  document.querySelectorAll('.glass-select').forEach(s => {
-    if (s !== el) {
-      s.classList.remove('active');
-      const o = s.querySelector('.glass-select-options');
-      if (o) { o.style.position = ''; o.style.top = ''; o.style.left = ''; o.style.width = ''; }
-    }
-  });
-
-  el.classList.toggle('active');
-
-  // On mobile: position:fixed so dropdown escapes scroll-container clipping
-  if (isNowActive && window.innerWidth <= 768) {
-    const opts = el.querySelector('.glass-select-options');
-    const trigger = el.querySelector('.glass-select-trigger');
-    if (opts && trigger) {
-      const r = trigger.getBoundingClientRect();
-      opts.style.position = 'fixed';
-      opts.style.top  = (r.bottom + 4) + 'px';
-      opts.style.left = r.left + 'px';
-      opts.style.width = Math.max(r.width, 160) + 'px';
-      opts.style.right = '';
-    }
-  } else if (!isNowActive) {
-    const opts = el.querySelector('.glass-select-options');
-    if (opts) { opts.style.position = ''; opts.style.top = ''; opts.style.left = ''; opts.style.width = ''; }
-  }
-}
-
-
-function selectGlassOption(e, el, val, callbackName) {
-  e.stopPropagation();
-  const select = el.closest('.glass-select');
-  const input = select.querySelector('input[type="hidden"]');
-  const label = select.querySelector('.selected-label');
-  
-  // Update state
-  input.value = val;
-  label.textContent = el.textContent;
-  
-  // Handle translation attribute if present
-  const i18nKey = el.getAttribute('data-i18n');
-  if (i18nKey) {
-    label.setAttribute('data-i18n', i18nKey);
-    // Explicitly re-translate the label text from the key
-    const translated = t(i18nKey);
-    if (translated) label.textContent = translated;
-  } else {
-    label.removeAttribute('data-i18n');
-  }
-  
-  // Update visual selection
-  select.querySelectorAll('.glass-option').forEach(opt => opt.classList.remove('selected'));
-  el.classList.add('selected');
-  
-  // Close and reset fixed styles
-  select.classList.remove('active');
-  const opts = select.querySelector('.glass-select-options');
-  if (opts) { opts.style.position = ''; opts.style.top = ''; opts.style.left = ''; opts.style.width = ''; }
-
-  
-  // Trigger callback
-  if (callbackName && typeof window[callbackName] === 'function') {
-    window[callbackName]();
-  }
-}
-
-document.addEventListener('click', () => {
-  document.querySelectorAll('.glass-select').forEach(s => {
-    s.classList.remove('active');
-    const o = s.querySelector('.glass-select-options');
-    if (o) { o.style.position = ''; o.style.top = ''; o.style.left = ''; o.style.width = ''; }
-  });
+VRCW.registerModule('upload', {
+  addFiles,
+  renderFileList,
+  removeFile,
+  startUpload,
 });
+renderAppVersionInfo();
 
 
 // Original Avtrdb Logic

@@ -1,7 +1,7 @@
 const http = require('http');
 const https = require('https');
 const PORT = 6790;
-const AUTH_SECRET = "YOUR_SECRET_HERE"; // 安全密钥
+const AUTH_SECRET = process.env.VPS_PROXY_SECRET;
 const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
@@ -10,6 +10,11 @@ const server = http.createServer((req, res) => {
     if (req.method === 'OPTIONS') {
         res.writeHead(200);
         res.end();
+        return;
+    }
+    if (!AUTH_SECRET) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: "VPS_PROXY_SECRET is not configured" }));
         return;
     }
     if (req.headers['x-proxy-secret'] !== AUTH_SECRET) {

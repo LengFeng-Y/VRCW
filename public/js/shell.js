@@ -166,7 +166,7 @@ function renderFriendFavGroupButtons() {
     return;
   }
   container.innerHTML = friendFavGroups.map(g =>
-    makeCatBtn(`⭐ ${escHtml(g.displayName || g.name)}`, `switchFriendCategory('fav_${g.name}')`, `friendCatFav_${g.name}`)
+    makeCatBtn(`⭐ ${escHtml(g.displayName || g.name)}`, `switchFriendCategory('fav_${escJsAttr(g.name)}')`, `friendCatFav_${g.name}`)
   ).join('');
 }
 
@@ -178,7 +178,7 @@ function _idsMatchSet(left, right) {
   return true;
 }
 
-function _avatarBasicFromItem(av) {
+function _avatarBasicFromFavoriteItem(av) {
   const id = av && (av.id || av.vrc_id);
   if (!id) return null;
   return {
@@ -288,7 +288,7 @@ async function upsertAvatarIntoFavoriteCache(groupName, av) {
     'avatar_basics_' + groupName,
     'avatar_basics_age_' + groupName,
     av,
-    _avatarBasicFromItem
+    _avatarBasicFromFavoriteItem
   );
 }
 
@@ -446,7 +446,7 @@ async function syncWorldFavoriteCachesByIndex() {
         const basics = remoteIds.length ? await _fetchWorldBasicsByIds(remoteIds, seqToken) : [];
         await idb.set('world_basics_' + category, basics);
         await idb.set('world_basics_age_' + category, Date.now());
-        if (currentTab === 'worlds' && currentWorldCategory === category) {
+        if (currentTab === 'worlds' && VRCW.modules.worlds && typeof currentWorldCategory !== 'undefined' && currentWorldCategory === category) {
           allWorlds = basics;
           filterWorlds();
         }
@@ -547,6 +547,11 @@ function renderFavoriteGroupButtons() {
 // below is reentrant-safe.
 let _priorityDepth = 0;
 const backgroundTaskKeys = new Set();
+const PERSISTENT_BACKGROUND_TASK_KEYS = new Set([
+  'startup-favorite-index-sync',
+  'startup-my-profile'
+]);
+
 async function runPriorityTask(taskFn) {
   currentGlobalFetchSeq++;
   _priorityDepth++;
@@ -584,9 +589,40 @@ async function processBackgroundQueue() {
   }
 }
 
-function clearBackgroundQueue() {
+function clearBackgroundQueue(opts = {}) {
+  const preservePersistent = !!opts.preservePersistent;
+  if (!preservePersistent) {
+    backgroundLoadQueue.length = 0;
+    backgroundTaskKeys.clear();
+    return;
+  }
+  const keep = backgroundLoadQueue.filter(item => item?.key && PERSISTENT_BACKGROUND_TASK_KEYS.has(item.key));
   backgroundLoadQueue.length = 0;
+  backgroundLoadQueue.push(...keep);
   backgroundTaskKeys.clear();
+  keep.forEach(item => { if (item.key) backgroundTaskKeys.add(item.key); });
+}
+
+VRCW.registerService('backgroundQueue', {
+  queue: queueBackgroundTask,
+  clear: clearBackgroundQueue,
+  runPriority: runPriorityTask,
+});
+
+VRCW.registerService('scripts', {
+  loadOnce: loadScriptOnce,
+});
+
+function startUpload() {
+  return loadScriptOnce('js/upload.js?v=' + APP_CACHE_VERSION).then(() => {
+    if (!VRCW.modules.upload || typeof VRCW.modules.upload.startUpload !== 'function') {
+      throw new Error('Upload module did not register');
+    }
+    return VRCW.modules.upload.startUpload();
+  }).catch(err => {
+    console.error(err);
+    showToast('上传模块加载失败: ' + err.message, 'error');
+  });
 }
 
 // ── Tabs ──
@@ -618,7 +654,7 @@ function switchTab(tab) {
   // If already on this tab, skip the abort+reload dance entirely
   if (isSameTab) return;
   bumpUiEpoch();
-  clearBackgroundQueue();
+  clearBackgroundQueue({ preservePersistent: true });
 
   runPriorityTask(async () => {
     if (currentTabAbortController) currentTabAbortController.abort();
@@ -642,7 +678,12 @@ function switchTab(tab) {
       window._isInitialLoad = false;
       await fetchAvatars(force);
     }
-    if (tab === 'assets') await initAssetsTab?.();
+    if (tab === 'assets') {
+      await loadScriptOnce('js/media-profile.js?v=' + APP_CACHE_VERSION);
+      await loadScriptOnce('js/assets-groups.js?v=' + APP_CACHE_VERSION);
+      await initAssetsTab?.();
+    }
+    if (tab === 'upload') await loadScriptOnce('js/upload.js?v=' + APP_CACHE_VERSION);
     if (tab === 'settings') await loadCacheStats();
   });
 }
@@ -953,3 +994,6 @@ async function refreshAllPersistentCache() {
 }
 
 // ── Categories ──
+
+VRCW.registerModule('shell', { syncAllFavoriteIds, fetchFavoriteGroups, renderFriendFavGroupButtons, removeAvatarFromFavoriteCache, upsertAvatarIntoFavoriteCache, removeWorldFromFavoriteCache, upsertWorldIntoFavoriteCache, syncAvatarFavoriteCachesByIndex, syncWorldFavoriteCachesByIndex, preloadAllFavorites, renderFavoriteGroupButtons, runPriorityTask, queueBackgroundTask, processBackgroundQueue, clearBackgroundQueue, startUpload, switchTab, switchSettingsPage, loadJoinPrefs, saveJoinPrefs, loadCacheStats, clearCacheCategory, clearImageCache, clearAllCacheNow, refreshAllPersistentCache });
+renderAppVersionInfo();

@@ -6,9 +6,8 @@ node_modules/
 dist/
 .DS_Store
 
-# Local-only files (not part of the published source)
-public/app.monolith.bak.js
-public/gifuct.esm.js
+# Local-only files (not part of the published source or static assets)
+.local_backups/
 
 # Internal dev memory — NEVER commit / sync
 memory.md

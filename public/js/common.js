@@ -155,7 +155,7 @@ function proxyImg(url) {
   if (!url) return '';
   // All VRChat images go through Worker proxy (SW caches them after first view)
   if (url.includes('vrchat.cloud') || url.includes('vrchat.com'))
-    return `${API_BASE}/api/image?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(vrcAuth || '')}`;
+    return `${API_BASE}/api/image?url=${encodeURIComponent(url)}&auth=${encodeURIComponent(vrcAuth || '')}&bucket=${encodeURIComponent(_apiAuthBucket())}`;
   return url;
 }
 
@@ -170,3 +170,5 @@ function formatDate(d) {
   });
 }
 
+VRCW.registerModule('common', { getStatusLabel, getTrustInfo, isVRCPlus, getPlatformEmoji, getLocationDisplay, parseLocation, getLanguages, friendLogMsg, worldLogMsg, proxyImg, formatDate });
+renderAppVersionInfo();

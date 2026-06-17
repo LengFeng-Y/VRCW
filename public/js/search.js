@@ -598,10 +598,7 @@ function displayAvatarDetail(av, opts = {}) {
   const desc = av.description || "";
   let thumb = av.image_url || av.thumbnailImageUrl || av.imageUrl || "";
   
-  // Proxy VRChat images
-  if (thumb && (thumb.includes("api.vrchat.cloud") || thumb.includes("files.vrchat.cloud"))) {
-    thumb = `${API_BASE}/api/image?url=${encodeURIComponent(thumb)}&auth=${encodeURIComponent(vrcAuth || "")}`;
-  }
+  thumb = proxyImg(thumb);
 
   const createdAt = av.created_at || av.createdAt;
   const updatedAt = av.updated_at || av.updatedAt;
@@ -1203,3 +1200,27 @@ async function deleteImpostor(avtrId, name) {
     showToast('错误: ' + e.message, 'error');
   }
 }
+
+VRCW.registerModule('search', {
+  saveCurrentDetailToLocal,
+  onSearchCategoryChange,
+  onAvtrdbInput,
+  doAvtrdbSearch,
+  avtrdbLoadMore,
+  setAvtrdbSort,
+  setAvtrdbMatchField,
+  openAvtrdbDetail,
+  openLocalDetail,
+  closeAvtrdbDetail,
+  toggleAvatarFavGridMenu,
+  toggleAvtrdbFavMenu,
+  addToFavorite,
+  unfavoriteFromGroup,
+  _refreshDetailAfterFavChange,
+  openInVRCX,
+  switchAvatar,
+  setFallbackAvatar,
+  enqueueImpostor,
+  deleteImpostor,
+});
+renderAppVersionInfo();

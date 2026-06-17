@@ -243,6 +243,7 @@ async function doVerify2FA() {
 function doLogout() {
   vrcAuth = "";
   localStorage.removeItem("vrc_auth");
+  if (typeof clearApiMemoryCache === 'function') clearApiMemoryCache();
   // Wipe in-memory session state so a subsequent login on the same tab doesn't
   // briefly flash the previous user's friends / avatars / modals before the
   // fresh fetch comes back. Per red-line R2, we DON'T call VRChat /logout —
@@ -318,3 +319,6 @@ function showMainApp() {
   window._isInitialLoad = false;
   switchTab(initialTab);
 }
+
+VRCW.registerModule('auth', { renderSavedAccounts, removeSavedAccount, saveAccountInfo, getDeviceFingerprint, doLogin, doVerify2FA, doLogout, showMainApp });
+renderAppVersionInfo();

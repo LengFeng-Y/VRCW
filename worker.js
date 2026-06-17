@@ -131,6 +131,15 @@ function mergeCookies(existing, newCookies) {
         .join("; ");
 }
 
+function authBucket(authCookies) {
+    if (!authCookies) return "anon";
+    let hash = 0;
+    for (let i = 0; i < authCookies.length; i++) {
+        hash = ((hash << 5) - hash + authCookies.charCodeAt(i)) | 0;
+    }
+    return `auth:${Math.abs(hash)}`;
+}
+
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
@@ -278,6 +287,7 @@ export default {
         // Uses Cache API for instant hits after batch prefetch.
         if (path === "/api/image" && request.method === "GET") {
             const targetUrl = url.searchParams.get("url");
+            const imageBucket = url.searchParams.get("bucket") || authBucket(auth);
             let imgAuth = auth;
             const authParam = url.searchParams.get("auth");
             if (!imgAuth && authParam) {
@@ -289,7 +299,7 @@ export default {
             }
 
             // Check CF Cache API first
-            const cacheKey = new Request(new URL(`/api/image?url=${encodeURIComponent(targetUrl)}`, request.url).toString(), { method: "GET" });
+            const cacheKey = new Request(new URL(`/api/image?bucket=${encodeURIComponent(imageBucket)}&url=${encodeURIComponent(targetUrl)}`, request.url).toString(), { method: "GET" });
             const cache = caches.default;
             let cached = await cache.match(cacheKey);
             if (cached) return cached;
@@ -364,6 +374,7 @@ export default {
         if (path === "/api/images/prefetch" && request.method === "POST") {
             const body = await request.json();
             const urls = (body.urls || []).filter(isAllowedTarget);
+            const imageBucket = body.bucket || authBucket(auth);
             if (!urls.length) return jsonResp({ ok: true, cached: 0 });
 
             const cache = caches.default;
@@ -374,7 +385,7 @@ export default {
 
             // Fire all fetches concurrently
             const promises = batch.map(async (rawUrl) => {
-                const cacheKey = new Request(new URL(`/api/image?url=${encodeURIComponent(rawUrl)}`, request.url).toString(), { method: "GET" });
+                const cacheKey = new Request(new URL(`/api/image?bucket=${encodeURIComponent(imageBucket)}&url=${encodeURIComponent(rawUrl)}`, request.url).toString(), { method: "GET" });
                 // Skip if already cached
                 const existing = await cache.match(cacheKey);
                 if (existing) { cachedCount++; return; }

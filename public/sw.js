@@ -6,7 +6,7 @@
  * After first view, images NEVER hit Cloudflare again.
  */
 
-const CACHE_NAME = 'vrcw-img-v1';
+const CACHE_NAME = 'vrcw-img-v2';
 const IMAGE_PATH = '/api/image';
 
 self.addEventListener('install', () => self.skipWaiting());
@@ -21,7 +21,8 @@ self.addEventListener('fetch', event => {
   // Build a stable cache key — same image URL regardless of auth token
   const imageUrl = url.searchParams.get('url');
   if (!imageUrl) return;
-  const stableKey = new Request(url.origin + IMAGE_PATH + '?url=' + encodeURIComponent(imageUrl));
+  const bucket = url.searchParams.get('bucket') || 'anon';
+  const stableKey = new Request(url.origin + IMAGE_PATH + '?bucket=' + encodeURIComponent(bucket) + '&url=' + encodeURIComponent(imageUrl));
 
   event.respondWith(
     caches.open(CACHE_NAME).then(async cache => {

@@ -673,3 +673,6 @@ async function sendFriendRequest(userId, name) {
     }
   } catch(e) { friendLogMsg(`✗ 发送失败: ${e.message}`, 'error'); }
 }
+
+VRCW.registerModule('friendProfile', { openFriendProfile, getFriendProfileActionState, _renderFriendProfileUI, closeFriendProfile, switchFriendProfileTab, deleteFriend, sendFriendRequest });
+renderAppVersionInfo();

@@ -11,8 +11,6 @@
 // ═══════════════════════════════════════════════════════════════
 
 let allWorlds           = [];
-let worldsLoaded        = false;
-let currentWorldCategory = 'recent';
 let currentWorldDetail  = null;
 
 async function initWorldsTab() {
@@ -55,7 +53,7 @@ function renderWorldFavGroupButtons(message) {
   html += extra.map(g => {
     const isVrcPlus = g.name.startsWith('vrcPlusWorlds') || g.type === 'vrcPlusWorld';
     const icon = isVrcPlus ? '💎' : '⭐';
-    return makeCatBtn(`${icon} ${escHtml(g.displayName || g.name)}`, `switchWorldCategory('fav_${g.name}')`, `worldCatFav_${g.name}`);
+    return makeCatBtn(`${icon} ${escHtml(g.displayName || g.name)}`, `switchWorldCategory('fav_${escJsAttr(g.name)}')`, `worldCatFav_${g.name}`);
   }).join('');
 
   html += makeCatBtn('📤 我上传的世界', "switchWorldCategory('mine')", 'worldCatMine');
@@ -667,50 +665,7 @@ async function unfavoriteSelectedWorlds() {
 
 async function cleanInvalidWorlds() {
   if (!currentWorldCategory || !currentWorldCategory.startsWith('fav_')) return;
-  const invalid = allWorlds.filter(w => w.isInvalid);
-  if (!invalid.length) {
-    worldLogMsg('✅ 当前收藏夹没有失效世界', 'success');
-    showToast('当前收藏夹没有失效世界', 'info');
-    return;
-  }
-  worldLogMsg(`🧹 发现 ${invalid.length} 个失效世界，准备清理...`, 'info');
-  _showCleanupModal({
-    title: '🧹 清理失效世界',
-    invalidItems: invalid,
-    privateNonOwnItems: [],
-    invalidLabel: item => item.name || '失效世界',
-    onConfirm: async (toDelete, ctx) => {
-      worldLogMsg(`🗑️ 开始清理 ${toDelete.length} 个失效世界...`, 'info');
-      let success = 0, fail = 0, done = 0;
-      for (const w of toDelete) {
-        if (ctx?.isCancelled?.()) break;
-        const fid = worldFavoriteIdMap.get(w.id);
-        if (!fid) {
-          fail++;
-          done++;
-          ctx?.updateProgress?.(done, toDelete.length);
-          worldLogMsg(`⚠ ${w.name}: 找不到收藏 ID`, 'error');
-          continue;
-        }
-        try {
-          await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
-          worldFavoriteIdMap.delete(w.id);
-          if (currentWorldCategory && currentWorldCategory.startsWith('fav_')) {
-            await removeWorldFromFavoriteCache(currentWorldCategory.slice(4), w.id);
-          }
-          success++;
-          worldLogMsg(`✓ 已移除失效世界: ${w.name || w.id}`, 'success');
-        } catch(e) { fail++; worldLogMsg(`✗ 移除失败: ${e.message}`, 'error'); }
-        done++;
-        ctx?.updateProgress?.(done, toDelete.length);
-        await new Promise(r => setTimeout(r, 200));
-      }
-      const cancelled = ctx?.isCancelled?.();
-      worldLogMsg(`${cancelled ? '⏹ 已停止清理' : '✅ 清理完毕'}：成功 ${success}，失败 ${fail}`, success > 0 ? 'success' : (cancelled ? 'info' : 'error'));
-      try { await _saveWorldBasicsForCurrentCategory(); } catch(_) {}
-      fetchWorlds(currentWorldCategory, true);
-    }
-  });
+  return cleanupInvalidWorlds();
 }
 
 function toggleSelectWorld(id, e) {
@@ -1121,7 +1076,7 @@ async function showCacheClearModal() {
       if (navigator.serviceWorker?.controller) {
         navigator.serviceWorker.controller.postMessage('clearImageCache');
       } else {
-        caches.delete('vrcw-img-v1').catch(() => {});
+        Promise.all([caches.delete('vrcw-img-v1'), caches.delete('vrcw-img-v2')]).catch(() => {});
       }
     }
 
@@ -1321,3 +1276,28 @@ async function toggleWorldFavorite() {
     setTimeout(()=>{ if(statusEl) statusEl.textContent=''; }, 3000);
   }
 }
+
+VRCW.registerModule('worlds', {
+  initWorldsTab,
+  renderWorldFavGroupButtons,
+  fetchWorlds,
+  loadWorldFavGroups,
+  switchWorldCategory,
+  cleanupInvalidWorlds,
+  filterWorlds,
+  selectAllWorlds,
+  unfavoriteSelectedWorlds,
+  cleanInvalidWorlds,
+  toggleSelectWorld,
+  switchWorldDetailTab,
+  openWorldDetail,
+  closeWorldDetail,
+  deleteCurrentWorld,
+  showCacheClearModal,
+  joinWorldInstance,
+  joinSpecificInstance,
+  addWorldToFavorite,
+  toggleWorldFavMenu,
+  toggleWorldFavorite,
+});
+renderAppVersionInfo();

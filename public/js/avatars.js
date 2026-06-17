@@ -541,7 +541,7 @@ function renderGrid(list) {
       ${releaseBadge}
     </div>`;
     card.id = "card-" + av.id;
-    card.onclick = () => openLocalDetail(av.id);
+        card.onclick = () => openLocalAvatarDetail(av.id);
     grid.appendChild(card);
   });
 
@@ -888,7 +888,7 @@ async function cleanInvalidFavorites() {
 }
 
 // ── Open Local Avatar Detail Modal ──
-async function openLocalDetail(id) {
+async function openLocalAvatarDetail(id) {
   const av = visibleAvatars.find(a => a.id === id);
   if (!av) return;
   // Show immediately with the cached basics (name/thumb/releaseStatus).
@@ -996,9 +996,7 @@ function editAvatar(id) {
   const note = document.getElementById("editThumbNote");
   const input = document.getElementById("editThumbInput");
   if (preview) {
-    preview.src = thumb
-      ? `${API_BASE}/api/image?url=${encodeURIComponent(thumb)}&auth=${encodeURIComponent(vrcAuth || "")}`
-      : "";
+    preview.src = thumb ? proxyImg(thumb) : "";
   }
   if (note) note.textContent = "";
   if (input) input.value = ""; // Reset file picker
@@ -1095,7 +1093,7 @@ async function saveEditAvatar() {
       if (newImageUrl) {
         const img = card.querySelector(".avatar-thumb");
         if (img) {
-          const proxyUrl = `${API_BASE}/api/image?url=${encodeURIComponent(newImageUrl)}&auth=${encodeURIComponent(vrcAuth || "")}`;
+          const proxyUrl = proxyImg(newImageUrl);
           img.classList.remove("failed");
           img.src = proxyUrl;
           loadedImageUrls.add(proxyUrl);
@@ -1393,16 +1391,8 @@ async function downloadSingleAvatar(av) {
   }
 }
 
-// ── Console ──
-function logMsg(msg, type = "info") {
-  const el = document.getElementById("logConsole");
-  const span = document.createElement("div");
-  span.className = `log-${type}`;
-  span.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  el.appendChild(span);
-  el.scrollTop = el.scrollHeight;
-  // Limit to 500 entries to prevent DOM bloat
-  while (el.children.length > 500) el.removeChild(el.firstChild);
-}
 
 // ── Upload Mode Toggle ──
+
+VRCW.registerModule('avatars', { switchCategory, updateSelectedCount, fetchAvatars, applyFilters, renderGrid, unfavorite, unfavoriteSelected, cleanInvalidFavorites, openLocalAvatarDetail, renderAvatars, toggleSelect, selectAll, editAvatar, onEditThumbSelected, closeEditModal, saveEditAvatar, deleteAvatar, pickSaveDir, clearSaveDir, downloadSelected, downloadSingleAvatar });
+renderAppVersionInfo();
