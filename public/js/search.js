@@ -288,11 +288,35 @@ function setAvtrdbMatchField(field) {
 
 function authorLinkHtml(authorName, authorId) {
   const name = authorName || "Unknown";
-  const target = authorId || (name && name !== "Unknown" ? name : "");
-  if (target) {
-    return `<span class="link-like" onclick="event.stopPropagation(); openFriendProfileById('${escJsAttr(target)}')">${escHtml(name)}</span>`;
+  if (authorId) {
+    return `<span class="link-like" onclick="event.stopPropagation(); openFriendProfileById('${escJsAttr(authorId)}')">${escHtml(name)}</span>`;
+  }
+  if (name && name !== "Unknown") {
+    return `<span class="link-like" title="解析作者资料" onclick="event.stopPropagation(); openAuthorProfileByName('${escJsAttr(name)}')">${escHtml(name)}</span>`;
   }
   return escHtml(name);
+}
+
+async function openAuthorProfileByName(authorName) {
+  const name = String(authorName || '').trim();
+  if (!name) return;
+  try {
+    const resp = await apiCall(`/api/vrc/users?search=${encodeURIComponent(name)}&n=10`);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const users = await resp.json().catch(() => []);
+    const list = Array.isArray(users) ? users : (users?.users || users?.data || []);
+    const lower = name.toLowerCase();
+    const hit = list.find(u => String(u.displayName || '').toLowerCase() === lower
+      || String(u.username || '').toLowerCase() === lower
+      || String(u.name || '').toLowerCase() === lower) || list[0];
+    if (hit?.id) {
+      openFriendProfileById(hit.id);
+    } else {
+      showToast('找不到作者资料: ' + name, 'error');
+    }
+  } catch (e) {
+    showToast('作者资料解析失败: ' + (e.message || e), 'error');
+  }
 }
 
 // Build one normalized avatar card element from a collected record.
