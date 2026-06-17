@@ -427,6 +427,16 @@ function _rerenderAvtrdbGrid(opts = {}) {
   avtrdbTotalLoaded = items.length;
   if (stats) stats.textContent = `已显示 ${items.length} 个结果（${platLabel} · ${fieldLabel} · 按${sortLabel}排序）${_avtrdbHasMore ? " · 还有更多" : " · 全部加载完毕"}`;
 }
+
+function renderEarlyAvtrdbResults() {
+  const grid = document.getElementById("avtrdbGrid");
+  const stats = document.getElementById("avtrdbStats");
+  if (!grid || _avtrdbDisplayOrder.length || _avtrdbDedupMap.size === 0) return;
+  document.getElementById('avtrdb-loading-spinner')?.remove();
+  _rerenderAvtrdbGrid();
+  if (stats) stats.textContent += " · 正在继续补全其它数据库...";
+}
+
 async function avtrdbFetch(append, _signal) {
   // Use the signal from the caller or fall back to the global tab abort signal
   const signal = _signal || currentTabAbortController?.signal;
@@ -501,6 +511,7 @@ async function avtrdbFetch(append, _signal) {
             ...av, vrc_id: av.vrc_id, image_url: av.image_url,
             compatibility: av.compatibility || [], performance: av.performance || {}
           }));
+          if (!append && !signal?.aborted) renderEarlyAvtrdbResults();
         })
         .catch(() => {});
     };
