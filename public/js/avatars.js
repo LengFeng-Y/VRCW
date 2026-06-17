@@ -889,32 +889,7 @@ async function cleanInvalidFavorites() {
 
 // ── Open Local Avatar Detail Modal ──
 async function openLocalAvatarDetail(id) {
-  const av = visibleAvatars.find(a => a.id === id);
-  if (!av) return;
-  // Show immediately with the cached basics (name/thumb/releaseStatus).
-  displayAvatarDetail(av);
-
-  // The list only carries "basics" (id/name/thumb/releaseStatus/authorId/tags) —
-  // description, performance ratings, version and dates are missing. Fetch the
-  // FULL object from the AUTHENTICATED VRChat endpoint. This works for your own
-  // private avatars (the community-DB fallback in openAvtrdbDetail only knows
-  // PUBLIC avatars, which is why private ones showed an empty detail before).
-  try {
-    const r = await apiCall(`/api/vrc/avatars/${id}`);
-    if (!r.ok) return; // keep the basics view; private-non-owned will 404
-    const full = await r.json();
-    if (full && full.id) {
-      // Merge so we keep any list-only fields, prefer fresh API values.
-      const merged = Object.assign({}, av, full);
-      const idx = visibleAvatars.findIndex(a => a.id === id);
-      if (idx !== -1) visibleAvatars[idx] = merged;
-      const aidx = avatars.findIndex(a => a.id === id);
-      if (aidx !== -1) avatars[aidx] = Object.assign({}, avatars[aidx], full);
-      // Re-render the (still-open) modal with complete data.
-      const modal = document.getElementById("avtrdbDetailModal");
-      if (modal && !modal.classList.contains("hidden")) displayAvatarDetail(merged, { preserveZ: true });
-    }
-  } catch (_) { /* network blip — basics view stays */ }
+  return openLocalDetail(id);
 }
 
 function renderAvatars() {
