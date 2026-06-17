@@ -87,7 +87,10 @@ function positionGlassSelectOptions(el) {
   opts.style.setProperty('width', width + 'px', 'important');
   opts.style.setProperty('max-height', maxHeight + 'px', 'important');
   opts.style.setProperty('overflow-y', naturalHeight > maxHeight ? 'auto' : 'hidden', 'important');
-  opts.style.setProperty('transition', 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 'important');
+  opts.style.setProperty('opacity', '1', 'important');
+  opts.style.setProperty('transform', 'translateY(0)', 'important');
+  opts.style.setProperty('pointer-events', 'auto', 'important');
+  opts.style.setProperty('transition', 'none', 'important');
 }
 
 function toggleGlassSelect(e, el) {
