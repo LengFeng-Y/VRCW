@@ -10,7 +10,7 @@ let avtrdbPage = 0;
 let _avtrdbDedupMap = new Map(); // id -> avatar data
 let _avtrdbRenderMap = new Map(); // id -> card DOM element
 const SEARCH_TARGET = 500; // target unique cards per search session
-const COMMUNITY_LOAD_MORE_LIMIT = 150;
+const COMMUNITY_LOAD_MORE_LIMIT = 50;
 let _loadMoreInFlight = false;
 let _avtrdbHasMore = false; // module-level so auto-fill recursion can read it
 let _communityHasMore = false;
@@ -651,6 +651,25 @@ async function avtrdbFetch(append, _signal) {
     batchIds.add(id);
   };
 
+  let appendedNewCount = 0;
+  const flushAppendResults = () => {
+    if (!append || signal?.aborted || batchIds.size === 0) return;
+    const newItems = _avtrdbSortItems([...batchIds].map(id => dedupMap.get(id)).filter(Boolean))
+      .filter(av => !_avtrdbDisplayOrder.includes(av.vrc_id));
+    if (!newItems.length) {
+      batchIds.clear();
+      changedIds.clear();
+      return;
+    }
+    appendedNewCount += newItems.length;
+    _avtrdbDisplayOrder.push(...newItems.map(av => av.vrc_id));
+    changedIds.forEach(id => _refreshAvtrdbCard(dedupMap.get(id)));
+    batchIds.clear();
+    changedIds.clear();
+    document.getElementById('avtrdb-loadmore-spinner')?.remove();
+    _rerenderAvtrdbGrid({ preserveOrder: true, preserveRendered: true });
+  };
+
   // Loading spinner on fresh search
   if (!append) {
     grid.innerHTML = `<div id="avtrdb-loading-spinner" style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:16px;color:rgba(255,255,255,0.5);">
@@ -663,7 +682,7 @@ async function avtrdbFetch(append, _signal) {
     // One AvtrDB page → collect (no render)
     const startPage = avtrdbPage;
     const fetchAvtrdbPage = (pageNum) => {
-      let url = `https://api.avtrdb.com/v2/avatar/search?query=${encodeURIComponent(avtrdbCurrentQuery)}&page_size=100&page=${pageNum}`;
+      let url = `https://api.avtrdb.com/v2/avatar/search?query=${encodeURIComponent(avtrdbCurrentQuery)}&page_size=${append ? 50 : 100}&page=${pageNum}`;
       if (requiredPlats.length > 0) url += `&compatibility=${requiredPlats[0]}`;
       return fetchJsonWithTimeout(`/api/proxy?url=${encodeURIComponent(url)}`, { signal, timeoutMs: append ? 7000 : 9000 })
         .then(data => {
@@ -674,12 +693,13 @@ async function avtrdbFetch(append, _signal) {
             ...av, vrc_id: av.vrc_id, image_url: av.image_url,
             compatibility: av.compatibility || [], performance: av.performance || {}
           }));
+          if (append) flushAppendResults();
           if (!append && !signal?.aborted) renderEarlyAvtrdbResults();
         })
         .catch(() => {});
     };
 
-    const PAGES_PER_BATCH = append ? 2 : 3;
+    const PAGES_PER_BATCH = append ? 1 : 3;
     const avtrdbPromises = Array.from({ length: PAGES_PER_BATCH }, (_, i) => fetchAvtrdbPage(startPage + i));
     avtrdbPage = startPage + PAGES_PER_BATCH - 1;
 
@@ -710,6 +730,7 @@ async function avtrdbFetch(append, _signal) {
             }
             if (dedupMap.size > beforeSize) communityAdded = true;
           });
+          if (append) flushAppendResults();
         })
         .catch(() => {}));
     });
@@ -732,14 +753,8 @@ async function avtrdbFetch(append, _signal) {
 
     // Score, sort, render. Load More must not reshuffle cards the user has
     // already scanned, so only append newly discovered IDs to the locked order.
-    let appendedNewCount = 0;
     if (append) {
-      const newItems = _avtrdbSortItems([...batchIds].map(id => dedupMap.get(id)).filter(Boolean))
-        .filter(av => !_avtrdbDisplayOrder.includes(av.vrc_id));
-      appendedNewCount = newItems.length;
-      _avtrdbDisplayOrder.push(...newItems.map(av => av.vrc_id));
-      changedIds.forEach(id => _refreshAvtrdbCard(dedupMap.get(id)));
-      _rerenderAvtrdbGrid({ preserveOrder: true, preserveRendered: true });
+      flushAppendResults();
     } else {
       _rerenderAvtrdbGrid();
     }
