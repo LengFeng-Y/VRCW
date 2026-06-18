@@ -10,8 +10,8 @@ let avtrdbPage = 0;
 let _avtrdbDedupMap = new Map(); // id -> avatar data
 let _avtrdbRenderMap = new Map(); // id -> card DOM element
 const SEARCH_TARGET = 500; // target unique cards per search session
-let _loadMoreInFlight = false; // re-entrancy guard for avtrdbLoadMore
 const COMMUNITY_LOAD_MORE_LIMIT = 500;
+let _loadMoreInFlight = false;
 let _avtrdbHasMore = false; // module-level so auto-fill recursion can read it
 let _communityHasMore = false;
 
@@ -284,33 +284,27 @@ async function vrcdbFetch(cat, query) {
 }
 
 async function avtrdbLoadMore() {
-  // Re-entrancy guard: a slow Load More used to let double-clicks fire twice,
-  // corrupting avtrdbPage and double-fetching.
   if (_loadMoreInFlight) return;
-  const grid = document.getElementById("avtrdbGrid");
-  const btn = document.getElementById("avtrdbLoadMore");
   _loadMoreInFlight = true;
-  // Immediate feedback: disable + show loading text. Previously the button
-  // stayed unchanged until results arrived, so it felt like "clicked, nothing
-  // happened".
-  if (btn) { btn.disabled = true; btn.textContent = "加载中… / Loading…"; }
-  // Insert a trailing spinner inside the grid (append path doesn't wipe the
-  // grid, so this is safe and gives a visible "more coming" cue).
-  let spinner = null;
-  if (grid) {
-    spinner = document.createElement('div');
-    spinner.id = 'avtrdb-loadmore-spinner';
-    spinner.style.cssText = 'grid-column:1/-1;text-align:center;padding:24px;color:rgba(255,255,255,0.5);font-size:0.85em;';
-    spinner.textContent = '正在加载更多…';
-    grid.appendChild(spinner);
-  }
+  const btn = document.getElementById("avtrdbLoadMore");
+  const grid = document.getElementById("avtrdbGrid");
+  if (!grid) { _loadMoreInFlight = false; return; }
+  const currentCount = grid.querySelectorAll('.avatar-card').length;
+  window._avtrdbLoadMoreTarget = currentCount + SEARCH_TARGET;
+  // Immediate feedback: disable button + show spinner
+  if (btn) { btn.disabled = true; btn.innerHTML = "⏳ 加载更多中..."; }
+  const spinner = document.createElement("div");
+  spinner.id = "avtrdb-loadmore-spinner";
+  spinner.style.cssText = "grid-column:1/-1;display:flex;align-items:center;justify-content:center;padding:32px;gap:12px;color:rgba(255,255,255,0.5);";
+  spinner.innerHTML = "<div style='width:32px;height:32px;border:2px solid rgba(255,255,255,0.15);border-top-color:rgba(255,255,255,0.7);border-radius:50%;animation:spin 0.8s linear infinite;'></div><span>加载更多...</span>";
+  grid.appendChild(spinner);
   try {
-    avtrdbPage++; // advance to next batch start
+    avtrdbPage++;
     await avtrdbFetch(true);
   } finally {
-    document.getElementById('avtrdb-loadmore-spinner')?.remove();
-    if (btn) { btn.disabled = false; btn.textContent = "加载更多 / Load More"; }
     _loadMoreInFlight = false;
+    document.getElementById("avtrdb-loadmore-spinner")?.remove();
+    if (btn) { btn.disabled = false; btn.innerHTML = "📦 加载更多"; }
   }
 }
 
@@ -686,10 +680,7 @@ async function avtrdbFetch(append, _signal) {
       _rerenderAvtrdbGrid();
     }
     window._avtrdbLoadMoreTarget = null;
-    // Button visibility: only show if a source genuinely has more AND (on
-    // append) this batch actually produced new cards. Hiding the button when
-    // a Load More returned only duplicates prevents the "clicked, nothing
-    // happened" loop — the user sees there's nothing more to load.
+    // If Load More produced no new cards, hide the button to avoid a "clicked, nothing happened" loop.
     const sourcesHaveMore = _avtrdbHasMore || _communityHasMore;
     const producedNew = !append || appendedNewCount > 0;
     loadMoreBtn.style.display = (sourcesHaveMore && producedNew) ? "inline-block" : "none";

@@ -104,14 +104,16 @@ async function onUploadFileSelected(inputId, tag) {
   // For static emoji/sticker—show dimension warning if needed
   if (tag === 'emoji' || tag === 'sticker') {
     const img = new Image();
+    const objUrl = URL.createObjectURL(f);
     img.onload = () => {
+      URL.revokeObjectURL(objUrl);
       const ok = img.width <= 1024 && img.height <= 1024;
       if (dim) dim.textContent = img.width + '×' + img.height + (ok ? '' : ' ⚠️ 超出 1024×1024！');
       if (dim) dim.style.color = ok ? 'var(--text-muted)' : '#f87171';
       btn.disabled = tooBig || !ok;
     };
-    img.onerror = () => { btn.disabled = tooBig; };
-    img.src = URL.createObjectURL(f);
+    img.onerror = () => { URL.revokeObjectURL(objUrl); btn.disabled = tooBig; };
+    img.src = objUrl;
   } else if (tag === 'emojianimated') {
     // For GIFs, auto-detect FPS from frame delays
     if (f.type === 'image/gif') {
@@ -172,12 +174,14 @@ async function uploadToVRCStyled(inputId, tag, refreshPage) {
       statusEl.textContent = '⏳ 检查尺寸...';
       await new Promise((res, rej) => {
         const img = new Image();
+        const objUrl = URL.createObjectURL(file);
         img.onload = () => {
+          URL.revokeObjectURL(objUrl);
           if (img.width > 1024 || img.height > 1024) rej(new Error(`图片尺寸 ${img.width}×${img.height} 超出上限 1024×1024`));
           else res();
         };
-        img.onerror = res; // if can't load dimensions, proceed anyway
-        img.src = URL.createObjectURL(file);
+        img.onerror = () => { URL.revokeObjectURL(objUrl); res(); }; // if can't load dimensions, proceed anyway
+        img.src = objUrl;
       });
       fd.append('filestring', file, file.name);
       fd.append('tagstring', tag);

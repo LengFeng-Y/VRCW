@@ -621,28 +621,24 @@ setInterval(() => {
 }, 300000); // 5 min — balanced between freshness and Worker request quota
 
 async function openFriendProfileById(userId) {
-  // Open a placeholder profile IMMEDIATELY so the user sees feedback, then
-  // upgrade with the full profile when /users/{id} resolves. Without this the
-  // modal only appeared after a slow API roundtrip, and if the user did
-  // something else in the meantime the late response hijacked focus by
-  // bumping the modal to the top (friend-profile.js modalZTop()).
-  const stubEl = { dataset: { friend: escAttrJson({ id: userId, displayName: '加载中… / Loading…', state: 'offline' }) } };
-  await openFriendProfile(stubEl); // shell wrapper resolves after module loads + openFriendProfile runs (sets _fpCurrentSeq)
+  // Open a placeholder profile immediately, then upgrade the same modal in
+  // place when /users/{id} resolves. openFriendProfile() owns _fpSeq, so this
+  // wrapper uses its own request id plus the post-placeholder fpSeq.
+  const reqId = (window._openFriendProfileByIdReq = (window._openFriendProfileByIdReq || 0) + 1);
+  const stubEl = { dataset: { friend: escAttrJson({ id: userId, displayName: '加载中… / Loading…', state: 'offline', _loading: true }) } };
+  await openFriendProfile(stubEl);
+  if (window._openFriendProfileByIdReq !== reqId) return;
   const fpSeq = window._fpCurrentSeq;
+
   try {
     const r = await apiCall('/api/vrc/users/' + userId);
     if (!r.ok) return;
     const u = await r.json();
-    // Bail if the user opened/closed a different profile while we waited.
-    if (window._fpCurrentSeq !== fpSeq) return;
-    // Upgrade the already-open modal with the full profile. Re-render in
-    // place rather than calling openFriendProfile again (which would bump
-    // _fpSeq and defeat the guard above).
+    if (window._openFriendProfileByIdReq !== reqId || window._fpCurrentSeq !== fpSeq) return;
     currentFriendProfile = Object.assign({}, currentFriendProfile, u);
     await _renderFriendProfileUI(currentFriendProfile, document.getElementById('friendProfileModal'));
   } catch(e) {}
 }
-
 function filterFriends() {
   const q      = (document.getElementById('friendSearch')?.value||'').toLowerCase().trim();
   const sortBy = document.getElementById('friendSortBy')?.value || 'status';

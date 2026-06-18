@@ -992,6 +992,8 @@ function onEditThumbSelected(input) {
   if (!file) return;
   const preview = document.getElementById("editThumbPreview");
   const note = document.getElementById("editThumbNote");
+  // Revoke previous blob URL if one existed
+  if (preview && preview.src && preview.src.startsWith('blob:')) URL.revokeObjectURL(preview.src);
   if (preview) preview.src = URL.createObjectURL(file);
   if (note) note.textContent = `✓ ${file.name} (${(file.size / 1024).toFixed(0)} KB) — 保存时上传 / will upload on save`;
 }
