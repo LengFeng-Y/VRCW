@@ -10,7 +10,19 @@ let avtrdbPage = 0;
 let _avtrdbDedupMap = new Map(); // id -> avatar data
 let _avtrdbRenderMap = new Map(); // id -> card DOM element
 const SEARCH_TARGET = 500; // target unique cards per search session
+const COMMUNITY_LOAD_MORE_LIMIT = 500;
 let _avtrdbHasMore = false; // module-level so auto-fill recursion can read it
+let _communityHasMore = false;
+
+function _communityDbSources(query, append) {
+  const suffix = append ? '&n=' + COMMUNITY_LOAD_MORE_LIMIT : '';
+  return [
+    { name: 'vrcdb', url: `/api/proxy?url=${encodeURIComponent(`https://vrcx.vrcdb.com/avatars/Avatar/VRCX?search=${encodeURIComponent(query)}${suffix}`)}` },
+    { name: 'avatarrecovery', url: `/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?search=${encodeURIComponent(query)}${suffix}`)}` },
+    { name: 'cute.bet', url: `/api/proxy?url=${encodeURIComponent(`https://avtr.cute.bet/search?search=${encodeURIComponent(query)}${suffix}`)}` },
+    { name: 'nekosunevr', url: `/api/proxy?url=${encodeURIComponent(`https://avtr.nekosunevr.co.uk/vrcx_search?search=${encodeURIComponent(query)}${suffix}`)}` }
+  ];
+}
 
 let avtrdbCurrentQuery = "";
 let avtrdbCurrentPlatform = "";
@@ -40,16 +52,21 @@ function normalizeAvtrdbMatchField(field) {
 
 // Builds the favorite group list HTML with checkmarks for groups where the avatar
 // is already favorited. Clicking a checked group unfavorites; unchecked adds.
-function _buildFavGroupListHtml(favList, id) {
+function _findFavGroupNode(favList, attr, groupName) {
+  return Array.from(favList.querySelectorAll(`[${attr}]`)).find(el => el.getAttribute(attr) === groupName) || null;
+}
+
+function _buildFavGroupListHtml(favList, id, opts = {}) {
   const favedGroups = avatarFavTagMap.get(id) || new Set();
   const isLocalFaved = localAvatarIdMap.has(id);
+  const localSaveAction = opts.localSaveAction || `saveCurrentDetailToLocal(); _refreshDetailAfterFavChange('${escJsAttr(id)}')`;
 
   let html = '';
   // Local favorites row
   if (isLocalFaved) {
     html += `<button class="avtrdb-fav-group-btn avtrdb-fav-group-active" onclick="removeFromLocalFavorite('${escJsAttr(id)}'); _refreshDetailAfterFavChange('${escJsAttr(id)}');">✓ 📦 本地收藏</button>`;
   } else {
-    html += `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveCurrentDetailToLocal(); _refreshDetailAfterFavChange('${escJsAttr(id)}');">+ 📦 保存到本地 (200槽位)</button>`;
+    html += `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="${localSaveAction}">+ 📦 保存到本地 (200槽位)</button>`;
   }
 
   // Cloud groups
@@ -57,23 +74,54 @@ function _buildFavGroupListHtml(favList, id) {
     html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
   } else {
     html += favoriteGroups.map(g => {
-      const count = avatarFavGroupCounts.get(g.name) || 0;
-      const cap = 50;
-      const full = count >= cap;
       const isFavedInGroup = favedGroups.has(g.name);
-      const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full && !isFavedInGroup ?'#f87171':'inherit'}">(${count}/${cap})</span>`;
+      const lbl = `<span data-favcount="${escHtml(g.name)}" style="margin-left:4px;font-size:0.8em;opacity:0.7;">(…/50)</span>`;
       const displayName = escHtml(g.displayName || g.name);
 
       if (isFavedInGroup) {
         // Already in this group — click to unfavorite
-        return `<button class="avtrdb-fav-group-btn avtrdb-fav-group-active" onclick="unfavoriteFromGroup('${escJsAttr(id)}','${escJsAttr(g.name)}',this)">✓ ${displayName} ${lbl}</button>`;
+        return `<button class="avtrdb-fav-group-btn avtrdb-fav-group-active" data-favgroup="${escHtml(g.name)}" onclick="unfavoriteFromGroup('${escJsAttr(id)}','${escJsAttr(g.name)}',this)">✓ ${displayName} ${lbl}</button>`;
       } else {
         // Not in this group — click to add
-        return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escJsAttr(id)}','${escJsAttr(g.name)}',this)">${displayName} ${lbl}</button>`;
+        return `<button class="avtrdb-fav-group-btn" data-favgroup="${escHtml(g.name)}" onclick="addToFavorite('${escJsAttr(id)}','${escJsAttr(g.name)}',this)">${displayName} ${lbl}</button>`;
       }
     }).join("");
   }
   favList.innerHTML = html;
+}
+
+function _setFavGroupCountState(favList, groupName, count, id) {
+  const cap = 50;
+  const span = _findFavGroupNode(favList, 'data-favcount', groupName);
+  const btn = _findFavGroupNode(favList, 'data-favgroup', groupName);
+  const favedGroups = avatarFavTagMap.get(id) || new Set();
+  const isFavedInGroup = favedGroups.has(groupName);
+  const full = count >= cap;
+  if (span) {
+    span.textContent = `(${count}/${cap})`;
+    span.style.color = full && !isFavedInGroup ? '#f87171' : 'inherit';
+  }
+  if (btn && !isFavedInGroup) {
+    btn.disabled = full;
+    btn.title = full ? '收藏夹已满' : '';
+  }
+}
+
+async function _refreshFavGroupCountsLive(favList, id) {
+  if (!favList || favoriteGroups.length === 0) return;
+  await Promise.allSettled(favoriteGroups.map(async (g) => {
+    try {
+      const r = await apiCall(`/api/vrc/favorites?type=avatar&tag=${encodeURIComponent(g.name)}&n=100`, { noAbort: true });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const list = await r.json();
+      const count = Array.isArray(list) ? list.length : 0;
+      avatarFavGroupCounts.set(g.name, count);
+      _setFavGroupCountState(favList, g.name, count, id);
+    } catch (_) {
+      const span = _findFavGroupNode(favList, 'data-favcount', g.name);
+      if (span) span.textContent = '(?/50)';
+    }
+  }));
 }
 
 
@@ -120,6 +168,7 @@ async function doAvtrdbSearch() {
   avtrdbPage = 0;
   avtrdbTotalLoaded = 0;
   _avtrdbHasMore = false;
+  _communityHasMore = false;
   _avtrdbDedupMap = new Map();
   _avtrdbRenderMap = new Map();
   _avtrdbDisplayOrder = [];
@@ -458,7 +507,7 @@ function _rerenderAvtrdbGrid(opts = {}) {
   const sortLabel = { relevance: '相关度', newest: '最新', name: '名称' }[avtrdbSortMode] || '相关度';
   const fieldLabel = { all: '全部字段', title: '标题', author: '作者', tags: 'Tag', desc: '描述' }[avtrdbMatchField] || '全部字段';
   avtrdbTotalLoaded = items.length;
-  if (stats) stats.textContent = `已显示 ${items.length} 个结果（${platLabel} · ${fieldLabel} · 按${sortLabel}排序）${_avtrdbHasMore ? " · 还有更多" : " · 全部加载完毕"}`;
+  if (stats) stats.textContent = `已显示 ${items.length} 个结果（${platLabel} · ${fieldLabel} · 按${sortLabel}排序）${(_avtrdbHasMore || _communityHasMore) ? " · 还有更多" : " · 全部加载完毕"}`;
 }
 
 function renderEarlyAvtrdbResults() {
@@ -553,40 +602,41 @@ async function avtrdbFetch(append, _signal) {
     const avtrdbPromises = Array.from({ length: PAGES_PER_BATCH }, (_, i) => fetchAvtrdbPage(startPage + i));
     avtrdbPage = startPage + PAGES_PER_BATCH - 1;
 
-    // Community DBs — first search only
+    // Community DBs — initial search uses the default small result set; Load More
+    // asks VRCX-compatible providers for a larger batch and lets collect() dedup.
     const communityPromises = [];
-    if (startPage === 0) {
-      const dbSources = [
-        { name: 'vrcdb', url: `/api/proxy?url=${encodeURIComponent(`https://vrcx.vrcdb.com/avatars/Avatar/VRCX?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` },
-        { name: 'avatarrecovery', url: `/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` },
-        { name: 'cute.bet', url: `/api/proxy?url=${encodeURIComponent(`https://avtr.cute.bet/search?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` },
-        { name: 'nekosunevr', url: `/api/proxy?url=${encodeURIComponent(`https://avtr.nekosunevr.co.uk/vrcx_search?search=${encodeURIComponent(avtrdbCurrentQuery)}`)}` }
-      ];
-      dbSources.forEach(db => {
-        communityPromises.push(fetch(db.url, { signal })
-          .then(r => r.json())
-          .then(data => {
-            const list = (Array.isArray(data) ? data : data?.avatars || []).slice(0, 100);
-            list.forEach(av => {
-              if (db.name === 'cute.bet') {
-                collect({ ...av, vrc_id: av.id, image_url: av.imageUrl || av.thumbnailImageUrl || "",
-                  author: { name: av.authorName || "Unknown", id: av.authorId }, unityPackages: av.unityPackages || [] });
-              } else {
-                collect({ vrc_id: av.id, name: av.name || av.avatarName || "未知模型",
-                  author: { name: av.authorName || "Unknown", id: av.authorId },
-                  image_url: av.imageUrl || av.thumbnailImageUrl || "",
-                  performance: av.performance || {},
-                  compatibility: av.compatibility || (av.imageUrl ? ["pc"] : []),
-                  description: av.description || "" });
-              }
-            });
-          })
-          .catch(() => {}));
-      });
-    }
+    let communityAdded = false;
+    let communityMayHaveMore = false;
+    const dbSources = _communityDbSources(avtrdbCurrentQuery, append);
+    dbSources.forEach(db => {
+      communityPromises.push(fetch(db.url, { signal })
+        .then(r => r.json())
+        .then(data => {
+          const rawList = Array.isArray(data) ? data : data?.avatars || [];
+          if (!append && rawList.length >= 100) communityMayHaveMore = true;
+          const list = append ? rawList : rawList.slice(0, 100);
+          list.forEach(av => {
+            const beforeSize = dedupMap.size;
+            if (db.name === 'cute.bet') {
+              collect({ ...av, vrc_id: av.id, image_url: av.imageUrl || av.thumbnailImageUrl || "",
+                author: { name: av.authorName || "Unknown", id: av.authorId }, unityPackages: av.unityPackages || [] });
+            } else {
+              collect({ vrc_id: av.id, name: av.name || av.avatarName || "未知模型",
+                author: { name: av.authorName || "Unknown", id: av.authorId },
+                image_url: av.imageUrl || av.thumbnailImageUrl || "",
+                performance: av.performance || {},
+                compatibility: av.compatibility || (av.imageUrl ? ["pc"] : []),
+                description: av.description || "" });
+            }
+            if (dedupMap.size > beforeSize) communityAdded = true;
+          });
+        })
+        .catch(() => {}));
+    });
 
     await Promise.allSettled([...avtrdbPromises, ...communityPromises]);
     if (signal?.aborted) return;
+    _communityHasMore = append ? communityAdded : communityMayHaveMore;
 
     document.getElementById('avtrdb-loading-spinner')?.remove();
 
@@ -612,7 +662,7 @@ async function avtrdbFetch(append, _signal) {
       _rerenderAvtrdbGrid();
     }
     window._avtrdbLoadMoreTarget = null;
-    loadMoreBtn.style.display = _avtrdbHasMore ? "inline-block" : "none";
+    loadMoreBtn.style.display = (_avtrdbHasMore || _communityHasMore) ? "inline-block" : "none";
 
   } catch (e) {
     if (!append) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#ef4444;">搜索失败: ${escHtml(e.message)}</div>`;
@@ -735,6 +785,7 @@ function displayAvatarDetail(av, opts = {}) {
   const favList = document.getElementById("avtrdbFavGroupList");
   if (favList) {
      _buildFavGroupListHtml(favList, id);
+     _refreshFavGroupCountsLive(favList, id);
   }
 
   // 5. Actions
@@ -942,15 +993,13 @@ function closeAvtrdbDetail() {
 function toggleAvatarFavGridMenu(event, id, name, btn) {
   const menu = document.getElementById("avtrdbFavMenu");
   if (!menu) return;
+  menu.dataset.avatarId = id;
   toggleFavMenuGeneric(event, menu, btn, () => {
-    let html = `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="saveToLocalFavorite(visibleAvatars.find(a=>a.id==='${escJsAttr(id)}'))">📦 保存到本地 (200槽位)</button>`;
-    if (favoriteGroups.length === 0) html += `<div style="padding:8px 12px;font-size:0.8em;color:var(--text-muted);">请先加载收藏夹</div>`;
-    else html += favoriteGroups.map(g => {
-      const count = avatarFavGroupCounts.get(g.name) || 0; const cap = 50; const full = count >= cap;
-      const lbl = `<span style="margin-left:4px;font-size:0.8em;opacity:0.7;color:${full?'#f87171':'inherit'}">(${count}/${cap})</span>`;
-      return `<button class="avtrdb-fav-group-btn" ${full?'disabled title="收藏夹已满"':''} onclick="addToFavorite('${escJsAttr(id)}','${escJsAttr(g.name)}',this)">${escHtml(g.displayName || g.name)} ${lbl}</button>`;
-    }).join("");
-    return html;
+    const tmp = document.createElement('div');
+    _buildFavGroupListHtml(tmp, id, {
+      localSaveAction: `saveToLocalFavorite(visibleAvatars.find(a=>a.id==='${escJsAttr(id)}'))`
+    });
+    return tmp.innerHTML;
   });
 }
 
@@ -961,20 +1010,10 @@ function toggleAvtrdbFavMenu(event) {
   toggleFavMenuGeneric(event, menu, btn, () => {
     const idRow = document.getElementById("avtrdbDetailId");
     const id = idRow ? idRow.textContent : "";
-    // Use a temp container to build the HTML via _buildFavGroupListHtml
+    menu.dataset.avatarId = id;
+    // Build immediately with live per-group counters; avoids showing stale cached counts.
     const tmp = document.createElement('div');
     _buildFavGroupListHtml(tmp, id);
-    // Background refresh: re-sync favorite counts from API, then rebuild
-    // the list if the menu is still open. This ensures counts stay fresh
-    // even when favorites were modified externally (e.g. in VRChat client).
-    syncAllFavoriteIds().then(() => {
-      if (menu.classList.contains('hidden')) return;
-      const freshId = document.getElementById("avtrdbDetailId")?.textContent || "";
-      const list = menu.querySelector('div:last-child');
-      if (list && freshId) _buildFavGroupListHtml(list, freshId);
-      // Also refresh the main button state
-      if (freshId) _refreshDetailAfterFavChange(freshId);
-    }).catch(() => {});
     return tmp.innerHTML;
   });
 }
@@ -986,7 +1025,10 @@ function toggleFavMenuGeneric(event, menu, btn, contentFn) {
     return;
   }
   const list = menu.querySelector('div:last-child');
-  if (list) list.innerHTML = contentFn();
+  if (list) {
+    list.innerHTML = contentFn();
+    if (menu.dataset.avatarId) _refreshFavGroupCountsLive(list, menu.dataset.avatarId);
+  }
 
   menu.classList.remove("hidden");
   // Float above whatever modal is currently open. The hardcoded z-index:2000 in
@@ -1149,7 +1191,10 @@ function _refreshDetailAfterFavChange(avtrId) {
   }
   // Rebuild group list to reflect new checkmarks
   const favList = document.getElementById('avtrdbFavGroupList');
-  if (favList) _buildFavGroupListHtml(favList, avtrId);
+  if (favList) {
+    _buildFavGroupListHtml(favList, avtrId);
+    _refreshFavGroupCountsLive(favList, avtrId);
+  }
 }
 
 function openInVRCX(avtrId) {
