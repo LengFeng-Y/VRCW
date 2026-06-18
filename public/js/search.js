@@ -399,13 +399,17 @@ function _buildAvtrdbCard(av) {
   const platBadges = Array.from(ratings.keys()).map(p =>
     `<span class="avtrdb-badge">${{ pc: "PC", android: "Quest", ios: "Apple" }[p] || p}</span>`
   ).join("");
+  const thumb = proxyImg(av.image_url || av.imageUrl || av.thumbnailImageUrl || "");
+  const isCached = thumb && loadedImageUrls.has(imageCacheKey(thumb));
+  const imgHtml = thumb
+    ? (isCached
+      ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="${escHtml(av.name || "")}">`
+      : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="${escHtml(av.name || "")}">`)
+    : `<img class="avatar-thumb" src="${BLANK}" alt="">`;
 
   card.innerHTML = `
-    <div class="avatar-thumb-wrapper">
-      <img class="avatar-thumb" src="${escHtml(av.image_url || "")}"
-           alt="${escHtml(av.name || "")}"
-           loading="lazy" decoding="async"
-           onerror="this.style.opacity='0.3'">
+    <div class="avatar-thumb-wrapper ${thumb && !isCached ? 'img-loading' : ''}">
+      ${imgHtml}
       <div class="avatar-name-overlay">${escHtml(av.name || "未知模型")}</div>
     </div>
     <div style="padding:8px 6px 4px;font-size:0.7em;color:rgba(255,255,255,0.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
@@ -415,6 +419,9 @@ function _buildAvtrdbCard(av) {
   `;
 
   // Lazy metadata enrichment when the card scrolls into view
+  const lazyImg = card.querySelector('.avatar-thumb[data-src]');
+  if (lazyImg) avatarObserver.observe(lazyImg);
+
   if (!(av.unityPackages && av.unityPackages.length > 0)) {
     const io = new IntersectionObserver((entries, obs) => {
       if (!entries[0].isIntersecting) return;
