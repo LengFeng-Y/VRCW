@@ -2528,18 +2528,44 @@ select.input-field {
   background: var(--bg-card);
 }
 
+.sidebar-mini-profile .mini-profile-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .sidebar-mini-profile .mini-name {
   font-size: 0.82em;
   font-weight: 600;
   color: var(--text-primary);
-  white-space: nowrap;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-mini-profile .mini-vrc-plus {
+  display: inline-block;
+  vertical-align: 1px;
+  font-size: 0.65em;
+  background: rgba(255, 255, 255, 0.2);
+  color: #d4d4d8;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  padding: 1px 5px;
+  border-radius: 99px;
 }
 
 .sidebar-mini-profile .mini-status {
   font-size: 0.68em;
   color: var(--text-muted);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .sidebar-mini-profile .mini-dot {
