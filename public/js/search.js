@@ -927,6 +927,7 @@ async function openAvtrdbDetail(av) {
   bumpUiEpoch();
   const detailToken = makeUiToken('avatarDetail', av.vrc_id || av.id || '');
   window._avatarDetailActiveToken = detailToken;
+  const detailCtrl = beginScopedAbort('avatarDetail');
   displayAvatarDetail(av); // Show immediately with available data
 
   const id = av.vrc_id || av.id;
@@ -957,14 +958,14 @@ async function openAvtrdbDetail(av) {
     };
 
     // Fire both in parallel, patch as soon as either returns
-    fetch(cuteUrl).then(r => r.json()).then(data => {
+    fetch(cuteUrl, { signal: detailCtrl.signal }).then(r => r.json()).then(data => {
       if (!isUiTokenCurrent(detailToken)) return;
       const list = Array.isArray(data) ? data : (data?.avatars || []);
       const match = list.find(x => x.id === id) || (list.length === 1 ? list[0] : null) || (list.length > 0 ? list[0] : null);
       tryPatch(match);
     }).catch(() => {});
 
-    fetch(avtrUrl).then(r => r.json()).then(data => {
+    fetch(avtrUrl, { signal: detailCtrl.signal }).then(r => r.json()).then(data => {
       if (!isUiTokenCurrent(detailToken)) return;
       const list = data?.avatars || [];
       const match = list.find(x => x.vrc_id === id);
@@ -977,14 +978,15 @@ async function openLocalDetail(id) {
   bumpUiEpoch();
   const detailToken = makeUiToken('avatarDetail', id);
   window._avatarDetailActiveToken = detailToken;
+  const detailCtrl = beginScopedAbort('avatarDetail');
   const av = visibleAvatars.find(a => a.id === id) || avatars.find(a => a.id === id) || { id };
   displayAvatarDetail(av);
 
   try {
-    const r = await apiCall(`/api/vrc/avatars/${id}`);
+    const r = await apiCall(`/api/vrc/avatars/${id}`, { signal: detailCtrl.signal, noDedupe: true });
     if (r.ok) {
       const full = await r.json();
-      if (!isUiTokenCurrent(detailToken)) return;
+      if (!isUiTokenCurrent(detailToken) || !isScopedAbortCurrent('avatarDetail', detailCtrl)) return;
       if (full && full.id) {
         const merged = Object.assign({}, av, full, { isInvalid: false, invalidReason: '' });
         const vidx = visibleAvatars.findIndex(a => a.id === id);
@@ -998,7 +1000,7 @@ async function openLocalDetail(id) {
 
     if (r.status === 404 || r.status === 403) {
       const cached = typeof findCachedAvatarSnapshot === 'function' ? await findCachedAvatarSnapshot(id) : null;
-      if (!isUiTokenCurrent(detailToken)) return;
+      if (!isUiTokenCurrent(detailToken) || !isScopedAbortCurrent('avatarDetail', detailCtrl)) return;
       const invalid = Object.assign(
         {},
         cached || {},
@@ -1015,11 +1017,11 @@ async function openLocalDetail(id) {
         }
       );
       displayAvatarDetail(invalid, { preserveZ: true });
-      recoverInvalidAvatarDetailFromPublicSources(id, invalid, { persist: false, token: detailToken }).catch(() => {});
+      recoverInvalidAvatarDetailFromPublicSources(id, invalid, { persist: false, token: detailToken, signal: detailCtrl.signal }).catch(() => {});
     }
   } catch (_) {
     const cached = typeof findCachedAvatarSnapshot === 'function' ? await findCachedAvatarSnapshot(id) : null;
-    if (cached && isUiTokenCurrent(detailToken)) displayAvatarDetail(Object.assign({}, av, cached), { preserveZ: true });
+    if (cached && isUiTokenCurrent(detailToken) && isScopedAbortCurrent('avatarDetail', detailCtrl)) displayAvatarDetail(Object.assign({}, av, cached), { preserveZ: true });
   }
 }
 
@@ -1054,7 +1056,7 @@ async function recoverInvalidAvatarDetailFromPublicSources(id, baseAv, opts = {}
 
     for (const url of endpoints) {
       try {
-        const r = await apiCall(url, { noAbort: true });
+        const r = await apiCall(url, Object.assign({ noAbort: true }, opts.signal ? { signal: opts.signal, noAbort: false } : {}));
         if (!r.ok) continue;
         const data = await r.json().catch(() => null);
         const list = Array.isArray(data) ? data : (data?.avatars || data?.results || []);
@@ -1082,12 +1084,14 @@ async function recoverInvalidAvatarDetailFromPublicSources(id, baseAv, opts = {}
 function closeAvtrdbDetail() {
   bumpUiEpoch();
   window._avatarDetailActiveToken = null;
+  cancelScopedAbort('avatarDetail');
   const modal = document.getElementById("avtrdbDetailModal");
   if (modal) {
     modal.classList.add("hidden");
     if (modal.dataset.scrollLocked === '1') { unlockBodyScroll(); modal.dataset.scrollLocked = ''; }
   }
   document.getElementById("avtrdbFavMenu")?.classList.add("hidden");
+  if (typeof flushPendingAvatarCardUpdates === 'function') flushPendingAvatarCardUpdates();
 }
 
 function toggleAvatarFavGridMenu(event, id, name, btn) {

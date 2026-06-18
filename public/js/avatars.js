@@ -53,6 +53,91 @@ let fetchSeq = 0; // Track latest fetch to avoid stale renders
 // TTL: skip the API refresh entirely when basics cache is younger than this.
 // Tab switches pass forceRefresh=false → fast path; the 🔄 button passes true.
 const AVATARS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const avatarCardElements = new Map();
+const pendingAvatarCardUpdates = new Map();
+
+function _isAvatarListRenderable() {
+  const panel = document.getElementById('downloadPanel');
+  const blockingDetailIds = [
+    'avtrdbDetailModal',
+    'friendProfileModal',
+    'worldDetailModal',
+    'groupDetailModal',
+    'instanceDetailModal'
+  ];
+  const detailOpen = blockingDetailIds.some(id => {
+    const el = document.getElementById(id);
+    return el && !el.classList.contains('hidden');
+  });
+  return currentTab === 'download'
+    && (!panel || panel.classList.contains('active'))
+    && !detailOpen;
+}
+
+function _queueAvatarCardUpdate(av) {
+  if (!av || !av.id) return;
+  pendingAvatarCardUpdates.set(av.id, av);
+}
+
+function flushPendingAvatarCardUpdates() {
+  if (!_isAvatarListRenderable() || pendingAvatarCardUpdates.size === 0) return;
+  const pending = Array.from(pendingAvatarCardUpdates.values());
+  pendingAvatarCardUpdates.clear();
+  pending.forEach(av => _replaceAvatarCard(av));
+}
+
+function _avatarMatchesCurrentFilters(av) {
+  if (!av) return false;
+  const q = document.getElementById("searchInput")?.value.toLowerCase().trim() || "";
+  const state = document.getElementById("filterStatus")?.value || "all";
+  const plat = document.getElementById("filterPlatform")?.value || "all";
+
+  if (state !== "all" && av.releaseStatus !== state) return false;
+  if (plat !== "all") {
+    const { hasPC, hasQuest, hasApple } = _platformCheck(av);
+    if (plat === "pc" && !hasPC) return false;
+    if (plat === "pc-quest" && (!hasPC || !hasQuest)) return false;
+    if (plat === "pc-quest-apple" && (!hasPC || !hasQuest || !hasApple)) return false;
+  }
+  if (q) {
+    const name = (av.name || "").toLowerCase();
+    const desc = (av.description || "").toLowerCase();
+    const tags = (av.tags || []).join(" ").toLowerCase();
+    let score = 0;
+    if (name === q) score += 100;
+    else if (name.includes(q)) score += 50;
+    if (tags.includes(q)) score += 30;
+    if (desc.includes(q)) score += 10;
+    if (score === 0) {
+      let qIdx = 0;
+      for (let i = 0; i < name.length; i++) {
+        if (name[i] === q[qIdx]) qIdx++;
+        if (qIdx === q.length) break;
+      }
+      if (qIdx === q.length) score += 5;
+    }
+    if (score === 0) return false;
+  }
+  return true;
+}
+
+function _mergeAvatarIntoLists(fresh) {
+  if (!fresh || !fresh.id) return null;
+  let merged = fresh;
+  const aidx = avatars.findIndex(ex => ex.id === fresh.id);
+  if (aidx !== -1) {
+    merged = Object.assign({}, avatars[aidx], fresh);
+    avatars[aidx] = merged;
+  } else {
+    avatars.push(fresh);
+  }
+  const vidx = visibleAvatars.findIndex(ex => ex.id === fresh.id);
+  if (vidx !== -1) {
+    visibleAvatars[vidx] = Object.assign({}, visibleAvatars[vidx], merged);
+    merged = visibleAvatars[vidx];
+  }
+  return merged;
+}
 
 function _avatarBasicFromItem(a) {
   if (!a || !a.id) return null;
@@ -306,31 +391,40 @@ async function fetchAvatars(forceRefresh = false) {
     // Stage 3: Streaming Refresh (metadata check)
     if (currentCategory !== 'mine' && currentCategory !== 'local') {
       const avIds = allFetched.map(a => a.id);
-      const CONCURRENCY = 30;
-      // Streaming refresh used to applyFilters() per chunk, which rebuilt the
-      // ENTIRE grid (innerHTML="" + recreate all cards). On a flaky network
-      // the user saw cards "twitch" every few seconds as chunks settled in.
-      // We now run all chunks first, then apply ONCE at the very end. The
-      // user sees the cached version for the full window — fresh data appears
-      // once, smoothly, after the streaming completes.
-      for (let i = 0; i < avIds.length; i += CONCURRENCY) {
-        if (seq !== fetchSeq || currentCategory === 'mine') return;
-        const chunk = avIds.slice(i, i + CONCURRENCY);
-        const results = await Promise.allSettled(chunk.map(id => fetchOfficialAvatarData(id)));
-        if (seq !== fetchSeq) return;
-
-        const freshBatch = results.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
-        freshBatch.forEach(a => {
-           const idx = avatars.findIndex(ex => ex.id === a.id);
-           if (idx !== -1) avatars[idx] = Object.assign(avatars[idx], a);
-        });
-        // Save basics with fresh data
+      const CONCURRENCY = 10;
+      let cursor = 0;
+      let dirty = false;
+      let lastSaveAt = 0;
+      const saveFreshBasics = () => {
+        const now = Date.now();
+        if (!dirty || now - lastSaveAt < 800) return;
+        dirty = false;
+        lastSaveAt = now;
+        const freshBasics = avatars.map(_avatarBasicFromItem).filter(Boolean);
+        idb.set("avatar_basics_" + currentCategory, freshBasics).catch(()=>{});
+        idb.set("avatar_basics_age_" + currentCategory, Date.now()).catch(()=>{});
+      };
+      const worker = async () => {
+        while (cursor < avIds.length) {
+          if (seq !== fetchSeq || currentCategory === 'mine' || currentTab !== 'download') return;
+          const id = avIds[cursor++];
+          const fresh = await fetchOfficialAvatarData(id).catch(() => null);
+          if (seq !== fetchSeq || currentCategory === 'mine' || currentTab !== 'download') return;
+          if (fresh && fresh.id) {
+            updateAvatarCardStream(fresh);
+            dirty = true;
+            saveFreshBasics();
+          }
+        }
+      };
+      const workers = Array.from({ length: Math.min(CONCURRENCY, avIds.length) }, () => worker());
+      await Promise.allSettled(workers);
+      if (seq === fetchSeq && currentTab === 'download' && dirty) {
         const freshBasics = avatars.map(_avatarBasicFromItem).filter(Boolean);
         idb.set("avatar_basics_" + currentCategory, freshBasics).catch(()=>{});
         idb.set("avatar_basics_age_" + currentCategory, Date.now()).catch(()=>{});
       }
-      // Final apply to ensure last batch is rendered
-      if (seq === fetchSeq) applyFilters();
+      flushPendingAvatarCardUpdates();
     }
 
     // Also populate upload avatar select
@@ -461,6 +555,112 @@ function _applyFiltersToList(list, q, state, plat) {
   renderGrid(visibleAvatars);
 }
 
+function _disposeAvatarCard(card) {
+  if (!card) return;
+  card.querySelectorAll(".avatar-thumb[data-src]").forEach((img) => {
+    try { avatarObserver.unobserve(img); } catch (_) {}
+    const idx = imageQueue.findIndex(it => it.img === img);
+    if (idx !== -1) imageQueue.splice(idx, 1);
+    if (img._abortCtrl) {
+      try { img._abortCtrl.abort(); } catch (_) {}
+    }
+  });
+}
+
+function _buildAvatarCard(av) {
+  let thumb = av.thumbnailImageUrl || av.imageUrl || "";
+  thumb = proxyImg(thumb);
+
+  const isOwner = currentUserId && av.authorId === currentUserId;
+  const card = document.createElement("div");
+  card.className = "avatar-card" + (selectedIds.has(av.id) ? " selected" : "");
+  card.style.cursor = "pointer";
+
+  const isLocalFaved = localAvatarIdMap.has(av.id);
+  const isCloudFaved = favoriteIdMap.has(av.id);
+  const isFaved = isLocalFaved || isCloudFaved;
+
+  const isCached = loadedImageUrls.has(imageCacheKey(thumb));
+  const imgHtml = isCached
+      ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="${escHtml(av.name || '')}">`
+      : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`;
+
+  const releaseBadge = isOwner
+    ? (av.releaseStatus === 'public'
+        ? '<div class="card-release-badge release-public">Public</div>'
+        : '<div class="card-release-badge release-private">Private</div>')
+    : '';
+
+  card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached ? '' : 'img-loading'}">
+    ${imgHtml}
+    <div class="avatar-name-overlay">${escHtml(av.name || "失效模型 (Invalid / Deleted)")}</div>
+    <div class="card-tl-overlay">
+      <div class="card-checkbox ${selectedIds.has(av.id) ? 'on' : ''}" onclick="event.stopPropagation(); toggleSelect('${escJsAttr(av.id)}')" title="选中/取消选中">${selectedIds.has(av.id) ? '✓' : ''}</div>
+    </div>
+    <div class="card-tr-overlay">
+      <div class="card-fav-quick" onclick="event.stopPropagation(); _avatarQuickFav('${escJsAttr(av.id)}','${escJsAttr(av.name || '')}',event,this)" title="${isFaved ? '已收藏' : '添加到收藏'}">${isFaved ? '⭐' : '☆'}</div>
+    </div>
+    ${releaseBadge}
+  </div>`;
+  card.id = "card-" + av.id;
+  card.dataset.avatarId = av.id;
+  card.onclick = () => openLocalAvatarDetail(av.id);
+  return card;
+}
+
+function _observeAvatarCardImages(card) {
+  if (!card) return;
+  card.querySelectorAll(".avatar-thumb[data-src]").forEach((img) => avatarObserver.observe(img));
+}
+
+function _replaceAvatarCard(av) {
+  if (!av || !av.id) return;
+  const grid = document.getElementById("avatarGrid");
+  if (!grid) return;
+  const oldCard = avatarCardElements.get(av.id) || document.getElementById("card-" + av.id);
+  const matches = _avatarMatchesCurrentFilters(av);
+  if (!matches) {
+    if (oldCard) {
+      _disposeAvatarCard(oldCard);
+      oldCard.remove();
+      avatarCardElements.delete(av.id);
+      visibleAvatars = visibleAvatars.filter(x => x.id !== av.id);
+      const totalEl = document.getElementById("statTotal");
+      if (totalEl) totalEl.textContent = visibleAvatars.length;
+    }
+    return;
+  }
+  if (!visibleAvatars.some(x => x.id === av.id)) visibleAvatars.push(av);
+  const nextCard = _buildAvatarCard(av);
+  if (oldCard && oldCard.parentNode === grid) {
+    _disposeAvatarCard(oldCard);
+    grid.replaceChild(nextCard, oldCard);
+  } else {
+    grid.appendChild(nextCard);
+  }
+  avatarCardElements.set(av.id, nextCard);
+  _observeAvatarCardImages(nextCard);
+  const totalEl = document.getElementById("statTotal");
+  if (totalEl) totalEl.textContent = visibleAvatars.length;
+}
+
+function updateAvatarCardStream(fresh, opts = {}) {
+  const merged = _mergeAvatarIntoLists(fresh);
+  if (!merged) return;
+  if (!_isAvatarListRenderable()) {
+    _queueAvatarCardUpdate(merged);
+    return;
+  }
+  _replaceAvatarCard(merged);
+  if (opts.flash !== false) {
+    const card = avatarCardElements.get(merged.id);
+    if (card) {
+      card.classList.add('stream-updated');
+      setTimeout(() => card.classList.remove('stream-updated'), 650);
+    }
+  }
+}
+
 function renderGrid(list) {
   const grid = document.getElementById("avatarGrid");
   if (!grid) return;
@@ -474,6 +674,7 @@ function renderGrid(list) {
   imageQueue.length = 0; 
 
   grid.innerHTML = "";
+  avatarCardElements.clear();
 
   // Show empty state when no avatars
   if (list.length === 0) {
@@ -495,55 +696,9 @@ function renderGrid(list) {
   document.querySelector('button[onclick="downloadSelected()"]')?.classList.toggle("hidden", isFavoriteView);
 
   list.forEach((av) => {
-    let thumb = av.thumbnailImageUrl || av.imageUrl || "";
-    thumb = proxyImg(thumb);
-
-    const safeId = escHtml(av.id);
-    const isOwner = currentUserId && av.authorId === currentUserId;
-    const card = document.createElement("div");
-    card.className = "avatar-card" + (selectedIds.has(av.id) ? " selected" : "");
-    card.style.cursor = "pointer";
-
-    const isLocalFaved = localAvatarIdMap.has(av.id);
-    const isCloudFaved = favoriteIdMap.has(av.id);
-    const isFaved = isLocalFaved || isCloudFaved;
-
-    // Apply memory cache for instant render if already loaded previously
-    const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-    const isCached = loadedImageUrls.has(imageCacheKey(thumb));
-    const imgHtml = isCached
-        ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="${escHtml(av.name)}">`
-        : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`;
-
-    // Card layout matches world card exactly (renderWorldGrid in worlds.js):
-    //   top-left:  selection checkbox
-    //   top-right: quick favorite toggle (☆/⭐)
-    //   below:     release-status badge (Public/Private) — only if owner-known
-    //   bottom:    image + name overlay
-    // Per-card edit/delete buttons were removed — they now live ONLY in the
-    // detail modal (clicking the card opens the modal, where the owner sees
-    // ✏️ edit / 🗑️ delete actions). This unifies the look across mine /
-    // favorites / local categories and removes per-card visual variance.
-    const releaseBadge = isOwner
-      ? (av.releaseStatus === 'public'
-          ? '<div class="card-release-badge release-public">Public</div>'
-          : '<div class="card-release-badge release-private">Private</div>')
-      : '';
-
-    card.innerHTML = `<div class="avatar-thumb-wrapper ${isCached ? '' : 'img-loading'}">
-      ${imgHtml}
-      <div class="avatar-name-overlay">${escHtml(av.name || "失效模型 (Invalid / Deleted)")}</div>
-      <div class="card-tl-overlay">
-        <div class="card-checkbox ${selectedIds.has(av.id) ? 'on' : ''}" onclick="event.stopPropagation(); toggleSelect('${safeId}')" title="选中/取消选中">${selectedIds.has(av.id) ? '✓' : ''}</div>
-      </div>
-      <div class="card-tr-overlay">
-        <div class="card-fav-quick" onclick="event.stopPropagation(); _avatarQuickFav('${escJsAttr(av.id)}','${escJsAttr(av.name)}',event,this)" title="${isFaved ? '已收藏' : '添加到收藏'}">${isFaved ? '⭐' : '☆'}</div>
-      </div>
-      ${releaseBadge}
-    </div>`;
-    card.id = "card-" + av.id;
-        card.onclick = () => openLocalAvatarDetail(av.id);
+    const card = _buildAvatarCard(av);
     grid.appendChild(card);
+    avatarCardElements.set(av.id, card);
   });
 
   // Lazy loaded async image queue

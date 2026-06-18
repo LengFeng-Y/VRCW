@@ -22,6 +22,7 @@ function openFriendProfile(el) {
   // into currentFriendProfile, then B's tab loaders read the wrong global.
   const fpSeq = (window._fpSeq = (window._fpSeq || 0) + 1);
   window._fpCurrentSeq = fpSeq;
+  const detailCtrl = beginScopedAbort('friendProfile');
   const modal = document.getElementById('friendProfileModal');
   if (!modal) return;
 
@@ -32,9 +33,9 @@ function openFriendProfile(el) {
 
   // Fetch full profile if date_joined or tags are missing (friends list returns LimitedUser)
   if (f.id && (!f.date_joined || !f.tags)) {
-    apiCall('/api/vrc/users/' + f.id).then(r => r.ok ? r.json() : null).then(full => {
+    apiCall('/api/vrc/users/' + f.id, { signal: detailCtrl.signal, noDedupe: true }).then(r => r.ok ? r.json() : null).then(full => {
       // Skip if user opened a different friend in the meantime.
-      if (window._fpCurrentSeq !== fpSeq) return;
+      if (window._fpCurrentSeq !== fpSeq || !isScopedAbortCurrent('friendProfile', detailCtrl)) return;
       if (full && full.id) {
         currentFriendProfile = Object.assign({}, f, full);
         _renderFriendProfileUI(currentFriendProfile, modal);
@@ -261,12 +262,14 @@ function closeFriendProfile() {
   bumpUiEpoch();
   window._fpSeq = (window._fpSeq || 0) + 1;
   window._fpCurrentSeq = window._fpSeq;
+  cancelScopedAbort('friendProfile');
   const modal = document.getElementById('friendProfileModal');
   if (modal) {
     modal.classList.add('hidden');
     if (modal.dataset.scrollLocked === '1') { unlockBodyScroll(); modal.dataset.scrollLocked = ''; }
   }
   currentFriendProfile = null;
+  if (typeof flushPendingAvatarCardUpdates === 'function') flushPendingAvatarCardUpdates();
 }
 
 async function _loadFriendProfileGroups(userId, isFriend) {
@@ -279,9 +282,11 @@ async function _loadFriendProfileGroups(userId, isFriend) {
   gSummarySection.style.display = '';
 
   try {
-    const r = await apiCall('/api/vrc/users/' + userId + '/groups');
+    const r = await apiCall('/api/vrc/users/' + userId + '/groups', _friendProfileApiOpts());
+    if (!_isFriendProfileScopeCurrent()) return;
     if (!r.ok) throw new Error('Failed to fetch groups');
     const groups = await r.json();
+    if (!_isFriendProfileScopeCurrent()) return;
 
     // Filter: ONLY Representing group
     const filtered = groups.filter(g => g.isRepresenting);
@@ -317,6 +322,7 @@ async function _loadFriendProfileGroups(userId, isFriend) {
       `).join('')}
     </div>`;
   } catch (e) {
+    if (!_isFriendProfileScopeCurrent()) return;
     console.error('Group load failed:', e);
     gSummarySection.style.display = 'none';
   }
@@ -339,16 +345,28 @@ function switchFriendProfileTab(tab) {
   if (tab === 'avatars') fetchFriendAvatars(f.id, seq);
 }
 
+function _friendProfileApiOpts() {
+  const ctrl = scopedAbortControllers.get('friendProfile');
+  return ctrl ? { signal: ctrl.signal, noDedupe: true } : { noAbort: true, noDedupe: true };
+}
+
+function _isFriendProfileScopeCurrent() {
+  const ctrl = scopedAbortControllers.get('friendProfile');
+  return !ctrl || isScopedAbortCurrent('friendProfile', ctrl);
+}
+
 async function fetchFriendGroups(userId, seq) {
   const el = document.getElementById('fpGroupsList');
   if (!el) return;
   el.innerHTML = '<div style="padding:20px;color:rgba(255,255,255,0.3);text-align:center;">加载中...</div>';
   try {
-    const r = await apiCall('/api/vrc/users/' + userId + '/groups');
+    const r = await apiCall('/api/vrc/users/' + userId + '/groups', _friendProfileApiOpts());
     if (seq != null && window._fpCurrentSeq !== seq) return; // user opened another friend
+    if (!_isFriendProfileScopeCurrent()) return;
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const groups = await r.json();
     if (seq != null && window._fpCurrentSeq !== seq) return;
+    if (!_isFriendProfileScopeCurrent()) return;
 
     if (!groups || !groups.length) { 
       el.innerHTML = '<div style="padding:20px;color:rgba(255,255,255,0.3);">暂无公开群组</div>'; 
@@ -392,7 +410,8 @@ async function fetchFriendGroups(userId, seq) {
       html += remaining.map(g => renderGroup(g, '')).join('');
     }
     el.innerHTML = html;
-  } catch(e) { 
+  } catch(e) {
+    if (!_isFriendProfileScopeCurrent()) return;
     el.innerHTML = '<div style="padding:20px;color:var(--error);">' + escHtml(e.message) + '</div>'; 
   }
 }
@@ -403,11 +422,13 @@ async function fetchFriendWorlds(userId, seq) {
   if(!el) return;
   el.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:rgba(255,255,255,0.3);text-align:center;">加载中...</div>';
   try {
-    const r = await apiCall(`/api/vrc/worlds?userId=${userId}&releaseStatus=public&n=20&sort=updated`);
+    const r = await apiCall(`/api/vrc/worlds?userId=${userId}&releaseStatus=public&n=20&sort=updated`, _friendProfileApiOpts());
     if (seq != null && window._fpCurrentSeq !== seq) return;
+    if (!_isFriendProfileScopeCurrent()) return;
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const worlds = await r.json();
     if (seq != null && window._fpCurrentSeq !== seq) return;
+    if (!_isFriendProfileScopeCurrent()) return;
     if (!worlds || !worlds.length) { el.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:rgba(255,255,255,0.3);">暂无公开世界</div>'; return; }
     const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
     el.innerHTML = worlds.map(w => `<div class="avatar-card" style="cursor:pointer;" onclick="openWorldDetail('${escJsAttr(w.id)}')">
@@ -416,7 +437,10 @@ async function fetchFriendWorlds(userId, seq) {
         <div class="avatar-name-overlay">${escHtml(w.name||'')}</div>
       </div></div>`).join('');
     el.querySelectorAll('.avatar-thumb[data-src]').forEach(img => avatarObserver.observe(img));
-  } catch(e) { el.innerHTML = `<div style="grid-column:1/-1;padding:20px;color:var(--error);">${escHtml(e.message)}</div>`; }
+  } catch(e) {
+    if (!_isFriendProfileScopeCurrent()) return;
+    el.innerHTML = `<div style="grid-column:1/-1;padding:20px;color:var(--error);">${escHtml(e.message)}</div>`;
+  }
 }
 
 function updateAvatarNameInUI(listEl, avId, newName) {
@@ -472,23 +496,24 @@ async function fetchFriendAvatars(userId, seq) {
     
     try {
     const promises = [];
+    const apiOpts = _friendProfileApiOpts();
     
     // 1. Official VRChat API (may return 401/403 for non-friends or restricted users)
-    promises.push(apiCall(`/api/vrc/avatars?userId=${userId}&releaseStatus=public&n=20`)
+    promises.push(apiCall(`/api/vrc/avatars?userId=${userId}&releaseStatus=public&n=20`, apiOpts)
       .then(async r => {
         if (!r.ok) return [];
         return await r.json() || [];
       }).catch(() => []));
 
     // 2. VRCX Database (via Proxy)
-    promises.push(apiCall(`/api/proxy?url=${encodeURIComponent(`https://vrcx.vrcdb.com/avatars/Avatar/VRCX?authorId=${userId}`)}`)
+    promises.push(apiCall(`/api/proxy?url=${encodeURIComponent(`https://vrcx.vrcdb.com/avatars/Avatar/VRCX?authorId=${userId}`)}`, apiOpts)
       .then(async r => {
         if (!r.ok) return [];
         return await r.json() || [];
       }).catch(() => []));
 
     // 3. AvatarRecovery (via Proxy)
-    promises.push(apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?authorId=${userId}`)}`)
+    promises.push(apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avatarrecovery.com/Avatar/vrcx?authorId=${userId}`)}`, apiOpts)
       .then(async r => {
         if (!r.ok) return [];
         return await r.json() || [];
@@ -496,7 +521,7 @@ async function fetchFriendAvatars(userId, seq) {
       
     // 4. AvtrDB (V3, as used in VRCX) — routed through the worker proxy so it
     // shares the SSRF allowlist and the page CSP's connect-src 'self'.
-    promises.push(apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avtrdb.com/v3/avatar/search/vrcx?authorId=${userId}&n=50`)}`)
+    promises.push(apiCall(`/api/proxy?url=${encodeURIComponent(`https://api.avtrdb.com/v3/avatar/search/vrcx?authorId=${userId}&n=50`)}`, apiOpts)
       .then(async r => {
         if (!r.ok) return [];
         const data = await r.json();
@@ -504,6 +529,7 @@ async function fetchFriendAvatars(userId, seq) {
       }).catch(() => []));
 
     const results = await Promise.allSettled(promises);
+    if (!_isFriendProfileScopeCurrent()) return;
     const flattenedResults = results.map(r => r.status === 'fulfilled' ? r.value : []).flat();
 
     // Build local name map to recover from favorites
@@ -560,6 +586,7 @@ async function fetchFriendAvatars(userId, seq) {
     
     // Store globally so detail modal can find them if needed
     if (seq != null && window._fpCurrentSeq !== seq) return; // user opened another friend
+    if (!_isFriendProfileScopeCurrent()) return;
     window._friendAvatars = allAvatars;
 
     const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';

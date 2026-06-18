@@ -704,6 +704,7 @@ async function openWorldDetail(worldId, worldObj = null) {
   bumpUiEpoch();
   const detailToken = makeUiToken('worldDetail', worldId);
   window._worldDetailActiveToken = detailToken;
+  const detailCtrl = beginScopedAbort('worldDetail');
 
   // Show the modal FIRST so the user sees something immediately,
   // even if subsequent setup throws.
@@ -725,10 +726,10 @@ async function openWorldDetail(worldId, worldObj = null) {
   if (worldObj) { const img = safe('worldDetailImg'); if (img) img.src = proxyImg(worldObj.thumbnailImageUrl||worldObj.imageUrl||''); }
 
   try {
-    const r = await apiCall(`/api/vrc/worlds/${worldId}`);
+    const r = await apiCall(`/api/vrc/worlds/${worldId}`, { signal: detailCtrl.signal, noDedupe: true });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const w = await r.json();
-    if (!isUiTokenCurrent(detailToken)) return;
+    if (!isUiTokenCurrent(detailToken) || !isScopedAbortCurrent('worldDetail', detailCtrl)) return;
     currentWorldDetail = w;
 
     // Fill Basic Info
@@ -910,12 +911,14 @@ async function openWorldDetail(worldId, worldObj = null) {
 function closeWorldDetail() {
   bumpUiEpoch();
   window._worldDetailActiveToken = null;
+  cancelScopedAbort('worldDetail');
   const modal = document.getElementById('worldDetailModal');
   if (modal) {
     modal.classList.add('hidden');
     if (modal.dataset.scrollLocked === '1') { unlockBodyScroll(); modal.dataset.scrollLocked = ''; }
   }
   currentWorldDetail = null;
+  if (typeof flushPendingAvatarCardUpdates === 'function') flushPendingAvatarCardUpdates();
 }
 
 // Delete the world the user is currently viewing.

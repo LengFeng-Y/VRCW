@@ -192,11 +192,11 @@ const avatarLookupQueue = {
   }
 };
 
-async function fetchOfficialAvatarData(id) {
+async function fetchOfficialAvatarData(id, options = {}) {
   // Only use official VRChat API for per-ID verification.
   // Third-party per-ID endpoints (AvtrDB v3, AvatarRecovery) cause 429/500 storms — removed.
   try {
-    const r = await apiCall(`/api/vrc/avatars/${id}`);
+    const r = await apiCall(`/api/vrc/avatars/${id}`, options);
     if (!r.ok) return null;
     return await r.json();
   } catch {
@@ -1291,6 +1291,30 @@ function applyI18n(root = document) {
 
 // ── API Helper ──
 let currentTabAbortController = null;
+const scopedAbortControllers = new Map();
+
+function beginScopedAbort(scope) {
+  if (!scope) return new AbortController();
+  const prev = scopedAbortControllers.get(scope);
+  if (prev) {
+    try { prev.abort(); } catch (_) {}
+  }
+  const ctrl = new AbortController();
+  scopedAbortControllers.set(scope, ctrl);
+  return ctrl;
+}
+
+function cancelScopedAbort(scope, ctrl = null) {
+  if (!scope) return;
+  const cur = scopedAbortControllers.get(scope);
+  if (!cur || (ctrl && cur !== ctrl)) return;
+  try { cur.abort(); } catch (_) {}
+  scopedAbortControllers.delete(scope);
+}
+
+function isScopedAbortCurrent(scope, ctrl) {
+  return !!(scope && ctrl && scopedAbortControllers.get(scope) === ctrl && !ctrl.signal.aborted);
+}
 
 const apiCache = new Map();
 const inFlightGetRequests = new Map();
@@ -1324,10 +1348,11 @@ async function apiCall(path, options = {}) {
   const method = options.method || 'GET';
   const isGet = method === 'GET';
   const wantsNoStore = options.cache === 'no-store' || options.noCache === true;
+  const noDedupe = options.noDedupe === true;
   const requestBody = options.json !== undefined ? JSON.stringify(options.json) : options.body;
   const cacheBodyKey = typeof requestBody === 'string' ? requestBody : '';
   const cacheKey = `${_apiAuthBucket()}::${path}::${cacheBodyKey}`;
-  const cacheable = isGet && !wantsNoStore && !NO_CACHE_PATTERNS.some(p => path.includes(p));
+  const cacheable = isGet && !wantsNoStore && !noDedupe && !NO_CACHE_PATTERNS.some(p => path.includes(p));
 
   // Return from memory cache if recent to prevent burst requests when users
   // quickly bounce between panels or detail modals on slow VRChat responses.
@@ -1356,6 +1381,7 @@ async function apiCall(path, options = {}) {
   delete fetchOptions.json;
   delete fetchOptions.noAbort;
   delete fetchOptions.noCache;
+  delete fetchOptions.noDedupe;
   const requestPromise = fetch(`${API_BASE}${path}`, fetchOptions);
   if (cacheable) {
     inFlightGetRequests.set(cacheKey, requestPromise.then(resp => resp.clone()));

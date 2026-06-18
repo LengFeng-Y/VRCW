@@ -631,10 +631,13 @@ async function openFriendProfileById(userId) {
   const fpSeq = window._fpCurrentSeq;
 
   try {
-    const r = await apiCall('/api/vrc/users/' + userId);
+    const ctrl = scopedAbortControllers.get('friendProfile');
+    const opts = ctrl ? { signal: ctrl.signal, noDedupe: true } : { noAbort: true, noDedupe: true };
+    const r = await apiCall('/api/vrc/users/' + userId, opts);
     if (!r.ok) return;
     const u = await r.json();
     if (window._openFriendProfileByIdReq !== reqId || window._fpCurrentSeq !== fpSeq) return;
+    if (ctrl && !isScopedAbortCurrent('friendProfile', ctrl)) return;
     currentFriendProfile = Object.assign({}, currentFriendProfile, u);
     await _renderFriendProfileUI(currentFriendProfile, document.getElementById('friendProfileModal'));
   } catch(e) {}

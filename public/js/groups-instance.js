@@ -56,6 +56,7 @@ async function openGroupDetail(groupId) {
   bumpUiEpoch();
   const detailToken = makeUiToken('groupDetail', groupId);
   window._groupDetailActiveToken = detailToken;
+  const detailCtrl = beginScopedAbort('groupDetail');
   // Stale-DOM guard: detect old structure missing the new gdIconBox container
   // (added when icon was upgraded to 80px + fallback letter). If old DOM exists,
   // force a rebuild so users don't see the broken old icon.
@@ -122,10 +123,10 @@ async function openGroupDetail(groupId) {
   _gdIconFallback.textContent = '';
   document.getElementById('gdShortCode').textContent = '';
   try {
-    const r = await apiCall('/api/vrc/groups/' + groupId);
+    const r = await apiCall('/api/vrc/groups/' + groupId, { signal: detailCtrl.signal, noDedupe: true });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const g = await r.json();
-    if (!isUiTokenCurrent(detailToken)) return;
+    if (!isUiTokenCurrent(detailToken) || !isScopedAbortCurrent('groupDetail', detailCtrl)) return;
     document.getElementById('gdBanner').style.backgroundImage = g.bannerUrl ? 'url(' + proxyImg(g.bannerUrl) + ')' : '';
     // Group icons are nullable in VRChat API. Try iconUrl, then bannerUrl, then fall
     // back to a letter avatar (first character of group name). The <img> only shows
@@ -161,10 +162,10 @@ async function openGroupDetail(groupId) {
     document.getElementById('gdActions').innerHTML = actionHtml;
     
     // Fetch extra data
-    fetchGroupExtraData(groupId, g, detailToken);
+    fetchGroupExtraData(groupId, g, detailToken, detailCtrl.signal);
 
   } catch(e) {
-    if (!isUiTokenCurrent(detailToken)) return;
+    if (!isUiTokenCurrent(detailToken) || !isScopedAbortCurrent('groupDetail', detailCtrl)) return;
     document.getElementById('gdName').textContent = '加载失败: ' + e.message;
   }
 }
@@ -174,6 +175,7 @@ async function openGroupDetail(groupId) {
 function closeGroupDetail() {
   bumpUiEpoch();
   window._groupDetailActiveToken = null;
+  cancelScopedAbort('groupDetail');
   const modal = document.getElementById('groupDetailModal');
   if (!modal) return;
   modal.classList.add('hidden');
@@ -181,6 +183,7 @@ function closeGroupDetail() {
     unlockBodyScroll();
     delete modal.dataset.scrollLocked;
   }
+  if (typeof flushPendingAvatarCardUpdates === 'function') flushPendingAvatarCardUpdates();
 }
 
 async function vrcGroupAction(groupId, action, myId, nextVis) {
@@ -224,9 +227,9 @@ function switchGroupDetailTab(btn, tab) {
   document.getElementById('gdMembers').style.display = tab === 'members' ? '' : 'none';
 }
 
-async function fetchGroupExtraData(groupId, groupContext = null, token = null) {
-  fetchGroupInstances(groupId, groupContext, token);
-  fetchGroupMembers(groupId, token);
+async function fetchGroupExtraData(groupId, groupContext = null, token = null, signal = null) {
+  fetchGroupInstances(groupId, groupContext, token, signal);
+  fetchGroupMembers(groupId, token, signal);
 }
 
 function renderGroupInstancesForbidden(el, groupId, groupContext) {
@@ -314,13 +317,15 @@ function normalizeGroupInstanceInfo(i) {
   };
 }
 
-async function fetchGroupInstances(groupId, groupContext = null, token = null) {
+async function fetchGroupInstances(groupId, groupContext = null, token = null, signal = null) {
   const el = document.getElementById('gdInstances');
   if(!el) return;
   el.innerHTML = '<div style="padding:10px;color:var(--text-muted);text-align:center;font-size:0.8em;">加载实例中...</div>';
   try {
-    const r = await apiCall('/api/vrc/groups/' + groupId + '/instances');
+    const opts = signal ? { signal, noDedupe: true } : {};
+    const r = await apiCall('/api/vrc/groups/' + groupId + '/instances', opts);
     if (token && !isUiTokenCurrent(token)) return;
+    if (signal && signal.aborted) return;
     if (r.status === 403) {
       renderGroupInstancesForbidden(el, groupId, groupContext);
       return;
@@ -328,6 +333,7 @@ async function fetchGroupInstances(groupId, groupContext = null, token = null) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const insts = await r.json();
     if (token && !isUiTokenCurrent(token)) return;
+    if (signal && signal.aborted) return;
     if (!insts || !insts.length) {
       el.innerHTML = '<div style="padding:10px;color:var(--text-muted);text-align:center;font-size:0.8rem;">暂无活动实例</div>';
       return;
@@ -353,21 +359,25 @@ async function fetchGroupInstances(groupId, groupContext = null, token = null) {
     }).join('');
   } catch(e) {
     if (token && !isUiTokenCurrent(token)) return;
+    if (signal && signal.aborted) return;
     el.innerHTML = '<div style="padding:10px;color:var(--error);font-size:0.8rem;">无法加载实例: ' + escHtml(e.message) + '</div>';
   }
 }
 
-async function fetchGroupMembers(groupId, token = null) {
+async function fetchGroupMembers(groupId, token = null, signal = null) {
   const el = document.getElementById('gdMembers');
   if(!el) return;
   el.innerHTML = '<div style="padding:10px;color:var(--text-muted);text-align:center;font-size:0.8em;">加载成员中...</div>';
   try {
     // Note: VRChat API limit is 100 per page. We'll just fetch the first page for now.
-    const r = await apiCall('/api/vrc/groups/' + groupId + '/members?n=50');
+    const opts = signal ? { signal, noDedupe: true } : {};
+    const r = await apiCall('/api/vrc/groups/' + groupId + '/members?n=50', opts);
     if (token && !isUiTokenCurrent(token)) return;
+    if (signal && signal.aborted) return;
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const members = await r.json();
     if (token && !isUiTokenCurrent(token)) return;
+    if (signal && signal.aborted) return;
     if (!members || !members.length) {
       el.innerHTML = '<div style="padding:10px;color:var(--text-muted);text-align:center;font-size:0.8rem;">暂无可见成员</div>';
       return;
@@ -386,13 +396,14 @@ async function fetchGroupMembers(groupId, token = null) {
     }).join('');
   } catch(e) {
     if (token && !isUiTokenCurrent(token)) return;
+    if (signal && signal.aborted) return;
     el.innerHTML = '<div style="padding:10px;color:var(--error);font-size:0.8rem;">无法加载成员: ' + escHtml(e.message) + '</div>';
   }
 }
 
 
 // ── Live instance occupancy (counts only; stranger roster not exposed by API) ──
-async function fetchInstanceOccupancy(loc, token = null) {
+async function fetchInstanceOccupancy(loc, token = null, signal = null) {
   const el = document.getElementById('insOccupancy');
   if (!el) return;
   if (loc.indexOf(':') < 0) return;
@@ -400,11 +411,14 @@ async function fetchInstanceOccupancy(loc, token = null) {
   const instancePath = loc;
   el.innerHTML = '<span style="font-size:0.72em;color:var(--text-muted);">读取在线人数...</span>';
   try {
-    const r = await apiCall('/api/vrc/instances/' + instancePath);
+    const opts = signal ? { signal, noDedupe: true } : {};
+    const r = await apiCall('/api/vrc/instances/' + instancePath, opts);
     if (token && !isUiTokenCurrent(token)) return;
+    if (signal && signal.aborted) return;
     if (!r.ok) { el.innerHTML = ''; return; }
     const ins = await r.json();
     if (token && !isUiTokenCurrent(token)) return;
+    if (signal && signal.aborted) return;
     const pill = (icon, label, val) =>
       `<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.72em;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text-secondary);">${icon} <b style="color:var(--text-primary);">${val}</b> ${label}</span>`;
     const parts = [];
@@ -424,6 +438,7 @@ async function fetchInstanceOccupancy(loc, token = null) {
       '<span style="font-size:0.72em;color:var(--text-muted);">实例为空或信息不可用</span>';
   } catch (e) {
     if (token && !isUiTokenCurrent(token)) return;
+    if (signal && signal.aborted) return;
     el.innerHTML = '';
   }
 }
@@ -432,6 +447,7 @@ async function openInstanceDetail(loc) {
   bumpUiEpoch();
   const detailToken = makeUiToken('instanceDetail', loc);
   window._instanceDetailActiveToken = detailToken;
+  const detailCtrl = beginScopedAbort('instanceDetail');
   // private / offline / ~private instances cannot be joined
   const isPrivateLoc = !loc || loc === 'private' || loc === 'offline' || loc.includes('~private');
   if (isPrivateLoc) return;
@@ -506,10 +522,10 @@ async function openInstanceDetail(loc) {
   document.getElementById('insFriendList').innerHTML = '<div style="text-align:center;padding:20px;opacity:0.5;">同步中...</div>';
 
   try {
-    const wResp = await apiCall('/api/vrc/worlds/' + worldId);
+    const wResp = await apiCall('/api/vrc/worlds/' + worldId, { signal: detailCtrl.signal, noDedupe: true });
     if (wResp.ok) {
       const w = await wResp.json();
-      if (!isUiTokenCurrent(detailToken)) return;
+      if (!isUiTokenCurrent(detailToken) || !isScopedAbortCurrent('instanceDetail', detailCtrl)) return;
       document.getElementById('insWorldName').textContent = w.name;
       document.getElementById('insBanner').style.backgroundImage = `url(${proxyImg(w.imageUrl)})`;
       document.getElementById('insAuthorLine').innerHTML = `by <a href="#" onclick="openFriendProfileById('${escJsAttr(w.authorId)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${escHtml(w.authorName)}</a>`;
@@ -530,7 +546,7 @@ async function openInstanceDetail(loc) {
 
     // Live instance occupancy (people count / capacity / queue / platform split).
     // The full member roster of strangers is NOT exposed by the API; only counts.
-    fetchInstanceOccupancy(loc, detailToken);
+    fetchInstanceOccupancy(loc, detailToken, detailCtrl.signal);
 
     // Find all friends in this instance
     const friendsInIns = allFriends.filter(f => f.location === loc);
@@ -565,7 +581,7 @@ async function openInstanceDetail(loc) {
       }).join('');
     }
   } catch(e) {
-    if (!isUiTokenCurrent(detailToken)) return;
+    if (!isUiTokenCurrent(detailToken) || !isScopedAbortCurrent('instanceDetail', detailCtrl)) return;
     console.error('Instance detail error', e);
     document.getElementById('insWorldName').textContent = '加载失败';
     // Don't leave the friend list spinning forever ("同步中...") when the
@@ -580,6 +596,7 @@ async function openInstanceDetail(loc) {
 function closeInstanceDetail() {
   bumpUiEpoch();
   window._instanceDetailActiveToken = null;
+  cancelScopedAbort('instanceDetail');
   const modal = document.getElementById('instanceDetailModal');
   if (!modal) return;
   modal.classList.add('hidden');
@@ -587,6 +604,7 @@ function closeInstanceDetail() {
     unlockBodyScroll();
     delete modal.dataset.scrollLocked;
   }
+  if (typeof flushPendingAvatarCardUpdates === 'function') flushPendingAvatarCardUpdates();
 }
 
 
