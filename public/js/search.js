@@ -10,7 +10,7 @@ let avtrdbPage = 0;
 let _avtrdbDedupMap = new Map(); // id -> avatar data
 let _avtrdbRenderMap = new Map(); // id -> card DOM element
 const SEARCH_TARGET = 500; // target unique cards per search session
-const COMMUNITY_LOAD_MORE_LIMIT = 500;
+const COMMUNITY_LOAD_MORE_LIMIT = 150;
 let _loadMoreInFlight = false;
 let _avtrdbHasMore = false; // module-level so auto-fill recursion can read it
 let _communityHasMore = false;
@@ -34,6 +34,10 @@ let avtrdbMatchField = (function () {
   catch (_) { return 'all'; }
 })();
 let _avtrdbDisplayOrder = [];
+const AVTRDB_RENDER_BATCH = 60;
+let _avtrdbRenderItems = [];
+let _avtrdbRenderedCount = 0;
+let _avtrdbRenderObserver = null;
 // The avatar object currently shown in the detail modal. Set by displayAvatarDetail()
 // so the "save to local" fav-menu button has something to pass to saveToLocalFavorite().
 // (Fixes a ReferenceError: the inline onclick referenced an undefined `currentAvatarDetail`.)
@@ -44,6 +48,24 @@ let _currentDetailAvatar = null;
 // the fav-menu button through this.
 function saveCurrentDetailToLocal() {
   if (_currentDetailAvatar) saveToLocalFavorite(_currentDetailAvatar);
+}
+
+function fetchJsonWithTimeout(url, opts = {}) {
+  const timeoutMs = opts.timeoutMs || 8000;
+  const parentSignal = opts.signal;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, timeoutMs);
+  const abortFromParent = () => { try { ctrl.abort(); } catch (_) {} };
+  if (parentSignal) {
+    if (parentSignal.aborted) abortFromParent();
+    else parentSignal.addEventListener('abort', abortFromParent, { once: true });
+  }
+  return fetch(url, { signal: ctrl.signal })
+    .then(r => r.json())
+    .finally(() => {
+      clearTimeout(timer);
+      if (parentSignal) parentSignal.removeEventListener('abort', abortFromParent);
+    });
 }
 
 function normalizeAvtrdbMatchField(field) {
@@ -483,6 +505,45 @@ function _avtrdbSortItems(items) {
     || String(a.name || '').localeCompare(String(b.name || '')));
 }
 
+function _appendAvtrdbRenderBatch(count = AVTRDB_RENDER_BATCH) {
+  const grid = document.getElementById("avtrdbGrid");
+  if (!grid || !_avtrdbRenderItems.length) return;
+  document.getElementById('avtrdb-render-sentinel')?.remove();
+
+  const frag = document.createDocumentFragment();
+  const nextCount = Math.min(_avtrdbRenderedCount + count, _avtrdbRenderItems.length);
+  for (let i = _avtrdbRenderedCount; i < nextCount; i++) {
+    const av = _avtrdbRenderItems[i];
+    let card = _avtrdbRenderMap.get(av.vrc_id);
+    if (!card) card = _buildAvtrdbCard(av);
+    frag.appendChild(card);
+  }
+  _avtrdbRenderedCount = nextCount;
+
+  if (_avtrdbRenderedCount < _avtrdbRenderItems.length) {
+    const sentinel = document.createElement('div');
+    sentinel.id = 'avtrdb-render-sentinel';
+    sentinel.style.cssText = 'grid-column:1/-1;height:1px;';
+    frag.appendChild(sentinel);
+  }
+  grid.appendChild(frag);
+
+  const stats = document.getElementById("avtrdbStats");
+  if (stats && _avtrdbRenderItems.length) {
+    stats.dataset.rendered = String(_avtrdbRenderedCount);
+    stats.dataset.total = String(_avtrdbRenderItems.length);
+  }
+
+  const sentinel = document.getElementById('avtrdb-render-sentinel');
+  if (_avtrdbRenderObserver) _avtrdbRenderObserver.disconnect();
+  if (sentinel) {
+    _avtrdbRenderObserver = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) _appendAvtrdbRenderBatch();
+    }, { root: grid, rootMargin: '700px 0px' });
+    _avtrdbRenderObserver.observe(sentinel);
+  }
+}
+
 // Score + sort all collected records, then (re)render the grid in order.
 // This is the core of the relevance ranking: results are ordered by how well
 // they match the query, with quality/recency as tiebreakers.
@@ -516,14 +577,12 @@ function _rerenderAvtrdbGrid(opts = {}) {
     _avtrdbDisplayOrder = items.map(av => av.vrc_id);
   }
 
-  const frag = document.createDocumentFragment();
-  for (const av of items) {
-    let card = _avtrdbRenderMap.get(av.vrc_id);
-    if (!card) card = _buildAvtrdbCard(av);
-    frag.appendChild(card);
-  }
+  const previousRendered = opts.preserveRendered ? _avtrdbRenderedCount : 0;
+  _avtrdbRenderItems = items;
+  _avtrdbRenderedCount = 0;
+  if (_avtrdbRenderObserver) { _avtrdbRenderObserver.disconnect(); _avtrdbRenderObserver = null; }
   grid.innerHTML = '';
-  grid.appendChild(frag);
+  _appendAvtrdbRenderBatch(Math.max(AVTRDB_RENDER_BATCH, previousRendered));
 
   const platLabelMap = { pc:"PC", android:"Quest", ios:"Apple", "pc+android":"PC + Quest", "pc+android+ios":"PC + Quest + Apple" };
   const platLabel = avtrdbCurrentPlatform ? (platLabelMap[avtrdbCurrentPlatform] || avtrdbCurrentPlatform) : "全平台";
@@ -606,8 +665,7 @@ async function avtrdbFetch(append, _signal) {
     const fetchAvtrdbPage = (pageNum) => {
       let url = `https://api.avtrdb.com/v2/avatar/search?query=${encodeURIComponent(avtrdbCurrentQuery)}&page_size=100&page=${pageNum}`;
       if (requiredPlats.length > 0) url += `&compatibility=${requiredPlats[0]}`;
-      return fetch(`/api/proxy?url=${encodeURIComponent(url)}`, { signal })
-        .then(r => r.json())
+      return fetchJsonWithTimeout(`/api/proxy?url=${encodeURIComponent(url)}`, { signal, timeoutMs: append ? 7000 : 9000 })
         .then(data => {
           if (pageNum === startPage) {
             _avtrdbHasMore = data.has_more || false;
@@ -621,7 +679,7 @@ async function avtrdbFetch(append, _signal) {
         .catch(() => {});
     };
 
-    const PAGES_PER_BATCH = 5;
+    const PAGES_PER_BATCH = append ? 2 : 3;
     const avtrdbPromises = Array.from({ length: PAGES_PER_BATCH }, (_, i) => fetchAvtrdbPage(startPage + i));
     avtrdbPage = startPage + PAGES_PER_BATCH - 1;
 
@@ -632,8 +690,7 @@ async function avtrdbFetch(append, _signal) {
     let communityMayHaveMore = false;
     const dbSources = _communityDbSources(avtrdbCurrentQuery, append);
     dbSources.forEach(db => {
-      communityPromises.push(fetch(db.url, { signal })
-        .then(r => r.json())
+      communityPromises.push(fetchJsonWithTimeout(db.url, { signal, timeoutMs: append ? 7000 : 9000 })
         .then(data => {
           const rawList = Array.isArray(data) ? data : data?.avatars || [];
           if (!append && rawList.length >= 100) communityMayHaveMore = true;
@@ -682,7 +739,7 @@ async function avtrdbFetch(append, _signal) {
       appendedNewCount = newItems.length;
       _avtrdbDisplayOrder.push(...newItems.map(av => av.vrc_id));
       changedIds.forEach(id => _refreshAvtrdbCard(dedupMap.get(id)));
-      _rerenderAvtrdbGrid({ preserveOrder: true });
+      _rerenderAvtrdbGrid({ preserveOrder: true, preserveRendered: true });
     } else {
       _rerenderAvtrdbGrid();
     }
