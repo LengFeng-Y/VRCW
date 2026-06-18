@@ -10,6 +10,7 @@ let avtrdbPage = 0;
 let _avtrdbDedupMap = new Map(); // id -> avatar data
 let _avtrdbRenderMap = new Map(); // id -> card DOM element
 const SEARCH_TARGET = 500; // target unique cards per search session
+let _loadMoreInFlight = false; // re-entrancy guard for avtrdbLoadMore
 const COMMUNITY_LOAD_MORE_LIMIT = 500;
 let _avtrdbHasMore = false; // module-level so auto-fill recursion can read it
 let _communityHasMore = false;
@@ -238,7 +239,7 @@ async function vrcdbFetch(cat, query) {
       filteredData.forEach(w => {
         const thumb = proxyImg(w.thumbnailImageUrl || w.imageUrl || '');
         const isFaved = worldFavoriteIdMap.has(w.id);
-        const isCached = loadedImageUrls.has(thumb);
+        const isCached = loadedImageUrls.has(imageCacheKey(thumb));
         const card = document.createElement('div');
         card.className = 'avatar-card';
         card.style.cursor = 'pointer';
@@ -283,13 +284,34 @@ async function vrcdbFetch(cat, query) {
 }
 
 async function avtrdbLoadMore() {
+  // Re-entrancy guard: a slow Load More used to let double-clicks fire twice,
+  // corrupting avtrdbPage and double-fetching.
+  if (_loadMoreInFlight) return;
   const grid = document.getElementById("avtrdbGrid");
-  const currentCount = grid.querySelectorAll('.avatar-card').length;
-  window._avtrdbLoadMoreTarget = currentCount + SEARCH_TARGET;
-  // avtrdbFetch manages page advancement internally (startPage + PAGES_PER_BATCH)
-  // Just call it with append flag; it will use avtrdbPage which was left at batch end
-  avtrdbPage++; // advance to next batch start
-  await avtrdbFetch(true);
+  const btn = document.getElementById("avtrdbLoadMore");
+  _loadMoreInFlight = true;
+  // Immediate feedback: disable + show loading text. Previously the button
+  // stayed unchanged until results arrived, so it felt like "clicked, nothing
+  // happened".
+  if (btn) { btn.disabled = true; btn.textContent = "加载中… / Loading…"; }
+  // Insert a trailing spinner inside the grid (append path doesn't wipe the
+  // grid, so this is safe and gives a visible "more coming" cue).
+  let spinner = null;
+  if (grid) {
+    spinner = document.createElement('div');
+    spinner.id = 'avtrdb-loadmore-spinner';
+    spinner.style.cssText = 'grid-column:1/-1;text-align:center;padding:24px;color:rgba(255,255,255,0.5);font-size:0.85em;';
+    spinner.textContent = '正在加载更多…';
+    grid.appendChild(spinner);
+  }
+  try {
+    avtrdbPage++; // advance to next batch start
+    await avtrdbFetch(true);
+  } finally {
+    document.getElementById('avtrdb-loadmore-spinner')?.remove();
+    if (btn) { btn.disabled = false; btn.textContent = "加载更多 / Load More"; }
+    _loadMoreInFlight = false;
+  }
 }
 
 // Current sort mode for avatar search: 'relevance' | 'newest' | 'name'
@@ -652,9 +674,11 @@ async function avtrdbFetch(append, _signal) {
 
     // Score, sort, render. Load More must not reshuffle cards the user has
     // already scanned, so only append newly discovered IDs to the locked order.
+    let appendedNewCount = 0;
     if (append) {
       const newItems = _avtrdbSortItems([...batchIds].map(id => dedupMap.get(id)).filter(Boolean))
         .filter(av => !_avtrdbDisplayOrder.includes(av.vrc_id));
+      appendedNewCount = newItems.length;
       _avtrdbDisplayOrder.push(...newItems.map(av => av.vrc_id));
       changedIds.forEach(id => _refreshAvtrdbCard(dedupMap.get(id)));
       _rerenderAvtrdbGrid({ preserveOrder: true });
@@ -662,7 +686,13 @@ async function avtrdbFetch(append, _signal) {
       _rerenderAvtrdbGrid();
     }
     window._avtrdbLoadMoreTarget = null;
-    loadMoreBtn.style.display = (_avtrdbHasMore || _communityHasMore) ? "inline-block" : "none";
+    // Button visibility: only show if a source genuinely has more AND (on
+    // append) this batch actually produced new cards. Hiding the button when
+    // a Load More returned only duplicates prevents the "clicked, nothing
+    // happened" loop — the user sees there's nothing more to load.
+    const sourcesHaveMore = _avtrdbHasMore || _communityHasMore;
+    const producedNew = !append || appendedNewCount > 0;
+    loadMoreBtn.style.display = (sourcesHaveMore && producedNew) ? "inline-block" : "none";
 
   } catch (e) {
     if (!append) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#ef4444;">搜索失败: ${escHtml(e.message)}</div>`;

@@ -423,7 +423,7 @@ function _buildWorldCard(w) {
 
   const friendsHere = (allFriends || []).filter(f => f.location && f.location.startsWith(w.id)).length;
   card.onclick = () => openWorldDetail(w.id, w);
-  const isCached = loadedImageUrls.has(thumb);
+  const isCached = loadedImageUrls.has(imageCacheKey(thumb));
   const isFaved  = worldFavoriteIdMap.has(w.id);
   const sel = selectedWorldIds.has(w.id);
 

@@ -7,6 +7,12 @@
  */
 function openFriendProfile(el) {
   window._fpIsSelf = false;
+  // Invalidate any in-flight avatar-detail async tail so it doesn't silently
+  // repaint the avatar modal (and fire fav-count network calls) behind this
+  // friend profile. The two systems use separate tokens (_avatarDetailActiveToken
+  // vs _fpSeq); without this, opening a friend profile from an avatar detail's
+  // author link leaves the avatar tail's isUiTokenCurrent() check true.
+  window._avatarDetailActiveToken = null;
   const f = parseAttrJson(el.dataset.friend);
   currentFriendProfile = f;
   // Race-condition token: bumped on every modal-open/refresh. Async tail fetches

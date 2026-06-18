@@ -510,7 +510,7 @@ function renderGrid(list) {
 
     // Apply memory cache for instant render if already loaded previously
     const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-    const isCached = loadedImageUrls.has(thumb);
+    const isCached = loadedImageUrls.has(imageCacheKey(thumb));
     const imgHtml = isCached
         ? `<img class="avatar-thumb" src="${escHtml(thumb)}" alt="${escHtml(av.name)}">`
         : `<img class="avatar-thumb loading" src="${BLANK}" data-src="${escHtml(thumb)}" alt="">`;

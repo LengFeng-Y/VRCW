@@ -6,15 +6,14 @@
  * 函数声明会提升为全局，跨文件调用没问题；请勿改为 type="module"。
  */
 // ── Smart Image Loading with Viewport Cancellation ──
-// Strategy (rev 2026-05-31, after user feedback "fast-scroll shows blank cards"):
-// - Preload aggressively: rootMargin 1500px (≈ 1.5 viewports above + below)
-//   so fast scrolling stays inside the preload zone.
-// - DON'T cancel mid-flight when an image leaves the viewport. Cancelling
-//   sounds like it saves bandwidth but in practice the bytes are already
-//   arriving — we just throw them away and force a fresh request when the
-//   user scrolls back. Net result of fast scroll-by-then-back was MORE
-//   network than just letting the load complete and cache. We only abort
-//   on tab teardown or session logout.
+// Strategy (rev 2026-06-18, after user feedback "loads everything at once, some time out"):
+// - Moderate preload: rootMargin 600px (≈ 0.6 viewports above + below) so only
+//   near-viewport cards queue, not the whole grid.
+// - Soft cancel on scroll-away: remove the image's PENDING queue entries (so
+//   it won't start loading), but do NOT abort an already-in-flight fetch —
+//   the bytes are arriving and IDB/CF cache will make the scroll-back cheap.
+//   This frees concurrency slots for visible cards without wasting bandwidth.
+// - 15s per-image timeout so a hung origin fetch can't starve the 12-wide queue.
 // - Higher concurrency (12) so a wide grid fills in faster.
 const imageQueue = [];
 let runningLoads = 0;
@@ -142,11 +141,15 @@ function processImageQueue() {
           return;
         }
 
-        // Fetch with AbortController so we can cancel mid-flight
+        // Fetch with AbortController so we can cancel mid-flight, plus a 15s
+        // timeout so a hung origin fetch can't hold a concurrency slot forever
+        // (starving the rest of the grid — the "some images time out" symptom).
         const ctrl = new AbortController();
         img._abortCtrl = ctrl;
+        const timeoutSignal = AbortSignal.timeout(15000);
+        const combinedSignal = AbortSignal.any ? AbortSignal.any([ctrl.signal, timeoutSignal]) : ctrl.signal;
 
-        fetch(src, { signal: ctrl.signal })
+        fetch(src, { signal: combinedSignal })
           .then(r => r.blob())
           .then(blob => {
             delete img._abortCtrl;
@@ -195,19 +198,24 @@ const avatarObserver = new IntersectionObserver(
             imageQueue.unshift(item);
           }
         }
+      } else {
+        // Leaving viewport: soft cancel. Remove this image's PENDING queue
+        // entries (not yet started) so they don't grab a concurrency slot the
+        // now-visible cards need. We do NOT abort an already-in-flight fetch —
+        // the bytes are arriving and the IDB/CF cache makes scroll-back cheap.
+        // Setting cancelled also makes processImageQueue skip it if it was
+        // about to start (line ~41 guard).
+        img.dataset.cancelled = '1';
+        for (let i = imageQueue.length - 1; i >= 0; i--) {
+          if (imageQueue[i].img === img) imageQueue.splice(i, 1);
+        }
       }
-      // Leaving viewport: do NOT abort. The bytes are usually already arriving
-      // and aborting just means we re-fetch when the user scrolls back. The
-      // earlier "save quota" intent backfires on fast scroll-then-back motion.
-      // Off-screen requests still count against MAX_CONCURRENT_IMAGES, so the
-      // queue self-throttles naturally.
     });
   },
-  // 1500px ≈ 1.5 viewports above and below — fast scrolling stays inside the
-  // preload zone so cards never enter view as blank placeholders. Tradeoff:
-  // slightly more eager fetching, but the IDB blob cache + worker prefetch
-  // make subsequent visits cheap.
-  { rootMargin: '1500px 0px' }
+  // 600px ≈ 0.6 viewports above and below. Smaller than the old 1500px so the
+  // queue isn't flooded with the whole grid the moment it renders, but still
+  // enough headroom that normal scroll speed stays inside the preload zone.
+  { rootMargin: '600px 0px' }
 );
 
 // ── Batch Image Prefetch ──

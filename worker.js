@@ -311,10 +311,14 @@ export default {
                 };
                 if (imgAuth) headers["Cookie"] = imgAuth;
 
+                // 20s deadline so a slow/hung VRC CDN origin can't hold the
+                // Worker subrequest open indefinitely and starve the client's
+                // image queue (the "some images time out" symptom).
                 const imgResp = await fetch(targetUrl, {
                     method: "GET",
                     headers,
-                    redirect: "follow"
+                    redirect: "follow",
+                    signal: AbortSignal.timeout(20000)
                 });
 
                 if (!imgResp.ok) {
