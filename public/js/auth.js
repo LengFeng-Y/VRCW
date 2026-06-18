@@ -296,8 +296,8 @@ function showMainApp() {
   // These compare lightweight remote indexes with IDB caches and only refresh
   // changed buckets, instead of forcing full detail reloads on every site open.
   queueBackgroundTask(async () => {
+    await fetchFavoriteGroups(); // IDB-first, remote refresh is backgrounded
     const indexOk = await syncAllFavoriteIds();
-    await fetchFavoriteGroups(); // populates the favorite-group sidebar buttons
     if (!indexOk) return;
     if (typeof syncAvatarFavoriteCachesByIndex === 'function') await syncAvatarFavoriteCachesByIndex();
     if (typeof syncWorldFavoriteCachesByIndex === 'function') await syncWorldFavoriteCachesByIndex();

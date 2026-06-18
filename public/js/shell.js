@@ -126,38 +126,60 @@ async function syncAllFavoriteIds() {
 }
 
 // ── Favorite Groups (dynamic sidebar) ──
-async function fetchFavoriteGroups() {
-  try {
-    // 1. Avatars
-    const rAv = await apiCall("/api/vrc/favorite/groups?type=avatar&n=50", { noAbort: true });
-    if (rAv.ok) {
-      const g = await rAv.json();
-      favoriteGroups = (g || []).filter(x => x.name && x.name.startsWith('avatars')).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
-      renderFavoriteGroupButtons();
-      // Startup cache refresh is driven by syncAvatarFavoriteCachesByIndex():
-      // compare the remote favorite index with IDB first, then refresh only
-      // changed groups. Avoid TTL-only preloading that would re-fetch unchanged
-      // groups simply because the local age expired.
-    }
-    // 2. Worlds
-    const rW = await apiCall("/api/vrc/favorite/groups?type=world&n=50", { noAbort: true });
-    if (rW.ok) {
-      const g = await rW.json();
-      worldFavGroups = (g || []).filter(x => x.name && (x.name.startsWith('worlds') || x.name.startsWith('vrcPlusWorlds'))).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
-      if (typeof renderWorldFavGroupButtons === 'function') renderWorldFavGroupButtons();
-    }
-    // 3. Friends
-    const rF = await apiCall("/api/vrc/favorite/groups?type=friend&n=50", { noAbort: true });
-    if (rF.ok) {
-      const g = await rF.json();
-      friendFavGroups = (g || []).filter(x => x.name && (x.name.startsWith('group_') || x.name==='friends')).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
-      renderFriendFavGroupButtons();
-    }
-  } catch (e) {
-    console.warn("Could not fetch favorite groups", e);
+function _sortFavoriteGroups(list, type) {
+  const arr = Array.isArray(list) ? list : [];
+  if (type === 'avatar') return arr.filter(x => x.name && x.name.startsWith('avatars')).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+  if (type === 'world') return arr.filter(x => x.name && (x.name.startsWith('worlds') || x.name.startsWith('vrcPlusWorlds'))).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+  return arr.filter(x => x.name && (x.name.startsWith('group_') || x.name === 'friends')).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+}
+
+function _renderFavoriteGroupsForType(type, groups) {
+  if (type === 'avatar') {
+    favoriteGroups = _sortFavoriteGroups(groups, 'avatar');
+    renderFavoriteGroupButtons();
+  } else if (type === 'world') {
+    worldFavGroups = _sortFavoriteGroups(groups, 'world');
+    if (typeof renderWorldFavGroupButtons === 'function') renderWorldFavGroupButtons();
+  } else {
+    friendFavGroups = _sortFavoriteGroups(groups, 'friend');
+    renderFriendFavGroupButtons();
   }
 }
 
+async function _loadCachedFavoriteGroups() {
+  const entries = [
+    ['avatar', 'favorite_groups_avatar'],
+    ['world', 'favorite_groups_world'],
+    ['friend', 'favorite_groups_friend'],
+  ];
+  await Promise.all(entries.map(async ([type, key]) => {
+    const cached = await idb.get(key).catch(() => null);
+    if (Array.isArray(cached)) _renderFavoriteGroupsForType(type, cached);
+  }));
+}
+
+async function _refreshFavoriteGroupsFromRemote() {
+  const specs = [
+    ['avatar', 'favorite_groups_avatar', '/api/vrc/favorite/groups?type=avatar&n=50'],
+    ['world', 'favorite_groups_world', '/api/vrc/favorite/groups?type=world&n=50'],
+    ['friend', 'favorite_groups_friend', '/api/vrc/favorite/groups?type=friend&n=50'],
+  ];
+  await Promise.allSettled(specs.map(async ([type, key, url]) => {
+    const r = await apiCall(url, { noAbort: true });
+    if (!r.ok) return;
+    const groups = await r.json();
+    if (!Array.isArray(groups)) return;
+    await idb.set(key, groups).catch(() => {});
+    _renderFavoriteGroupsForType(type, groups);
+  }));
+}
+
+async function fetchFavoriteGroups() {
+  // IDB-first: draw sidebar group buttons immediately, then refresh remote in
+  // the background. Do not block startup on VRChat favorite-group endpoints.
+  await _loadCachedFavoriteGroups();
+  _refreshFavoriteGroupsFromRemote().catch(e => console.warn("Could not fetch favorite groups", e));
+}
 function renderFriendFavGroupButtons() {
   const container = document.getElementById('friendFavGroupList');
   if (!container) return;
