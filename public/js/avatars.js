@@ -1431,22 +1431,39 @@ async function downloadSingleAvatar(av) {
 
   // Collect all candidate URLs (prefer no-variant first, then security, skip impostor)
   const candidateUrls = [];
+  const fallbackUrls = [];
   for (const pkg of av.unityPackages || []) {
-    if (
-      (pkg.platform === "standalonewindows" || pkg.platform === "pc") &&
-      pkg.assetUrl
-    ) {
-      if (pkg.variant && pkg.variant.includes("impostor")) continue;
+    if (!pkg.assetUrl) continue;
+    if (pkg.variant && pkg.variant.includes("impostor")) continue;
+    
+    const plat = (pkg.platform || "").toLowerCase();
+    if (plat === "standalonewindows" || plat === "pc") {
       if (!pkg.variant || pkg.variant === "") {
         candidateUrls.unshift(pkg.assetUrl); // top priority
       } else {
         candidateUrls.push(pkg.assetUrl);
       }
+    } else {
+      if (!pkg.variant || pkg.variant === "") {
+        fallbackUrls.unshift(pkg.assetUrl);
+      } else {
+        fallbackUrls.push(pkg.assetUrl);
+      }
     }
   }
 
+  // Fallback 1: try root assetUrl (older API format)
+  if (candidateUrls.length === 0 && av.assetUrl) {
+    candidateUrls.push(av.assetUrl);
+  }
+
+  // Fallback 2: try non-PC packages (e.g. Android/Quest)
+  if (candidateUrls.length === 0 && fallbackUrls.length > 0) {
+    candidateUrls.push(...fallbackUrls);
+  }
+
   if (candidateUrls.length === 0) {
-    logMsg(`⚠ ${av.name}: No PC asset URL found`, "skip");
+    logMsg(`⚠ ${av.name}: No valid asset URL found`, "skip");
     if (card) {
       card.classList.remove("downloading");
       card.classList.add("skipped");
