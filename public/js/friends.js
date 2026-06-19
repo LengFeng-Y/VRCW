@@ -339,6 +339,12 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
   try {
     const cachedBasics = await idb.get('friend_basics') || [];
     const cacheAge = await idb.get('friend_basics_age') || 0;
+    
+    const cachedFavMap = await idb.get('friend_favorite_map');
+    if (cachedFavMap) {
+      friendFavoriteIdMap = new Map(cachedFavMap);
+    }
+    
     cacheIsFresh = cachedBasics.length > 0 && !forceRefresh && (Date.now() - cacheAge) < FRIENDS_CACHE_TTL;
 
     if (cachedBasics.length > 0) {
@@ -404,6 +410,7 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
     }));
     idb.set('friend_basics', basics).catch(()=>{});
     idb.set('friend_basics_age', Date.now()).catch(()=>{});
+    idb.set('friend_favorite_map', Array.from(friendFavoriteIdMap.entries())).catch(()=>{});
   };
 
   try {
