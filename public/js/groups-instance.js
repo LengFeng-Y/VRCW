@@ -667,18 +667,30 @@ async function fetchMutualFriends(userId, containerId, seq) {
   if (!el) return;
   el.innerHTML = '<span style="color:var(--text-muted);font-size:0.8em;">加载中...</span>';
   try {
-    // Correct VRChat API endpoint for mutual friends (same as VRCX uses)
-    const r = await apiCall('/api/vrc/users/' + userId + '/mutuals/friends');
-    if (seq != null && window._fpCurrentSeq !== seq) return; // user opened another friend
-    if (r.status === 403) {
-      // VRChat is still rolling out mutual friends - fall back to co-located friends
-      await fetchMutualFriendsFallback(userId, el);
-      return;
+    let offset = 0;
+    const list = [];
+    while (offset < 2000) {
+      // Correct VRChat API endpoint for mutual friends (same as VRCX uses), with pagination
+      const r = await apiCall(`/api/vrc/users/${userId}/mutuals/friends?n=100&offset=${offset}`);
+      if (seq != null && window._fpCurrentSeq !== seq) return; // user opened another friend
+      if (r.status === 403 && offset === 0) {
+        // VRChat is still rolling out mutual friends - fall back to co-located friends
+        await fetchMutualFriendsFallback(userId, el);
+        return;
+      }
+      if (!r.ok) { 
+        if (offset === 0) await fetchMutualFriendsFallback(userId, el);
+        break; 
+      }
+      const json = await r.json();
+      if (seq != null && window._fpCurrentSeq !== seq) return;
+      const batch = Array.isArray(json) ? json : (json.mutualFriends || json.users || []);
+      if (!batch || !batch.length) break;
+      list.push(...batch);
+      if (batch.length < 100) break;
+      offset += 100;
     }
-    if (!r.ok) { await fetchMutualFriendsFallback(userId, el); return; }
-    const json = await r.json();
-    if (seq != null && window._fpCurrentSeq !== seq) return;
-    const list = Array.isArray(json) ? json : (json.mutualFriends || json.users || []);
+    
     if (!list.length) {
       el.innerHTML = '<span style="color:var(--text-muted);font-size:0.8em;">暂无共同好友</span>';
       return;
