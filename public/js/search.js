@@ -9,11 +9,14 @@ let avtrdbPage = 0;
 // Persistent dedup state — reset on new search, survives Load More and auto-fill pages
 let _avtrdbDedupMap = new Map(); // id -> avatar data
 let _avtrdbRenderMap = new Map(); // id -> card DOM element
-const SEARCH_TARGET = 500; // target unique cards per search session
-const COMMUNITY_LOAD_MORE_LIMIT = 50;
-let _loadMoreInFlight = false;
-let _avtrdbHasMore = false; // module-level so auto-fill recursion can read it
-let _communityHasMore = false;
+const SEARCH_TARGET = 500; // (legacy, unused after streaming rewrite)
+const COMMUNITY_LOAD_MORE_LIMIT = 50; // (legacy, unused — community sources ignore `n=`)
+let _avtrdbHasMore = false; // avtrdb has more pages (set by page responses)
+// Background avtrdb pagination driver: auto-flips pages until has_more=false,
+// so the user never needs a "Load More" button.
+let _avtrdbBgDriverRunning = false;
+let _avtrdbBgDriverAbortEpoch = 0; // bumped on every new search to stop a stale driver
+let _avtrdbBgDriverFailedPage = -1; // page that failed twice → driver stopped
 
 function _communityDbSources(query, append) {
   const suffix = append ? '&n=' + COMMUNITY_LOAD_MORE_LIMIT : '';
@@ -182,19 +185,44 @@ async function doAvtrdbSearch() {
   const query = document.getElementById("avtrdbSearch")?.value.trim() || "";
   const cat = document.getElementById("searchCategory")?.value || "avatars";
   const platform = document.getElementById("avtrdbPlatform")?.value || "";
-  
+
   if (!query) return;
   avtrdbCurrentQuery = query;
   avtrdbCurrentPlatform = platform;
   window.searchCurrentCat = cat;
-  
+
+  // Abort ALL in-flight requests from the previous search (and from the
+  // previous tab's apiCall traffic that hangs off this controller). Without
+  // this, a second search would race against the first search's 5 source
+  // fetches + background driver, and the stale responses would flush
+  // "previous keyword" cards into the new grid. Must abort-then-recreate
+  // BEFORE firing new fetches so the new fetches attach to a fresh controller.
+  if (currentTabAbortController) {
+    try { currentTabAbortController.abort(); } catch (_) {}
+  }
+  currentTabAbortController = new AbortController();
+
+  // Tell the background queue to hold off while the user is actively
+  // searching — startup favorite-index sync / world-detail prefetches would
+  // otherwise hog browser concurrency slots (6/origin) and starve the 5
+  // search source fetches. Cleared when the user leaves the search tab.
+  if (typeof setSearchActive === 'function') setSearchActive(true);
+
   avtrdbPage = 0;
   avtrdbTotalLoaded = 0;
   _avtrdbHasMore = false;
-  _communityHasMore = false;
   _avtrdbDedupMap = new Map();
   _avtrdbRenderMap = new Map();
   _avtrdbDisplayOrder = [];
+  // Stop any in-flight background pagination from a previous search and
+  // reset render queue / sentinel state so streaming starts from scratch.
+  _avtrdbBgDriverAbortEpoch++;
+  _avtrdbBgDriverFailedPage = -1;
+  _avtrdbRenderItems = [];
+  _avtrdbRenderedCount = 0;
+  if (_avtrdbRenderObserver) { _avtrdbRenderObserver.disconnect(); _avtrdbRenderObserver = null; }
+  if (_avtrdbRecycler) { _avtrdbRecycler.disconnect(); _avtrdbRecycler = null; }
+  if (_avtrdbMetaObserver) { _avtrdbMetaObserver.disconnect(); _avtrdbMetaObserver = null; }
 
   const grid = document.getElementById("avtrdbGrid");
   grid.classList.remove('search-user-grid', 'search-group-grid', 'search-world-grid');
@@ -202,7 +230,6 @@ async function doAvtrdbSearch() {
   if (searchGridClass) grid.classList.add(searchGridClass);
   grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:rgba(255,255,255,0.4);">搜索中...</div>`;
   document.getElementById("avtrdbStats").textContent = "";
-  document.getElementById("avtrdbLoadMore").style.display = "none";
   
   if (cat === 'avatars') {
     await avtrdbFetch(false);
@@ -305,30 +332,11 @@ async function vrcdbFetch(cat, query) {
   }
 }
 
-async function avtrdbLoadMore() {
-  if (_loadMoreInFlight) return;
-  _loadMoreInFlight = true;
-  const btn = document.getElementById("avtrdbLoadMore");
-  const grid = document.getElementById("avtrdbGrid");
-  if (!grid) { _loadMoreInFlight = false; return; }
-  const currentCount = grid.querySelectorAll('.avatar-card').length;
-  window._avtrdbLoadMoreTarget = currentCount + SEARCH_TARGET;
-  // Immediate feedback: disable button + show spinner
-  if (btn) { btn.disabled = true; btn.innerHTML = "⏳ 加载更多中..."; }
-  const spinner = document.createElement("div");
-  spinner.id = "avtrdb-loadmore-spinner";
-  spinner.style.cssText = "grid-column:1/-1;display:flex;align-items:center;justify-content:center;padding:32px;gap:12px;color:rgba(255,255,255,0.5);";
-  spinner.innerHTML = "<div style='width:32px;height:32px;border:2px solid rgba(255,255,255,0.15);border-top-color:rgba(255,255,255,0.7);border-radius:50%;animation:spin 0.8s linear infinite;'></div><span>加载更多...</span>";
-  grid.appendChild(spinner);
-  try {
-    avtrdbPage++;
-    await avtrdbFetch(true);
-  } finally {
-    _loadMoreInFlight = false;
-    document.getElementById("avtrdb-loadmore-spinner")?.remove();
-    if (btn) { btn.disabled = false; btn.innerHTML = "📦 加载更多"; }
-  }
-}
+// avtrdbLoadMore — DEPRECATED. The streaming background driver auto-fills the
+// grid as new pages arrive, so a manual button is no longer needed (and it had
+// a bug where it got hidden while results were still incoming). Kept as a
+// no-op so any stale inline handler doesn't ReferenceError.
+function avtrdbLoadMore() { /* no-op: streaming auto-fill replaces this */ }
 
 // Current sort mode for avatar search: 'relevance' | 'newest' | 'name'
 // Persisted in localStorage so a chosen sort survives reloads — mirrors VRCX.
@@ -406,6 +414,155 @@ async function openAuthorProfileByName(authorName) {
   }
 }
 
+// === Streaming search infrastructure (added 2026-06-19, see memory.md) ===
+// Each source (avtrdb / vrcdb / avatarrecovery / cute.bet / nekosune) flushes
+// its results to the grid as soon as it resolves — no Promise.allSettled wait.
+// Sources arrive over a wide time range (~0.3s for vrcdb, ~12s for cute.bet),
+// so streaming makes the user see cards in <1s instead of waiting for the
+// slowest source. Order is "arrival order" — clicking a sort chip re-sorts.
+
+// Module-level dedup collector. Returns true if the av is brand-new (added to
+// dedupMap), false if it merged into an existing entry. Used by both the
+// initial avtrdbFetch and the background pagination driver so they share one
+// source of truth.
+function _collectAvatar(av) {
+  const id = av.vrc_id;
+  if (!id) return false;
+  const dedupMap = _avtrdbDedupMap;
+  if (!dedupMap.has(id)) {
+    dedupMap.set(id, av);
+    return true;
+  }
+  // Already have it — merge richer fields in (description / tags / image_url)
+  const existing = dedupMap.get(id);
+  const richness = o => ((o.unityPackages && o.unityPackages.length) ? 2 : 0)
+    + ((o.performance && Object.keys(o.performance).length > 2) ? 1 : 0)
+    + (o.image_url || o.imageUrl ? 1 : 0)
+    + (o.name && o.name !== '未知模型' ? 1 : 0);
+  if (richness(av) > richness(existing)) {
+    dedupMap.set(id, Object.assign({}, existing, av));
+    _refreshAvtrdbCard(dedupMap.get(id));
+  } else {
+    let changed = false;
+    if (av.description && !existing.description) { existing.description = av.description; changed = true; }
+    if (Array.isArray(av.tags)) {
+      const merged = [...new Set([...(existing.tags || []), ...av.tags])];
+      if (merged.length !== (existing.tags || []).length) { existing.tags = merged; changed = true; }
+    }
+    if (!existing.image_url && (av.image_url || av.imageUrl)) {
+      existing.image_url = av.image_url || av.imageUrl; changed = true;
+    }
+    if (changed) _refreshAvtrdbCard(existing);
+  }
+  return false;
+}
+
+// Push any newly-collected av records (in dedupMap but not yet in display
+// order) into the render queue, in arrival order, and trigger the existing
+// _appendAvtrdbRenderBatch incremental renderer. Also removes the initial
+// loading spinner once we have first cards.
+function _flushStreamedCards() {
+  if (_avtrdbDedupMap.size === 0) return;
+  const seen = new Set(_avtrdbDisplayOrder);
+  let added = 0;
+  for (const [id, av] of _avtrdbDedupMap) {
+    if (seen.has(id)) continue;
+    _avtrdbDisplayOrder.push(id);
+    _avtrdbRenderItems.push(av);
+    added++;
+  }
+  if (added > 0) {
+    document.getElementById('avtrdb-loading-spinner')?.remove();
+    document.getElementById('avtrdb-loadmore-spinner')?.remove();
+    _appendAvtrdbRenderBatch();
+    avtrdbTotalLoaded = _avtrdbDisplayOrder.length;
+  }
+  _updateAvtrdbStats();
+}
+
+// Update the top stats line. Reflects: rendered/indexed counts, current
+// platform/field/sort filters, and live background-driver state.
+function _updateAvtrdbStats() {
+  const stats = document.getElementById("avtrdbStats");
+  if (!stats) return;
+  const platLabelMap = { pc: "PC", android: "Quest", ios: "Apple", "pc+android": "PC + Quest", "pc+android+ios": "PC + Quest + Apple" };
+  const platLabel = avtrdbCurrentPlatform ? (platLabelMap[avtrdbCurrentPlatform] || avtrdbCurrentPlatform) : "全平台";
+  const sortLabel = { relevance: '相关度', newest: '最新', name: '名称', arrival: '到达顺序' }[avtrdbSortMode] || '到达顺序';
+  const fieldLabel = { all: '全部字段', title: '标题', author: '作者', tags: 'Tag', desc: '描述' }[avtrdbMatchField] || '全部字段';
+  const indexed = _avtrdbDedupMap.size;
+  const rendered = _avtrdbRenderedCount;
+  let suffix;
+  if (_avtrdbBgDriverFailedPage >= 0) {
+    suffix = ` · avtrdb 拉取中断 (第 ${_avtrdbBgDriverFailedPage} 页失败)`;
+  } else if (_avtrdbBgDriverRunning || _avtrdbHasMore) {
+    suffix = ` · 后台拉取中...`;
+  } else {
+    suffix = ` · 全部加载完毕`;
+  }
+  stats.textContent = `已显示 ${rendered} / 已索引 ${indexed}（${platLabel} · ${fieldLabel} · ${sortLabel}）${suffix}`;
+}
+
+// Background avtrdb pagination driver. Auto-flips pages from avtrdbPage onward
+// until has_more=false. Each page flushes to the grid as it arrives. A single
+// page is retried up to 10 times with exponential backoff (300ms, 600ms, 1.2s,
+// 2.4s, …, capped at 8s) before the driver gives up — a transient network
+// blip in the middle of a long search shouldn't truncate the result set.
+// Note: community sources (vrcdb / avatarrecovery / cute.bet / nekosune) are
+// NOT in this driver — they each fire one HTTP request from avtrdbFetch and
+// flush independently, so they're already done by the time the driver runs.
+// If the driver stops, only avtrdb pagination stops; community results stay.
+async function _avtrdbBackgroundDriver() {
+  if (_avtrdbBgDriverRunning) return;
+  _avtrdbBgDriverRunning = true;
+  const myEpoch = _avtrdbBgDriverAbortEpoch;
+  _avtrdbBgDriverFailedPage = -1;
+  const signal = currentTabAbortController?.signal;
+  const MAX_RETRIES = 10;
+  const sleep = (ms) => new Promise((res, rej) => {
+    const t = setTimeout(res, ms);
+    if (signal) signal.addEventListener('abort', () => { clearTimeout(t); rej(new Error('aborted')); }, { once: true });
+  });
+  try {
+    while (_avtrdbHasMore && myEpoch === _avtrdbBgDriverAbortEpoch) {
+      if (signal?.aborted) break;
+      const page = avtrdbPage;
+      let ok = false;
+      let lastErr = null;
+      for (let attempt = 0; attempt < MAX_RETRIES && !ok; attempt++) {
+        if (myEpoch !== _avtrdbBgDriverAbortEpoch || signal?.aborted) return;
+        try {
+          let url = `https://api.avtrdb.com/v2/avatar/search?query=${encodeURIComponent(avtrdbCurrentQuery)}&page_size=50&page=${page}`;
+          const requiredPlats = avtrdbCurrentPlatform ? avtrdbCurrentPlatform.split("+") : [];
+          if (requiredPlats.length > 0) url += `&compatibility=${requiredPlats[0]}`;
+          const data = await fetchJsonWithTimeout(`/api/proxy?url=${encodeURIComponent(url)}`, { signal, timeoutMs: 7000 });
+          if (myEpoch !== _avtrdbBgDriverAbortEpoch) return; // user kicked off a new search
+          if (signal?.aborted) return;
+          _avtrdbHasMore = data.has_more || false;
+          (data.avatars || []).forEach(av => _collectAvatar({
+            ...av, vrc_id: av.vrc_id, image_url: av.image_url,
+            compatibility: av.compatibility || [], performance: av.performance || {}
+          }));
+          _flushStreamedCards();
+          ok = true;
+        } catch (e) {
+          lastErr = e;
+          // Exponential backoff: 300, 600, 1200, 2400, 4800, then 8000 cap.
+          if (attempt < MAX_RETRIES - 1) {
+            const delay = Math.min(300 * Math.pow(2, attempt), 8000);
+            try { await sleep(delay); } catch (_) { return; }
+          }
+        }
+      }
+      if (!ok) { _avtrdbBgDriverFailedPage = page; break; }
+      avtrdbPage = page + 1;
+      _updateAvtrdbStats();
+    }
+  } finally {
+    _avtrdbBgDriverRunning = false;
+    _updateAvtrdbStats();
+  }
+}
+
 // Build one normalized avatar card element from a collected record.
 function _buildAvtrdbCard(av) {
   const id = av.vrc_id;
@@ -445,29 +602,166 @@ function _buildAvtrdbCard(av) {
   if (lazyImg) avatarObserver.observe(lazyImg);
 
   if (!(av.unityPackages && av.unityPackages.length > 0)) {
-    const io = new IntersectionObserver((entries, obs) => {
-      if (!entries[0].isIntersecting) return;
-      obs.disconnect();
-      avatarMetadataQueue.add(id, (data) => {
-        Object.assign(av, {
-          unityPackages: data.unityPackages || av.unityPackages,
-          performance: (data.performance && Object.keys(data.performance).length) ? data.performance : av.performance,
-          created_at: av.created_at || data.created_at || data.createdAt,
-          updated_at: av.updated_at || data.updated_at || data.updatedAt,
-          description: av.description || data.description || ""
-        });
-        const badgeWrap = card.querySelector('.card-plat-badges');
-        if (badgeWrap) {
-          const liveRatings = getAvatarPlatforms(av);
-          badgeWrap.innerHTML = Array.from(liveRatings.keys()).map(p =>
-            `<span class="avtrdb-badge">${{ pc: "PC", android: "Quest", ios: "Apple" }[p] || p}</span>`
-          ).join("");
-        }
-      });
-    }, { rootMargin: '200px' });
-    io.observe(card);
+    const metaObs = _ensureAvtrdbMetaObserver();
+    if (metaObs) metaObs.observe(card);
   }
+  // Register with the recycler: cards scrolled far outside the viewport
+  // (>2000px buffer) get their image+observers torn down to keep memory
+  // bounded (avoids the multi-hundred-MB blow-up when scrolling 2000+ cards).
+  // The av record stays in _avtrdbDedupMap; the skeleton stays at its slot;
+  // _restoreCard rebuilds the thumbnail when the card scrolls back in.
+  // Defer observation by one frame so a freshly-appended card that ends up
+  // outside the buffer band isn't torn down before its image even loads.
+  const recycler = _ensureRecycler();
+  if (recycler) requestAnimationFrame(() => { if (card.isConnected) recycler.observe(card); });
   return card;
+}
+
+let _avtrdbMetaObserver = null;
+function _ensureAvtrdbMetaObserver() {
+  if (_avtrdbMetaObserver) return _avtrdbMetaObserver;
+  const grid = document.getElementById('avtrdbGrid');
+  _avtrdbMetaObserver = new IntersectionObserver((entries, obs) => {
+    for (const e of entries) {
+      if (e.isIntersecting) {
+        const card = e.target;
+        obs.unobserve(card);
+        const id = card.getAttribute('data-avid');
+        const av = id && _avtrdbDedupMap.get(id);
+        if (av) {
+          avatarMetadataQueue.add(id, (data) => {
+            Object.assign(av, {
+              unityPackages: data.unityPackages || av.unityPackages,
+              performance: (data.performance && Object.keys(data.performance).length) ? data.performance : av.performance,
+              created_at: av.created_at || data.created_at || data.createdAt,
+              updated_at: av.updated_at || data.updated_at || data.updatedAt,
+              description: av.description || data.description || ""
+            });
+            const badgeWrap = card.querySelector('.card-plat-badges');
+            if (badgeWrap) {
+              const liveRatings = getAvatarPlatforms(av);
+              badgeWrap.innerHTML = Array.from(liveRatings.keys()).map(p =>
+                `<span class="avtrdb-badge">${{ pc: "PC", android: "Quest", ios: "Apple" }[p] || p}</span>`
+              ).join("");
+            }
+          });
+        }
+      }
+    }
+  }, { root: grid, rootMargin: '200px 0px' });
+  return _avtrdbMetaObserver;
+}
+
+// DOM recycler: keeps live memory bounded. Cards scrolled far outside the
+// viewport (>2000px buffer) have their heavy resources torn down (thumbnail
+// image decoded bitmap + in-flight fetch + per-card metadata observer) but
+// the lightweight card skeleton (div + text) stays in the DOM at its
+// position — so scroll position is stable and a scroll-back rebuilds the
+// image via the same avatarObserver lazy-load path. This trades a little DOM
+// node count for rock-solid scroll correctness (no "holes" when scrolling up).
+let _avtrdbRecycler = null;
+const AVTRDB_RECYCLE_BUFFER = 2000; // px outside viewport before teardown
+
+function _ensureRecycler() {
+  if (_avtrdbRecycler) return _avtrdbRecycler;
+  const grid = document.getElementById('avtrdbGrid');
+  // Batch recycle/restore into a single rAF to avoid scroll jank.
+  // Fast scrolling fires the observer for dozens of cards in one tick;
+  // doing querySelector + attribute work synchronously for each one
+  // blocks the main thread and causes visible stutter.
+  const pendingRecycle = new Set();
+  const pendingRestore = new Set();
+  let rafScheduled = false;
+  function flushRecycleQueue() {
+    rafScheduled = false;
+    // Process restores first (user is scrolling towards these)
+    for (const card of pendingRestore) {
+      pendingRecycle.delete(card); // cancel recycle if also queued
+      _restoreCard(card);
+    }
+    pendingRestore.clear();
+    for (const card of pendingRecycle) {
+      _recycleCard(card);
+    }
+    pendingRecycle.clear();
+  }
+  _avtrdbRecycler = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) {
+        pendingRecycle.delete(e.target);
+        pendingRestore.add(e.target);
+      } else {
+        pendingRestore.delete(e.target);
+        pendingRecycle.add(e.target);
+      }
+    }
+    if (!rafScheduled) {
+      rafScheduled = true;
+      requestAnimationFrame(flushRecycleQueue);
+    }
+  }, {
+    root: grid,
+    rootMargin: AVTRDB_RECYCLE_BUFFER + 'px 0px',
+    threshold: 0
+  });
+  return _avtrdbRecycler;
+}
+
+// Rebuild a recycled card's thumbnail when it re-enters the buffer band.
+function _restoreCard(card) {
+  if (!card || !card.isConnected) return;
+  if (card.dataset.recycled !== '1') return; // wasn't torn down
+  const id = card.getAttribute('data-avid');
+  const av = id && _avtrdbDedupMap.get(id);
+  if (!av) return;
+  delete card.dataset.recycled;
+  
+  const img = card.querySelector('.avatar-thumb');
+  if (img) {
+    const thumb = proxyImg(av.image_url || av.imageUrl || av.thumbnailImageUrl || "");
+    const isCached = thumb && loadedImageUrls.has(imageCacheKey(thumb));
+    const wrapper = img.closest('.avatar-thumb-wrapper');
+    if (thumb) {
+      if (isCached) {
+        img.src = thumb;
+      } else {
+        img.dataset.src = thumb;
+        img.classList.add('loading');
+        if (wrapper) wrapper.classList.add('img-loading');
+        if (typeof avatarObserver !== 'undefined') avatarObserver.observe(img);
+      }
+    }
+  }
+}
+
+// Tear down a card's heavy resources (decoded image bitmap + in-flight fetch)
+// but keep the lightweight skeleton in place so scroll position stays correct.
+function _recycleCard(card) {
+  if (!card || !card.isConnected) return;
+  if (card.dataset.recycled === '1') return; // already torn down
+  const img = card.querySelector('.avatar-thumb');
+  if (img) {
+    if (typeof avatarObserver !== 'undefined') {
+      try { avatarObserver.unobserve(img); } catch (_) {}
+    }
+    if (img._abortCtrl) { try { img._abortCtrl.abort(); } catch (_) {} }
+    if (img.src && img.src.startsWith('blob:')) { try { URL.revokeObjectURL(img.src); } catch (_) {} }
+    // Remove this image from the pending imageQueue to prevent a stale fetch
+    // from loading a now-recycled card (which would waste bandwidth + leak a
+    // blob URL that nobody ever sees).
+    if (typeof _imageQueueSet !== 'undefined' && _imageQueueSet.has(img)) {
+      _removeFromImageQueue(img);
+    }
+    img.removeAttribute('data-src');
+    // Using an embedded 1x1 transparent gif instead of global BLANK to be safe
+    img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+    delete img.dataset.loading;
+    delete img.dataset.cancelled;
+    img.classList.remove('loading');
+    const wrapper = img.closest('.avatar-thumb-wrapper');
+    if (wrapper) wrapper.classList.remove('img-loading');
+  }
+  card.dataset.recycled = '1';
 }
 
 function _refreshAvtrdbCard(av) {
@@ -581,192 +875,95 @@ function _rerenderAvtrdbGrid(opts = {}) {
   _avtrdbRenderItems = items;
   _avtrdbRenderedCount = 0;
   if (_avtrdbRenderObserver) { _avtrdbRenderObserver.disconnect(); _avtrdbRenderObserver = null; }
+  if (_avtrdbRecycler) { _avtrdbRecycler.disconnect(); _avtrdbRecycler = null; }
+  if (_avtrdbMetaObserver) { _avtrdbMetaObserver.disconnect(); _avtrdbMetaObserver = null; }
   grid.innerHTML = '';
   _appendAvtrdbRenderBatch(Math.max(AVTRDB_RENDER_BATCH, previousRendered));
 
-  const platLabelMap = { pc:"PC", android:"Quest", ios:"Apple", "pc+android":"PC + Quest", "pc+android+ios":"PC + Quest + Apple" };
-  const platLabel = avtrdbCurrentPlatform ? (platLabelMap[avtrdbCurrentPlatform] || avtrdbCurrentPlatform) : "全平台";
-  const sortLabel = { relevance: '相关度', newest: '最新', name: '名称' }[avtrdbSortMode] || '相关度';
-  const fieldLabel = { all: '全部字段', title: '标题', author: '作者', tags: 'Tag', desc: '描述' }[avtrdbMatchField] || '全部字段';
+  // After a manual re-sort, scroll the user back to the top of the new order
+  // (otherwise the same scroll position points at a totally different item).
+  if (!preserveOrder) {
+    try { (grid.closest('.upload-panel') || document.scrollingElement || document.documentElement).scrollTo({ top: 0 }); } catch (_) {}
+  }
   avtrdbTotalLoaded = items.length;
-  if (stats) stats.textContent = `已显示 ${items.length} 个结果（${platLabel} · ${fieldLabel} · 按${sortLabel}排序）${(_avtrdbHasMore || _communityHasMore) ? " · 还有更多" : " · 全部加载完毕"}`;
+  _updateAvtrdbStats();
 }
 
-function renderEarlyAvtrdbResults() {
-  const grid = document.getElementById("avtrdbGrid");
-  const stats = document.getElementById("avtrdbStats");
-  if (!grid || _avtrdbDisplayOrder.length || _avtrdbDedupMap.size === 0) return;
-  document.getElementById('avtrdb-loading-spinner')?.remove();
-  _rerenderAvtrdbGrid();
-  if (stats) stats.textContent += " · 正在继续补全其它数据库...";
-}
+// renderEarlyAvtrdbResults — DEPRECATED. The streaming avtrdbFetch now flushes
+// each source to the grid the moment it resolves, so there is no "early vs
+// final" distinction. Removed; kept this comment as a tombstone.
 
 async function avtrdbFetch(append, _signal) {
-  // Use the signal from the caller or fall back to the global tab abort signal
+  // Streaming search rewrite (2026-06-19, see memory.md):
+  //   - Each source flushes results to the grid the moment it resolves
+  //     (no Promise.allSettled wait). User sees first cards in <1s.
+  //   - Community sources return their FULL result set in one shot (the `n=`
+  //     param is ignored by all four; verified by direct probing). So one
+  //     request per community source is enough — no Load-More re-fetch.
+  //   - avtrdb is the only source that paginates (page_size capped at 50).
+  //     A background driver auto-flips pages until has_more=false; the
+  //     "Load More" button is removed.
+  // The `append` parameter is preserved for ABI compatibility but is now
+  // effectively always-false: any caller passing true is a stale code path.
   const signal = _signal || currentTabAbortController?.signal;
   const grid = document.getElementById("avtrdbGrid");
-  const stats = document.getElementById("avtrdbStats");
-  const loadMoreBtn = document.getElementById("avtrdbLoadMore");
 
   const requiredPlats = avtrdbCurrentPlatform ? avtrdbCurrentPlatform.split("+") : [];
-  const dedupMap = _avtrdbDedupMap;   // persistent global across Load More
-  const batchIds = new Set();
-  const changedIds = new Set();
 
-  // Collect-only aggregator: dedup + keep the RICHEST record per id.
-  // Rendering is deferred until all sources settle, so we can sort by relevance.
-  const collect = (av) => {
-    const id = av.vrc_id;
-    if (!id) return;
-    if (dedupMap.has(id)) {
-      const existing = dedupMap.get(id);
-      const richness = o => ((o.unityPackages && o.unityPackages.length) ? 2 : 0)
-        + ((o.performance && Object.keys(o.performance).length > 2) ? 1 : 0)
-        + (o.image_url || o.imageUrl ? 1 : 0)
-        + (o.name && o.name !== '未知模型' ? 1 : 0);
-      if (richness(av) > richness(existing)) {
-        // Adopt richer record but keep any fields the old one had
-        dedupMap.set(id, Object.assign({}, existing, av));
-        changedIds.add(id);
-      } else {
-        let changed = false;
-        if (av.description && !existing.description) {
-          existing.description = av.description;
-          changed = true;
-        }
-        if (Array.isArray(av.tags)) {
-          const mergedTags = [...new Set([...(existing.tags || []), ...av.tags])];
-          if (mergedTags.length !== (existing.tags || []).length) changed = true;
-          existing.tags = mergedTags;
-        }
-        if (!existing.image_url && (av.image_url || av.imageUrl)) {
-          existing.image_url = av.image_url || av.imageUrl;
-          changed = true;
-        }
-        if (changed) changedIds.add(id);
-      }
-      return;
-    }
-    dedupMap.set(id, av);
-    batchIds.add(id);
-  };
-
-  let appendedNewCount = 0;
-  const flushAppendResults = () => {
-    if (!append || signal?.aborted || batchIds.size === 0) return;
-    const newItems = _avtrdbSortItems([...batchIds].map(id => dedupMap.get(id)).filter(Boolean))
-      .filter(av => !_avtrdbDisplayOrder.includes(av.vrc_id));
-    if (!newItems.length) {
-      batchIds.clear();
-      changedIds.clear();
-      return;
-    }
-    appendedNewCount += newItems.length;
-    _avtrdbDisplayOrder.push(...newItems.map(av => av.vrc_id));
-    changedIds.forEach(id => _refreshAvtrdbCard(dedupMap.get(id)));
-    batchIds.clear();
-    changedIds.clear();
-    document.getElementById('avtrdb-loadmore-spinner')?.remove();
-    _rerenderAvtrdbGrid({ preserveOrder: true, preserveRendered: true });
-  };
-
-  // Loading spinner on fresh search
+  // Fresh search: show a spinner until the first source resolves.
   if (!append) {
     grid.innerHTML = `<div id="avtrdb-loading-spinner" style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:16px;color:rgba(255,255,255,0.5);">
       <div style="width:48px;height:48px;border:3px solid rgba(255,255,255,0.15);border-top-color:rgba(255,255,255,0.7);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-      <div style="font-size:0.85em;">正在从 5 个数据库搜索并按相关度排序...</div>
+      <div style="font-size:0.85em;">正在从 5 个数据库流式搜索...</div>
     </div>`;
   }
 
-  try {
-    // One AvtrDB page → collect (no render)
-    const startPage = avtrdbPage;
-    const fetchAvtrdbPage = (pageNum) => {
-      let url = `https://api.avtrdb.com/v2/avatar/search?query=${encodeURIComponent(avtrdbCurrentQuery)}&page_size=${append ? 50 : 100}&page=${pageNum}`;
-      if (requiredPlats.length > 0) url += `&compatibility=${requiredPlats[0]}`;
-      return fetchJsonWithTimeout(`/api/proxy?url=${encodeURIComponent(url)}`, { signal, timeoutMs: append ? 7000 : 9000 })
-        .then(data => {
-          if (pageNum === startPage) {
-            _avtrdbHasMore = data.has_more || false;
+  // avtrdb page 0 — fetch + collect + flush, then maybe kick off background driver.
+  let avtrdbUrl = `https://api.avtrdb.com/v2/avatar/search?query=${encodeURIComponent(avtrdbCurrentQuery)}&page_size=50&page=0`;
+  if (requiredPlats.length > 0) avtrdbUrl += `&compatibility=${requiredPlats[0]}`;
+  fetchJsonWithTimeout(`/api/proxy?url=${encodeURIComponent(avtrdbUrl)}`, { signal, timeoutMs: 9000 })
+    .then(data => {
+      if (signal?.aborted) return;
+      _avtrdbHasMore = !!data.has_more;
+      (data.avatars || []).forEach(av => _collectAvatar({
+        ...av, vrc_id: av.vrc_id, image_url: av.image_url,
+        compatibility: av.compatibility || [], performance: av.performance || {}
+      }));
+      _flushStreamedCards();
+      avtrdbPage = 1;
+      if (_avtrdbHasMore) _avtrdbBackgroundDriver();
+    })
+    .catch(() => {});
+
+  // Community DBs — each returns its full set in one HTTP call. Fire all four
+  // in parallel; each flushes independently as soon as it resolves.
+  const dbSources = _communityDbSources(avtrdbCurrentQuery, false);
+  dbSources.forEach(db => {
+    fetchJsonWithTimeout(db.url, { signal, timeoutMs: 14000 })
+      .then(data => {
+        if (signal?.aborted) return;
+        const rawList = Array.isArray(data) ? data : data?.avatars || [];
+        rawList.forEach(av => {
+          if (db.name === 'cute.bet') {
+            _collectAvatar({ ...av, vrc_id: av.id, image_url: av.imageUrl || av.thumbnailImageUrl || "",
+              author: { name: av.authorName || "Unknown", id: av.authorId }, unityPackages: av.unityPackages || [] });
+          } else {
+            _collectAvatar({ vrc_id: av.id, name: av.name || av.avatarName || "未知模型",
+              author: { name: av.authorName || "Unknown", id: av.authorId },
+              image_url: av.imageUrl || av.thumbnailImageUrl || "",
+              performance: av.performance || {},
+              compatibility: av.compatibility || (av.imageUrl ? ["pc"] : []),
+              description: av.description || "" });
           }
-          (data.avatars || []).forEach(av => collect({
-            ...av, vrc_id: av.vrc_id, image_url: av.image_url,
-            compatibility: av.compatibility || [], performance: av.performance || {}
-          }));
-          if (append) flushAppendResults();
-          if (!append && !signal?.aborted) renderEarlyAvtrdbResults();
-        })
-        .catch(() => {});
-    };
+        });
+        _flushStreamedCards();
+      })
+      .catch(() => {});
+  });
 
-    const PAGES_PER_BATCH = append ? 1 : 3;
-    const avtrdbPromises = Array.from({ length: PAGES_PER_BATCH }, (_, i) => fetchAvtrdbPage(startPage + i));
-    avtrdbPage = startPage + PAGES_PER_BATCH - 1;
-
-    // Community DBs — initial search uses the default small result set; Load More
-    // asks VRCX-compatible providers for a larger batch and lets collect() dedup.
-    const communityPromises = [];
-    let communityAdded = false;
-    let communityMayHaveMore = false;
-    const dbSources = _communityDbSources(avtrdbCurrentQuery, append);
-    dbSources.forEach(db => {
-      communityPromises.push(fetchJsonWithTimeout(db.url, { signal, timeoutMs: append ? 7000 : 9000 })
-        .then(data => {
-          const rawList = Array.isArray(data) ? data : data?.avatars || [];
-          if (!append && rawList.length >= 100) communityMayHaveMore = true;
-          const list = append ? rawList : rawList.slice(0, 100);
-          list.forEach(av => {
-            const beforeSize = dedupMap.size;
-            if (db.name === 'cute.bet') {
-              collect({ ...av, vrc_id: av.id, image_url: av.imageUrl || av.thumbnailImageUrl || "",
-                author: { name: av.authorName || "Unknown", id: av.authorId }, unityPackages: av.unityPackages || [] });
-            } else {
-              collect({ vrc_id: av.id, name: av.name || av.avatarName || "未知模型",
-                author: { name: av.authorName || "Unknown", id: av.authorId },
-                image_url: av.imageUrl || av.thumbnailImageUrl || "",
-                performance: av.performance || {},
-                compatibility: av.compatibility || (av.imageUrl ? ["pc"] : []),
-                description: av.description || "" });
-            }
-            if (dedupMap.size > beforeSize) communityAdded = true;
-          });
-          if (append) flushAppendResults();
-        })
-        .catch(() => {}));
-    });
-
-    await Promise.allSettled([...avtrdbPromises, ...communityPromises]);
-    if (signal?.aborted) return;
-    _communityHasMore = append ? communityAdded : communityMayHaveMore;
-
-    document.getElementById('avtrdb-loading-spinner')?.remove();
-
-    if (dedupMap.size === 0) {
-      stats.textContent = "未找到符合条件的模型 / No matching avatars found";
-      grid.innerHTML = `<div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:rgba(255,255,255,0.4);gap:12px;">
-        <div style="font-size:3em;">🔍</div>
-        <div>未找到相关模型 / No avatars found</div>
-      </div>`;
-      loadMoreBtn.style.display = "none";
-      return;
-    }
-
-    // Score, sort, render. Load More must not reshuffle cards the user has
-    // already scanned, so only append newly discovered IDs to the locked order.
-    if (append) {
-      flushAppendResults();
-    } else {
-      _rerenderAvtrdbGrid();
-    }
-    window._avtrdbLoadMoreTarget = null;
-    // If Load More produced no new cards, hide the button to avoid a "clicked, nothing happened" loop.
-    const sourcesHaveMore = _avtrdbHasMore || _communityHasMore;
-    const producedNew = !append || appendedNewCount > 0;
-    loadMoreBtn.style.display = (sourcesHaveMore && producedNew) ? "inline-block" : "none";
-
-  } catch (e) {
-    if (!append) grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#ef4444;">搜索失败: ${escHtml(e.message)}</div>`;
-  }
+  // Don't await — sources flush themselves. After ~15s, if still no results,
+  // the lingering spinner will tell the user something's off (TODO: nicer fail).
+  _updateAvtrdbStats();
 }
 
 

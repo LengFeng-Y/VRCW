@@ -338,7 +338,12 @@ async function fetchAvatars(forceRefresh = false) {
     // If views changed while we waited, abandon stale render
     if (seq !== fetchSeq) return;
     avatars = allFetched;
-    applyFilters();
+    // Only rebuild the grid from scratch on cold load (no cache was rendered).
+    // When renderedFromCache=true, the user already sees a stable grid from IDB;
+    // doing applyFilters() here would flash-rebuild the entire grid with a
+    // potentially different order, causing a jarring visual "jump".
+    // Stage 3 streaming will silently merge any new data card-by-card.
+    if (!renderedFromCache) applyFilters();
     
     // Save basics only
     const basics = allFetched.map(_avatarBasicFromItem).filter(Boolean);
@@ -411,7 +416,7 @@ async function fetchAvatars(forceRefresh = false) {
           const fresh = await fetchOfficialAvatarData(id).catch(() => null);
           if (seq !== fetchSeq || currentCategory === 'mine' || currentTab !== 'download') return;
           if (fresh && fresh.id) {
-            updateAvatarCardStream(fresh);
+            updateAvatarCardStream(fresh, { flash: false });
             dirty = true;
             saveFreshBasics();
           }
@@ -650,6 +655,22 @@ function updateAvatarCardStream(fresh, opts = {}) {
   if (!_isAvatarListRenderable()) {
     _queueAvatarCardUpdate(merged);
     return;
+  }
+  // Skip DOM replacement if the card already exists and no visible data changed.
+  // Stage 3 fetches ~200 avatar details; most return identical data to what
+  // the cache already shows. Replacing the DOM for those creates a jarring
+  // visual flicker (card briefly goes blank + image reloads).
+  const existingCard = avatarCardElements.get(merged.id);
+  if (existingCard && existingCard.parentNode) {
+    const nameEl = existingCard.querySelector('.avatar-name-overlay');
+    const oldName = nameEl ? nameEl.textContent : '';
+    const newName = merged.name || merged.avatarName || '';
+    const badgeEl = existingCard.querySelector('.card-plat-badges, .avatar-badges-row');
+    const oldBadgeText = badgeEl ? badgeEl.textContent.trim() : '';
+    const { hasPC, hasQuest, hasApple } = _platformCheck(merged);
+    const newBadgeText = [hasPC && 'PC', hasQuest && 'Quest', hasApple && 'Apple'].filter(Boolean).join('');
+    // If name and platform badges haven't changed, skip the expensive DOM swap
+    if (oldName === newName && oldBadgeText.replace(/\s+/g,'') === newBadgeText) return;
   }
   _replaceAvatarCard(merged);
   if (opts.flash !== false) {

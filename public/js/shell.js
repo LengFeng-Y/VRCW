@@ -602,12 +602,30 @@ function queueBackgroundTask(taskFn, key = '') {
 }
 
 async function processBackgroundQueue() {
-  if (isPriorityTaskRunning || !backgroundLoadQueue.length) return;
+  // _searchActive: while the user is actively searching (after the first
+  // doAvtrdbSearch in a session, until they leave the search tab), hold off
+  // background work. The browser's 6-concurrent-requests-per-origin limit
+  // means a noisy startup-favorite-index-sync (which can fan out to hundreds
+  // of /api/vrc/avatars/{id} detail fetches) will otherwise starve the 5
+  // streaming search source requests. setSearchActive(false) (called from
+  // switchTab leaving search) re-kicks this drain loop.
+  if (isPriorityTaskRunning || _searchActive || !backgroundLoadQueue.length) return;
   const item = backgroundLoadQueue.shift();
   if (item) {
     try { await item.taskFn(); } catch(e){}
     if (item.key) backgroundTaskKeys.delete(item.key);
     setTimeout(processBackgroundQueue, 500);
+  }
+}
+
+// Search-tab back-pressure flag. Set true by doAvtrdbSearch, cleared by
+// switchTab when leaving the search tab (see below).
+let _searchActive = false;
+function setSearchActive(v) {
+  _searchActive = !!v;
+  if (!_searchActive) {
+    // Drain queue when search ends so deferred startup syncs eventually run.
+    setTimeout(processBackgroundQueue, 50);
   }
 }
 
@@ -675,6 +693,11 @@ function switchTab(tab) {
 
   // If already on this tab, skip the abort+reload dance entirely
   if (isSameTab) return;
+  // Leaving the search tab: release the search-active back-pressure so the
+  // background queue (startup-favorite-index-sync etc.) can drain. If we're
+  // entering search, doAvtrdbSearch will set this true again as soon as the
+  // user types a query.
+  if (tab !== 'search' && typeof setSearchActive === 'function') setSearchActive(false);
   bumpUiEpoch();
   clearBackgroundQueue({ preservePersistent: true });
 

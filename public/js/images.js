@@ -14,10 +14,22 @@
 // - Each image has a 15s timeout so a slow origin cannot monopolize a slot.
 // - Higher concurrency (12) still keeps visible grids filling quickly.
 const imageQueue = [];
+// O(1) membership check: img → true if the img is currently in imageQueue.
+// Replaces the O(n) findIndex scans that blocked the main thread during fast
+// scrolling (30 images × 50-item queue = 1500 comparisons per scroll tick).
+const _imageQueueSet = new WeakSet();
 let runningLoads = 0;
 const MAX_CONCURRENT_IMAGES = 12;
 const loadedImageUrls = new Set();
 const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+// Helper: remove an img from imageQueue + WeakSet in O(n) but only called
+// when we actually know the img IS in the set (O(1) guard at call sites).
+function _removeFromImageQueue(img) {
+  const idx = imageQueue.findIndex(it => it.img === img);
+  if (idx !== -1) imageQueue.splice(idx, 1);
+  _imageQueueSet.delete(img);
+}
 
 function setImageBlobSrc(img, blob) {
   if (!img || !blob) return;
@@ -50,6 +62,7 @@ function processImageQueue() {
   while (runningLoads < MAX_CONCURRENT_IMAGES && imageQueue.length > 0) {
     runningLoads++;
     const { img, src } = imageQueue.shift();
+    _imageQueueSet.delete(img);
 
     // Skip if cancelled while waiting in queue
     if (img.dataset.cancelled) {
@@ -95,7 +108,7 @@ function processImageQueue() {
       const retryCount = parseInt(img.dataset.retry || '0');
       if (retryCount < 2 && !img.dataset.cancelled) {
         img.dataset.retry = retryCount + 1;
-        imageQueue.push({ img, src });
+        imageQueue.push({ img, src }); _imageQueueSet.add(img);
         finishLoad(false);
       } else {
         img.classList.add('failed');
@@ -123,7 +136,7 @@ function processImageQueue() {
               if (recoverSrc) {
                 img.setAttribute('data-src', recoverSrc);
                 img.dataset.loading = '1';
-                imageQueue.push({ img, src: recoverSrc });
+                imageQueue.push({ img, src: recoverSrc }); _imageQueueSet.add(img);
                 processImageQueue();
               }
             };
@@ -150,7 +163,7 @@ function processImageQueue() {
       } else {
         // Yield to priority tasks (tab switches etc.)
         if (isPriorityTaskRunning) {
-          imageQueue.unshift({ img, src });
+          imageQueue.unshift({ img, src }); _imageQueueSet.add(img);
           runningLoads--;
           setTimeout(processImageQueue, 500);
           return;
@@ -189,51 +202,63 @@ function processImageQueue() {
   }
 }
 
+// Batched avatar observer: collects enter/leave events during a scroll tick
+// and flushes them in a single rAF. This prevents dozens of synchronous
+// findIndex + splice operations from blocking the main thread during fast
+// scrolling through 1000+ search results.
+const _avatarObsPendingEnter = new Set();
+const _avatarObsPendingLeave = new Set();
+let _avatarObsRafPending = false;
+
+function _flushAvatarObsQueue() {
+  _avatarObsRafPending = false;
+  // Process enters: queue for load
+  for (const img of _avatarObsPendingEnter) {
+    _avatarObsPendingLeave.delete(img); // cancel any pending leave
+    delete img.dataset.cancelled;
+    const src = img.getAttribute('data-src');
+    if (src && !img.dataset.loading) {
+      img.dataset.loading = '1';
+      imageQueue.push({ img, src }); _imageQueueSet.add(img);
+    }
+    // Skip bubble-to-front — rAF batch already prioritizes recent entries
+  }
+  _avatarObsPendingEnter.clear();
+  // Process leaves: cancel / remove from queue
+  for (const img of _avatarObsPendingLeave) {
+    const src = img.getAttribute('data-src');
+    if (!src) continue;
+    if (_imageQueueSet.has(img)) { // O(1) check instead of O(n) findIndex
+      _removeFromImageQueue(img);
+      delete img.dataset.loading;
+      delete img.dataset.cancelled;
+    }
+    if (img._abortCtrl && !img.dataset.cancelled) {
+      img.dataset.cancelled = '1';
+      img._abortCtrl.abort();
+    }
+  }
+  _avatarObsPendingLeave.clear();
+  // Kick the queue once after all changes
+  processImageQueue();
+}
+
 const avatarObserver = new IntersectionObserver(
   (entries) => {
-    entries.forEach((entry) => {
-      const img = entry.target;
+    for (const entry of entries) {
       if (entry.isIntersecting) {
-        // Entering viewport (or preload zone): clear cancel flag, queue for load
-        delete img.dataset.cancelled;
-        const src = img.getAttribute('data-src');
-        if (src && !img.dataset.loading) {
-          img.dataset.loading = '1';
-          imageQueue.push({ img, src });
-          processImageQueue();
-        } else if (src && img.dataset.loading === '1') {
-          // Already queued but maybe far back behind 500 other items from a
-          // scroll burst — bubble it to the front so currently-visible cards
-          // win the next concurrency slot. We only re-order pending items
-          // (those still in imageQueue); in-flight loads keep going.
-          const idx = imageQueue.findIndex(it => it.img === img);
-          if (idx > 0) {
-            const item = imageQueue.splice(idx, 1)[0];
-            imageQueue.unshift(item);
-          }
-        }
+        _avatarObsPendingLeave.delete(entry.target);
+        _avatarObsPendingEnter.add(entry.target);
       } else {
-        // Leaving viewport: gentle cancel to free concurrency slots.
-        // Remove pending items from queue; abort in-flight fetches.
-        const src = img.getAttribute('data-src');
-        if (!src) return;
-        const qIdx = imageQueue.findIndex(it => it.img === img);
-        if (qIdx !== -1) {
-          imageQueue.splice(qIdx, 1);
-          delete img.dataset.loading;
-          delete img.dataset.cancelled;
-        }
-        if (img._abortCtrl && !img.dataset.cancelled) {
-          img.dataset.cancelled = '1';
-          img._abortCtrl.abort();
-        }
+        _avatarObsPendingEnter.delete(entry.target);
+        _avatarObsPendingLeave.add(entry.target);
       }
-    });
- },
-  // 1500px ≈ 1.5 viewports above and below — fast scrolling stays inside the
-  // preload zone so cards never enter view as blank placeholders. Tradeoff:
-  // slightly more eager fetching, but the IDB blob cache + worker prefetch
-  // make subsequent visits cheap.
+    }
+    if (!_avatarObsRafPending) {
+      _avatarObsRafPending = true;
+      requestAnimationFrame(_flushAvatarObsQueue);
+    }
+  },
   { rootMargin: '600px 0px' }
 );
 
