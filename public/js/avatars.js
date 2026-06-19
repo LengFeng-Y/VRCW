@@ -338,12 +338,9 @@ async function fetchAvatars(forceRefresh = false) {
     // If views changed while we waited, abandon stale render
     if (seq !== fetchSeq) return;
     avatars = allFetched;
-    // Only rebuild the grid from scratch on cold load (no cache was rendered).
-    // When renderedFromCache=true, the user already sees a stable grid from IDB;
-    // doing applyFilters() here would flash-rebuild the entire grid with a
-    // potentially different order, causing a jarring visual "jump".
-    // Stage 3 streaming will silently merge any new data card-by-card.
-    if (!renderedFromCache) applyFilters();
+    // renderGrid now does DOM reconciliation so calling applyFilters() won't flash.
+    // This ensures remote additions/deletions immediately update the grid structure.
+    applyFilters();
     
     // Save basics only
     const basics = allFetched.map(_avatarBasicFromItem).filter(Boolean);
@@ -549,6 +546,10 @@ function _applyFiltersToList(list, q, state, plat) {
 
   // Sort by relevance (score descending), then by updated_at (newest first)
   filtered.sort((a, b) => {
+    const isBad = (x) => x.avatar.isInvalid || x.avatar.releaseStatus === 'unavailable' || x.avatar.releaseStatus === 'hidden' || x.avatar.release_status === 'unavailable' || x.avatar.release_status === 'hidden';
+    const aBad = isBad(a), bBad = isBad(b);
+    if (aBad !== bBad) return aBad ? 1 : -1;
+
     if (b.score !== a.score) return b.score - a.score;
     return (
       new Date(b.avatar.updatedAt || b.avatar.updated_at || 0) -
@@ -686,27 +687,6 @@ function renderGrid(list) {
   const grid = document.getElementById("avatarGrid");
   if (!grid) return;
 
-  // Unobserve all stale images before clearing the grid
-  grid
-    .querySelectorAll(".avatar-thumb[data-src]")
-    .forEach((img) => avatarObserver.unobserve(img));
-    
-  // Clear the image queue to prevent fetching a backlog of ghost images
-  imageQueue.length = 0; 
-
-  grid.innerHTML = "";
-  avatarCardElements.clear();
-
-  // Show empty state when no avatars
-  if (list.length === 0) {
-    grid.innerHTML = `<div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:rgba(255,255,255,0.4);gap:12px;">
-      <div style="font-size:3em;">🎭</div>
-      <div style="font-size:1.1em;">暂无模型 / No avatars found</div>
-      <div style="font-size:0.85em;">点击「刷新」按钮重新加载 / Click Refresh to reload</div>
-    </div>`;
-    document.getElementById("statTotal").textContent = 0;
-    return;
-  }
   const isFavoriteView = currentCategory !== "mine";
 
   // Toggle Action Buttons based on context
@@ -716,17 +696,67 @@ function renderGrid(list) {
   document.getElementById("saveDirGroup")?.classList.toggle("hidden", isFavoriteView);
   document.querySelector('button[onclick="downloadSelected()"]')?.classList.toggle("hidden", isFavoriteView);
 
+  // Show empty state when no avatars
+  if (list.length === 0) {
+    grid.querySelectorAll(".avatar-thumb[data-src]").forEach((img) => avatarObserver.unobserve(img));
+    imageQueue.length = 0; 
+    grid.innerHTML = `<div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:rgba(255,255,255,0.4);gap:12px;">
+      <div style="font-size:3em;">🎭</div>
+      <div style="font-size:1.1em;">暂无模型 / No avatars found</div>
+      <div style="font-size:0.85em;">点击「刷新」按钮重新加载 / Click Refresh to reload</div>
+    </div>`;
+    avatarCardElements.clear();
+    const statEl = document.getElementById("statTotal");
+    if (statEl) statEl.textContent = 0;
+    return;
+  }
+
+  // Fast path for cold boot: if grid is empty, just build normally (no diffing needed)
+  if (avatarCardElements.size === 0) {
+    grid.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    list.forEach((av) => {
+      const card = _buildAvatarCard(av);
+      frag.appendChild(card);
+      avatarCardElements.set(av.id, card);
+    });
+    grid.appendChild(frag);
+    grid.querySelectorAll(".avatar-thumb[data-src]").forEach((img) => avatarObserver.observe(img));
+    const statEl = document.getElementById("statTotal");
+    if (statEl) statEl.textContent = list.length;
+    return;
+  }
+
+  // Reconciliation: re-use DOM nodes so sorting/filtering doesn't flash
+  const frag = document.createDocumentFragment();
+  const keep = new Set(list.map(av => av.id));
+  
+  // Cleanup cards that are removed
+  for (const [id, card] of avatarCardElements.entries()) {
+    if (!keep.has(id)) {
+      _disposeAvatarCard(card);
+      avatarCardElements.delete(id);
+    }
+  }
+
   list.forEach((av) => {
-    const card = _buildAvatarCard(av);
-    grid.appendChild(card);
-    avatarCardElements.set(av.id, card);
+    let card = avatarCardElements.get(av.id);
+    if (!card) {
+      card = _buildAvatarCard(av);
+      avatarCardElements.set(av.id, card);
+      _observeAvatarCardImages(card);
+    }
+    // Append moves the element if it's already in the DOM
+    frag.appendChild(card);
   });
 
-  // Lazy loaded async image queue
-  const imgs = grid.querySelectorAll(".avatar-thumb[data-src]");
-  imgs.forEach((img) => avatarObserver.observe(img));
+  // Since we appendChild on the frag, any card that was in `grid` but NOT in `list`
+  // remains in `grid`. Then we just clear `grid` and append the ordered frag.
+  grid.innerHTML = "";
+  grid.appendChild(frag);
 
-  document.getElementById("statTotal").textContent = list.length;
+  const statEl = document.getElementById("statTotal");
+  if (statEl) statEl.textContent = list.length;
 }
 
 // ── Unfavorite ──

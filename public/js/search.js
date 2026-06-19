@@ -800,19 +800,36 @@ function _avtrdbTextMatchesField(av, q, field) {
 }
 
 function _avtrdbSortItems(items) {
+  const isBad = (av) => {
+    const rs = av.releaseStatus || av.release_status || "";
+    return av.isInvalid || rs === 'unavailable' || rs === 'hidden';
+  };
+
   if (avtrdbSortMode === 'name') {
-    return items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+    return items.sort((a, b) => {
+      const aBad = isBad(a), bBad = isBad(b);
+      if (aBad !== bBad) return aBad ? 1 : -1;
+      return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+    });
   }
   if (avtrdbSortMode === 'newest') {
-    return items.sort((a, b) => new Date(b.updated_at || b.updatedAt || b.created_at || b.createdAt || 0)
-                       - new Date(a.updated_at || a.updatedAt || a.created_at || a.createdAt || 0));
+    return items.sort((a, b) => {
+      const aBad = isBad(a), bBad = isBad(b);
+      if (aBad !== bBad) return aBad ? 1 : -1;
+      return new Date(b.updated_at || b.updatedAt || b.created_at || b.createdAt || 0)
+             - new Date(a.updated_at || a.updatedAt || a.created_at || a.createdAt || 0);
+    });
   }
   items.forEach(av => {
     av._rel = relevanceScore(av, avtrdbCurrentQuery);
     av._qual = qualityScore(av);
   });
-  return items.sort((a, b) => (b._rel - a._rel) || (b._qual - a._qual)
-    || String(a.name || '').localeCompare(String(b.name || '')));
+  return items.sort((a, b) => {
+    const aBad = isBad(a), bBad = isBad(b);
+    if (aBad !== bBad) return aBad ? 1 : -1;
+    return (b._rel - a._rel) || (b._qual - a._qual)
+      || String(a.name || '').localeCompare(String(b.name || ''));
+  });
 }
 
 function _appendAvtrdbRenderBatch(count = AVTRDB_RENDER_BATCH) {
