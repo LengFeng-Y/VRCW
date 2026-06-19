@@ -784,6 +784,10 @@ function _refreshAvtrdbCard(av) {
 function _avtrdbTextMatchesField(av, q, field) {
   const query = String(q || '').trim().toLowerCase();
   if (!query) return true;
+  // 如果是“全部字段”搜索，无条件信任服务端的返回结果（服务端支持模糊匹配 / ES 分词搜索）。
+  // 避免本地的强包含（includes）逻辑误杀服务端的有效搜索结果，导致“已显示 < 已索引”
+  if (!field || field === 'all') return true;
+
   const name = String(av.name || av.avatarName || '').toLowerCase();
   const author = String(av.author?.name || av.authorName || '').toLowerCase();
   const tags = Array.isArray(av.tags) ? av.tags.join(' ').toLowerCase() : '';
@@ -796,7 +800,7 @@ function _avtrdbTextMatchesField(av, q, field) {
   if (field === 'author') return check(author);
   if (field === 'tags') return check(tags);
   if (field === 'desc') return check(desc);
-  return tokens.every(t => name.includes(t) || author.includes(t) || tags.includes(t) || desc.includes(t));
+  return true;
 }
 
 function _avtrdbSortItems(items) {
