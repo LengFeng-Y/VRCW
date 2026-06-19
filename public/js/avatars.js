@@ -1429,6 +1429,20 @@ async function downloadSingleAvatar(av) {
   const card = document.getElementById("card-" + av.id);
   if (card) card.classList.add("downloading");
 
+  // ALWAYS fetch fresh details right before downloading.
+  // The VRChat API often omits 'assetUrl' in list endpoints (like /avatars?user=me).
+  try {
+    const fresh = await fetchOfficialAvatarData(av.id);
+    if (fresh && fresh.id) {
+      av = fresh;
+      if (typeof updateAvatarCardStream === 'function') {
+        updateAvatarCardStream(fresh, { flash: false });
+      }
+    }
+  } catch (e) {
+    console.warn(`[Download] Failed to fetch fresh data for ${av.id}, using cached version:`, e);
+  }
+
   // Collect all candidate URLs (prefer no-variant first, then security, skip impostor)
   const candidateUrls = [];
   const fallbackUrls = [];
