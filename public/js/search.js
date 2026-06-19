@@ -41,6 +41,7 @@ const AVTRDB_RENDER_BATCH = 60;
 let _avtrdbRenderItems = [];
 let _avtrdbRenderedCount = 0;
 let _avtrdbRenderObserver = null;
+let _avtrdbProcessedIds = new Set();
 // The avatar object currently shown in the detail modal. Set by displayAvatarDetail()
 // so the "save to local" fav-menu button has something to pass to saveToLocalFavorite().
 // (Fixes a ReferenceError: the inline onclick referenced an undefined `currentAvatarDetail`.)
@@ -220,6 +221,7 @@ async function doAvtrdbSearch() {
   _avtrdbBgDriverFailedPage = -1;
   _avtrdbRenderItems = [];
   _avtrdbRenderedCount = 0;
+  _avtrdbProcessedIds = new Set();
   if (_avtrdbRenderObserver) { _avtrdbRenderObserver.disconnect(); _avtrdbRenderObserver = null; }
   if (_avtrdbRecycler) { _avtrdbRecycler.disconnect(); _avtrdbRecycler = null; }
   if (_avtrdbMetaObserver) { _avtrdbMetaObserver.disconnect(); _avtrdbMetaObserver = null; }
@@ -463,13 +465,23 @@ function _collectAvatar(av) {
 // loading spinner once we have first cards.
 function _flushStreamedCards() {
   if (_avtrdbDedupMap.size === 0) return;
-  const seen = new Set(_avtrdbDisplayOrder);
+  const requiredPlats = avtrdbCurrentPlatform ? avtrdbCurrentPlatform.split("+") : [];
+  const q = avtrdbCurrentQuery;
   let added = 0;
   for (const [id, av] of _avtrdbDedupMap) {
-    if (seen.has(id)) continue;
-    _avtrdbDisplayOrder.push(id);
-    _avtrdbRenderItems.push(av);
-    added++;
+    if (_avtrdbProcessedIds.has(id)) continue;
+    _avtrdbProcessedIds.add(id);
+    let pass = true;
+    if (requiredPlats.length > 0) {
+      const r = getAvatarPlatforms(av);
+      if (!requiredPlats.every(p => r.has(p))) pass = false;
+    }
+    if (pass && !_avtrdbTextMatchesField(av, q, avtrdbMatchField)) pass = false;
+    if (pass) {
+      _avtrdbDisplayOrder.push(id);
+      _avtrdbRenderItems.push(av);
+      added++;
+    }
   }
   if (added > 0) {
     document.getElementById('avtrdb-loading-spinner')?.remove();
@@ -776,11 +788,15 @@ function _avtrdbTextMatchesField(av, q, field) {
   const author = String(av.author?.name || av.authorName || '').toLowerCase();
   const tags = Array.isArray(av.tags) ? av.tags.join(' ').toLowerCase() : '';
   const desc = String(av.description || '').toLowerCase();
-  if (field === 'title') return name.includes(query);
-  if (field === 'author') return author.includes(query);
-  if (field === 'tags') return tags.includes(query);
-  if (field === 'desc') return desc.includes(query);
-  return name.includes(query) || author.includes(query) || tags.includes(query) || desc.includes(query);
+  
+  const tokens = query.split(/\s+/).filter(Boolean);
+  const check = (text) => tokens.every(t => text.includes(t));
+  
+  if (field === 'title') return check(name);
+  if (field === 'author') return check(author);
+  if (field === 'tags') return check(tags);
+  if (field === 'desc') return check(desc);
+  return tokens.every(t => name.includes(t) || author.includes(t) || tags.includes(t) || desc.includes(t));
 }
 
 function _avtrdbSortItems(items) {
@@ -806,10 +822,16 @@ function _appendAvtrdbRenderBatch(count = AVTRDB_RENDER_BATCH) {
 
   const frag = document.createDocumentFragment();
   const nextCount = Math.min(_avtrdbRenderedCount + count, _avtrdbRenderItems.length);
+  const recycler = _ensureRecycler();
   for (let i = _avtrdbRenderedCount; i < nextCount; i++) {
     const av = _avtrdbRenderItems[i];
     let card = _avtrdbRenderMap.get(av.vrc_id);
-    if (!card) card = _buildAvtrdbCard(av);
+    if (!card) {
+      card = _buildAvtrdbCard(av);
+    } else {
+      recycler.observe(card);
+      if (typeof _ensureMetaObserver === 'function') _ensureMetaObserver().observe(card);
+    }
     frag.appendChild(card);
   }
   _avtrdbRenderedCount = nextCount;
@@ -875,8 +897,7 @@ function _rerenderAvtrdbGrid(opts = {}) {
   _avtrdbRenderItems = items;
   _avtrdbRenderedCount = 0;
   if (_avtrdbRenderObserver) { _avtrdbRenderObserver.disconnect(); _avtrdbRenderObserver = null; }
-  if (_avtrdbRecycler) { _avtrdbRecycler.disconnect(); _avtrdbRecycler = null; }
-  if (_avtrdbMetaObserver) { _avtrdbMetaObserver.disconnect(); _avtrdbMetaObserver = null; }
+  // Do NOT disconnect _avtrdbRecycler or _avtrdbMetaObserver so reused cards can just be re-observed
   grid.innerHTML = '';
   _appendAvtrdbRenderBatch(Math.max(AVTRDB_RENDER_BATCH, previousRendered));
 
