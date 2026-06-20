@@ -10,7 +10,7 @@ const USER_AGENT = "VRCX/1.6.4 (vrcxml@gmail.com)";
 
 const CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-VRC-Auth, X-S3-Url, X-S3-content-md5, X-S3-content-type",
     "Access-Control-Expose-Headers": "X-VRC-Auth",
 };
@@ -52,11 +52,30 @@ function isAllowedTarget(rawUrl) {
     } catch {
         return false;
     }
-    // Only http(s) — blocks file:, data:, gopher:, etc.
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    if (parsed.protocol !== "https:") return false;
     const host = parsed.hostname.toLowerCase();
     if (ALLOWED_HOSTS.has(host)) return true;
     return ALLOWED_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
+
+function isAllowedUploadTarget(rawUrl) {
+    let parsed;
+    try {
+        parsed = new URL(rawUrl);
+    } catch {
+        return false;
+    }
+    if (parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    if (!host.endsWith(".amazonaws.com") && !host.endsWith(".cloudfront.net")) return false;
+    return parsed.searchParams.has("X-Amz-Signature") || parsed.searchParams.has("X-Amz-Credential");
+}
+
+function sanitizeDownloadFilename(filename) {
+    return String(filename || "avatar.vrca")
+        .replace(/[\r\n\"]/g, "_")
+        .replace(/[\\/]/g, "_")
+        .slice(0, 180) || "avatar.vrca";
 }
 
 function jsonResp(data, status = 200, extraHeaders = {}) {
@@ -91,6 +110,7 @@ async function vrcFetch(path, options = {}, authCookies = "") {
         headers,
         body: options.body,
         redirect: "manual",
+        signal: options.signal || AbortSignal.timeout(30000),
     });
 
     // Collect set-cookie headers to pass back
@@ -287,12 +307,12 @@ export default {
         // Uses Cache API for instant hits after batch prefetch.
         if (path === "/api/image" && request.method === "GET") {
             const targetUrl = url.searchParams.get("url");
-            const imageBucket = url.searchParams.get("bucket") || authBucket(auth);
             let imgAuth = auth;
             const authParam = url.searchParams.get("auth");
             if (!imgAuth && authParam) {
                 try { imgAuth = atob(authParam); } catch { imgAuth = authParam; }
             }
+            const imageBucket = authBucket(imgAuth);
             if (!targetUrl) return new Response("Missing url", { status: 400 });
             if (!isAllowedTarget(targetUrl)) {
                 return new Response("Target host not allowed", { status: 403, headers: CORS_HEADERS });
@@ -376,9 +396,14 @@ export default {
         // Batch-downloads images from VRC servers using Worker's high-speed edge bandwidth,
         // storing them in CF Cache API so subsequent /api/image requests are instant cache hits.
         if (path === "/api/images/prefetch" && request.method === "POST") {
-            const body = await request.json();
+            let body;
+            try {
+                body = await request.json();
+            } catch (_) {
+                return jsonResp({ error: "Invalid JSON" }, 400);
+            }
             const urls = (body.urls || []).filter(isAllowedTarget);
-            const imageBucket = body.bucket || authBucket(auth);
+            const imageBucket = authBucket(auth);
             if (!urls.length) return jsonResp({ ok: true, cached: 0 });
 
             const cache = caches.default;
@@ -435,7 +460,7 @@ export default {
             let body = null;
             let headers = {};
 
-            if (["POST", "PUT", "PATCH"].includes(method)) {
+            if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
                 const ct = request.headers.get("content-type") || "";
                 if (ct.includes("application/json")) {
                     body = await request.text();
@@ -474,7 +499,7 @@ export default {
         // Since this response is same-origin, browser `a.download` attribute works correctly.
         if (path === "/api/download" && request.method === "GET") {
             const vrcUrl = url.searchParams.get("url");
-            const filename = url.searchParams.get("filename") || "avatar.vrca";
+            const filename = sanitizeDownloadFilename(url.searchParams.get("filename") || "avatar.vrca");
             // Auth passed as query param since <a>.click() cannot send custom headers
             const authParam = url.searchParams.get("auth");
             let downloadAuth = auth; // from X-VRC-Auth header (normal apiCall)
@@ -495,8 +520,11 @@ export default {
                         headers: { "User-Agent": USER_AGENT, ...(authCookies ? { "Cookie": authCookies } : {}) },
                         redirect: "manual",
                     });
-                    if (step.status === 301 || step.status === 302) {
-                        currentUrl = step.headers.get("Location") || currentUrl;
+                    if (step.status === 301 || step.status === 302 || step.status === 303 || step.status === 307 || step.status === 308) {
+                        const location = step.headers.get("Location");
+                        if (!location) break;
+                        currentUrl = new URL(location, currentUrl).toString();
+                        if (!isAllowedTarget(currentUrl)) return { error: 403 };
                         resolved = currentUrl;
                         continue;
                     }
@@ -512,11 +540,14 @@ export default {
             if (resolved.error === 401) return jsonResp({ error: "VRChat auth expired" }, 401);
             if (resolved.error === 403) return jsonResp({ error: "Redirect target not allowed" }, 403);
             let cdnUrl = resolved.url;
+            if (!isAllowedTarget(cdnUrl)) return jsonResp({ error: "CDN target not allowed" }, 403);
 
             // Step 2: Fetch from CDN and stream back with Content-Disposition
             let cdnResp = await fetch(cdnUrl, {
                 method: "GET",
                 headers: { "User-Agent": USER_AGENT },
+                redirect: "manual",
+                signal: AbortSignal.timeout(30000),
             });
 
             // Retry on 403: the pre-signed S3 URL may have expired, re-resolve from scratch
@@ -525,9 +556,12 @@ export default {
                 if (resolved.error === 401) return jsonResp({ error: "VRChat auth expired" }, 401);
                 if (resolved.error === 403) return jsonResp({ error: "Redirect target not allowed" }, 403);
                 cdnUrl = resolved.url;
+                if (!isAllowedTarget(cdnUrl)) return jsonResp({ error: "CDN target not allowed" }, 403);
                 cdnResp = await fetch(cdnUrl, {
                     method: "GET",
                     headers: { "User-Agent": USER_AGENT },
+                    redirect: "manual",
+                    signal: AbortSignal.timeout(30000),
                 });
             }
 
@@ -562,8 +596,10 @@ export default {
         // If content-type is NOT in X-Amz-SignedHeaders, this extra header breaks S3 signature → 403.
         // Fix: wrap body in Blob with empty type to suppress automatic Content-Type injection.
         if (path === "/api/s3proxy" && request.method === "PUT") {
+            if (!auth) return jsonResp({ error: "Missing auth" }, 401);
             const s3Url = request.headers.get("X-S3-Url");
             if (!s3Url) return jsonResp({ error: "Missing X-S3-Url header" }, 400);
+            if (!isAllowedUploadTarget(s3Url)) return jsonResp({ error: "Upload target not allowed" }, 403);
 
             // Buffer body to avoid Transfer-Encoding:chunked
             const bodyBuffer = await request.arrayBuffer();
@@ -601,6 +637,8 @@ export default {
                 method: "PUT",
                 headers: s3Headers,
                 body: bodyBlob,
+                redirect: "manual",
+                signal: AbortSignal.timeout(30000),
             });
 
             const etag = s3Resp.headers.get("ETag") || "";

@@ -17,6 +17,15 @@ let _avtrdbHasMore = false; // avtrdb has more pages (set by page responses)
 let _avtrdbBgDriverRunning = false;
 let _avtrdbBgDriverAbortEpoch = 0; // bumped on every new search to stop a stale driver
 let _avtrdbBgDriverFailedPage = -1; // page that failed twice → driver stopped
+let _searchAbortController = null;
+
+function _newSearchSignal() {
+  if (_searchAbortController) {
+    try { _searchAbortController.abort(); } catch (_) {}
+  }
+  _searchAbortController = new AbortController();
+  return _searchAbortController.signal;
+}
 
 function _communityDbSources(query, append) {
   const suffix = append ? '&n=' + COMMUNITY_LOAD_MORE_LIMIT : '';
@@ -65,7 +74,11 @@ function fetchJsonWithTimeout(url, opts = {}) {
     else parentSignal.addEventListener('abort', abortFromParent, { once: true });
   }
   return fetch(url, { signal: ctrl.signal })
-    .then(r => r.json())
+    .then(r => {
+      if (r.status === 499) throw new DOMException('Aborted', 'AbortError');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
     .finally(() => {
       clearTimeout(timer);
       if (parentSignal) parentSignal.removeEventListener('abort', abortFromParent);
@@ -192,16 +205,9 @@ async function doAvtrdbSearch() {
   avtrdbCurrentPlatform = platform;
   window.searchCurrentCat = cat;
 
-  // Abort ALL in-flight requests from the previous search (and from the
-  // previous tab's apiCall traffic that hangs off this controller). Without
-  // this, a second search would race against the first search's 5 source
-  // fetches + background driver, and the stale responses would flush
-  // "previous keyword" cards into the new grid. Must abort-then-recreate
-  // BEFORE firing new fetches so the new fetches attach to a fresh controller.
-  if (currentTabAbortController) {
-    try { currentTabAbortController.abort(); } catch (_) {}
-  }
-  currentTabAbortController = new AbortController();
+  // Abort only the previous search. Tab navigation owns currentTabAbortController;
+  // sharing it here lets search cancel unrelated tab work and vice versa.
+  const searchSignal = _newSearchSignal();
 
   // Tell the background queue to hold off while the user is actively
   // searching — startup favorite-index sync / world-detail prefetches would
@@ -234,13 +240,13 @@ async function doAvtrdbSearch() {
   document.getElementById("avtrdbStats").textContent = "";
   
   if (cat === 'avatars') {
-    await avtrdbFetch(false);
+    await avtrdbFetch(false, searchSignal);
   } else {
-    await vrcdbFetch(cat, query);
+    await vrcdbFetch(cat, query, searchSignal);
   }
 }
 
-async function vrcdbFetch(cat, query) {
+async function vrcdbFetch(cat, query, signal) {
   const grid = document.getElementById("avtrdbGrid");
   const stats = document.getElementById("avtrdbStats");
   
@@ -250,7 +256,9 @@ async function vrcdbFetch(cat, query) {
     else if (cat === 'worlds') url = `/api/vrc/worlds?search=${encodeURIComponent(query)}&n=50`;
     else if (cat === 'groups') url = `/api/vrc/groups?query=${encodeURIComponent(query)}&n=50`;
     
-    const resp = await apiCall(url);
+    const resp = await apiCall(url, { signal, noDedupe: true });
+    if (resp.status === 499) return;
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     
     if (!data || data.length === 0) {
@@ -523,12 +531,11 @@ function _updateAvtrdbStats() {
 // NOT in this driver — they each fire one HTTP request from avtrdbFetch and
 // flush independently, so they're already done by the time the driver runs.
 // If the driver stops, only avtrdb pagination stops; community results stay.
-async function _avtrdbBackgroundDriver() {
+async function _avtrdbBackgroundDriver(signal) {
   if (_avtrdbBgDriverRunning) return;
   _avtrdbBgDriverRunning = true;
   const myEpoch = _avtrdbBgDriverAbortEpoch;
   _avtrdbBgDriverFailedPage = -1;
-  const signal = currentTabAbortController?.signal;
   const MAX_RETRIES = 10;
   const sleep = (ms) => new Promise((res, rej) => {
     const t = setTimeout(res, ms);
@@ -973,7 +980,7 @@ async function avtrdbFetch(append, _signal) {
       }));
       _flushStreamedCards();
       avtrdbPage = 1;
-      if (_avtrdbHasMore) _avtrdbBackgroundDriver();
+      if (_avtrdbHasMore) _avtrdbBackgroundDriver(signal);
     })
     .catch(() => {});
 

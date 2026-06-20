@@ -11,8 +11,11 @@ const STRIP_HEADERS = new Set([
     'x-vercel-id', 'x-vercel-ip-country', 'x-vercel-ip-city',
     'x-vercel-ip-timezone', 'x-vercel-ip-latitude', 'x-vercel-ip-longitude',
     'x-forwarded-host', 'x-forwarded-proto',
-    'cdn-loop', 'transfer-encoding'
+    'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
+    'te', 'trailer', 'transfer-encoding', 'upgrade', 'content-encoding',
+    'cdn-loop'
 ]);
+const PROXY_TIMEOUT_MS = 30000;
 
 export default function handler(req, res) {
     const secret = process.env.VPS_PROXY_SECRET;
@@ -114,16 +117,20 @@ export default function handler(req, res) {
         }
     }
 
-    const vrcReq = https.request(targetUrl, { method: req.method, headers }, (vrcRes) => {
+    const vrcReq = https.request(targetUrl, { method: req.method, headers, timeout: PROXY_TIMEOUT_MS }, (vrcRes) => {
         const resHeaders = { ...vrcRes.headers };
-        delete resHeaders['content-encoding'];
-        delete resHeaders['transfer-encoding'];
+        for (const h of STRIP_HEADERS) delete resHeaders[h];
         res.writeHead(vrcRes.statusCode, resHeaders);
         vrcRes.pipe(res);
     });
 
+    vrcReq.setTimeout(PROXY_TIMEOUT_MS, () => {
+        vrcReq.destroy(new Error('Upstream timeout'));
+    });
+
     vrcReq.on('error', (err) => {
-        res.status(500).json({ error: err.message });
+        if (!res.headersSent) res.status(err.message === 'Upstream timeout' ? 504 : 500).json({ error: err.message });
+        else res.end();
     });
     
     req.pipe(vrcReq);

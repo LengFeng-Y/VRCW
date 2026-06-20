@@ -178,13 +178,13 @@ async function fetchSubscriptions(container, gen) {
     container.innerHTML += subs.map(s => `<div class="my-profile-card" style="margin-bottom:12px;">
       <h3 style="color:#d4d4d8;margin-bottom:4px;">${escHtml(s.description || s.tier || 'VRChat Plus')}</h3>
       <div style="font-size:0.8rem;color:var(--text-secondary);">
-        状态: <span style="color:var(--success);">${s.status||'active'}</span><br>
-        类型: ${s.store||'Unknown'}<br>
-        过期时间: ${s.expires ? new Date(s.expires).toLocaleString() : '永久'}
+        状态: <span style="color:var(--success);">${escHtml(s.status || 'active')}</span><br>
+        类型: ${escHtml(s.store || 'Unknown')}<br>
+        过期时间: ${escHtml(s.expires ? new Date(s.expires).toLocaleString() : '永久')}
       </div>
     </div>`).join('');
   } catch(e) {
-    container.innerHTML = `<div style="color:var(--error);">Failed to load subscriptions: ${e.message}</div>`;
+    container.innerHTML = `<div style="color:var(--error);">Failed to load subscriptions: ${escHtml(e.message)}</div>`;
   }
 }
 
