@@ -1167,7 +1167,12 @@ function editAvatar(id) {
   currentEditId = id;
   document.getElementById("editName").value = av.name || "";
   document.getElementById("editDesc").value = av.description || "";
-  document.getElementById("editStatus").value = av.releaseStatus || "private";
+  // Sync the whole glass-select (hidden input + visible label + selected
+  // highlight) to the avatar's actual releaseStatus. Setting only
+  // #editStatus.value left the trigger label stuck on "Private" for models
+  // that were actually public.
+  const statusSelect = document.getElementById("editStatus").closest('.glass-select');
+  setGlassSelectValue(statusSelect, av.releaseStatus || "private");
   document.getElementById("editTags").value = (av.tags || [])
     .filter((t) => !t.startsWith("author_tag"))
     .join(", ");

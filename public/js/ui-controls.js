@@ -113,24 +113,54 @@ function toggleGlassSelect(e, el) {
   }
 }
 
+// Programmatically set a glass-select's value and sync the visible label +
+// `.selected` highlight, mirroring what selectGlassOption does on user click.
+// editAvatar needs this: setting only the hidden input's value leaves the
+// trigger label stuck on the old option (e.g. showing "Private" for a model
+// whose releaseStatus is actually public).
+function setGlassSelectValue(select, val) {
+  if (!select) return;
+  const input = select.querySelector('input[type="hidden"]');
+  if (input) input.value = val;
+  const label = select.querySelector('.selected-label');
+  let matched = null;
+  getGlassSelectOptions(select).querySelectorAll('.glass-option').forEach(opt => {
+    // Match either the option's declared value (onclick 'private'/'public')
+    // or, failing that, case-insensitive text. Classic defines option values
+    // inline via selectGlassOption(this, 'private'); there is no data-value
+    // attribute today, so we fall back to text for robustness.
+    const declared = opt.getAttribute('data-value') || opt.getAttribute('data-glass-value');
+    const matches = declared ? declared === val : (opt.textContent || '').trim().toLowerCase() === String(val).toLowerCase();
+    if (matches) {
+      matched = opt;
+    } else {
+      opt.classList.remove('selected');
+    }
+  });
+  if (matched) {
+    matched.classList.add('selected');
+    if (label) {
+      label.textContent = matched.textContent;
+      const i18nKey = matched.getAttribute('data-i18n');
+      if (i18nKey) {
+        label.setAttribute('data-i18n', i18nKey);
+        const translated = t(i18nKey);
+        if (translated) label.textContent = translated;
+      } else {
+        label.removeAttribute('data-i18n');
+      }
+    }
+  }
+}
+
 function selectGlassOption(e, el, val, callbackName) {
   e.stopPropagation();
   const select = el.closest('.glass-select') || el.parentNode.__glassSelectOwner;
   if (!select) return;
-  const input = select.querySelector('input[type="hidden"]');
-  const label = select.querySelector('.selected-label');
-  if (input) input.value = val;
-  if (label) label.textContent = el.textContent;
-
-  const i18nKey = el.getAttribute('data-i18n');
-  if (label && i18nKey) {
-    label.setAttribute('data-i18n', i18nKey);
-    const translated = t(i18nKey);
-    if (translated) label.textContent = translated;
-  } else if (label) {
-    label.removeAttribute('data-i18n');
-  }
-
+  setGlassSelectValue(select, val);
+  // Mirror the option the user clicked onto `.selected` even when its declared
+  // value did not match (setGlassSelectValue falls back to text, but the user's
+  // explicit click should always win visually).
   getGlassSelectOptions(select).querySelectorAll('.glass-option').forEach(opt => opt.classList.remove('selected'));
   el.classList.add('selected');
   select.classList.remove('active');
@@ -151,5 +181,6 @@ document.addEventListener('click', () => {
 VRCW.registerModule('uiControls', {
   toggleGlassSelect,
   selectGlassOption,
+  setGlassSelectValue,
 });
 renderAppVersionInfo();
