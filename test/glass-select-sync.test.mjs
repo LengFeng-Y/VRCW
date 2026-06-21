@@ -133,3 +133,63 @@ test('setGlassSelectValue falls back to private when value is private', () => {
   assert.equal(optPrivate.classList.contains('selected'), true);
   assert.equal(optPublic.classList.contains('selected'), false);
 });
+
+// Reproduces the real-world regression: applyI18n replaces option textContent
+// with translations (e.g. Private→私有, Public→公开). The text-fallback match
+// in setGlassSelectValue must NOT rely on textContent, or it breaks for every
+// glass-select once the UI is localized. Options declare their value via
+// data-value so matching survives i18n.
+function buildEditStatusSelectI18n() {
+  const select = makeEl('div', { class: 'glass-select' });
+  const trigger = makeEl('div', { class: 'glass-select-trigger' });
+  const label = makeEl('span', { class: 'selected-label' }); label.attributes['data-i18n'] = 'filterPrivate'; label._text = '私有';
+  trigger.appendChild(label);
+  trigger.appendChild(makeEl('span', { class: 'chevron' }));
+  select.appendChild(trigger);
+
+  const options = makeEl('div', { class: 'glass-select-options' });
+  const optPrivate = makeEl('div', { class: 'glass-option selected' }); optPrivate.setAttribute('data-value', 'private'); optPrivate.setAttribute('data-i18n', 'filterPrivate'); optPrivate._text = '私有';
+  const optPublic = makeEl('div', { class: 'glass-option' }); optPublic.setAttribute('data-value', 'public'); optPublic.setAttribute('data-i18n', 'filterPublic'); optPublic._text = '公开';
+  options.appendChild(optPrivate); options.appendChild(optPublic);
+  select.appendChild(options);
+
+  const input = makeEl('input'); input.tagName = 'INPUT'; input.attributes.type = 'hidden'; input.attributes.id = 'editStatus'; input.value = 'private';
+  select.appendChild(input);
+  return { select, label, optPrivate, optPublic, input };
+}
+
+test('setGlassSelectValue syncs label and selected class when options are i18n-translated (data-value wins over text)', () => {
+  const { select, label, optPrivate, optPublic, input } = buildEditStatusSelectI18n();
+  exported.setGlassSelectValue(select, 'public');
+  assert.equal(input.value, 'public', 'hidden input holds public');
+  assert.equal(label.textContent, '公开', 'label reflects the translated public option');
+  assert.equal(optPublic.classList.contains('selected'), true, 'public option selected');
+  assert.equal(optPrivate.classList.contains('selected'), false, 'private option deselected');
+});
+
+// Reproduces the original bug directly: WITHOUT data-value, i18n-translated
+// option text breaks the text-fallback match, so setGlassSelectValue must not
+// silently leave the label untouched. We assert that the contract is satisfied
+// via data-value (the fix in index.html), and that bare text matching is NOT
+// the relied-upon path. This test uses data-value because that is the fix.
+test('setGlassSelectValue does not match by translated text when data-value is absent (documents the pitfall)', () => {
+  const select = makeEl('div', { class: 'glass-select' });
+  const trigger = makeEl('div', { class: 'glass-select-trigger' });
+  const label = makeEl('span', { class: 'selected-label' }); label._text = '私有';
+  trigger.appendChild(label); trigger.appendChild(makeEl('span', { class: 'chevron' }));
+  select.appendChild(trigger);
+  const options = makeEl('div', { class: 'glass-select-options' });
+  const optPrivate = makeEl('div', { class: 'glass-option selected' }); optPrivate._text = '私有';
+  const optPublic = makeEl('div', { class: 'glass-option' }); optPublic._text = '公开';
+  options.appendChild(optPrivate); options.appendChild(optPublic);
+  select.appendChild(options);
+  const input = makeEl('input'); input.tagName = 'INPUT'; input.value = 'private';
+  select.appendChild(input);
+
+  // Without data-value, text fallback compares '公开' === 'public' → no match.
+  // The label is NOT updated. This documents why index.html must declare
+  // data-value on every glass-option that setGlassSelectValue targets.
+  exported.setGlassSelectValue(select, 'public');
+  assert.equal(label.textContent, '私有', 'without data-value the label stays stale (pitfall)');
+  assert.equal(input.value, 'public', 'hidden input is still set correctly');
+});
