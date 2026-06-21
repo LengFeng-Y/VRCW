@@ -31,6 +31,15 @@ function restoreGlassSelectOptions(opts) {
 
 function resetGlassSelectOptions(opts) {
   if (!opts) return;
+  // Hide immediately BEFORE removing positional overrides.
+  // Without this, removing position:fixed restores the CSS default
+  // `transition: all 0.3s`, causing the panel to animate from its
+  // fixed viewport coords back to the default absolute position —
+  // the "fly across the screen" artifact on close.
+  opts.style.setProperty('opacity', '0', 'important');
+  opts.style.setProperty('pointer-events', 'none', 'important');
+  opts.style.setProperty('transition', 'none', 'important');
+  // Now safe to remove all positional overrides; panel is invisible
   opts.style.removeProperty('position');
   opts.style.removeProperty('top');
   opts.style.removeProperty('left');
@@ -38,10 +47,13 @@ function resetGlassSelectOptions(opts) {
   opts.style.removeProperty('width');
   opts.style.removeProperty('max-height');
   opts.style.removeProperty('overflow-y');
+  // Finally remove the hide overrides so CSS defaults take over
+  // (opacity:0 + pointer-events:none are already the CSS defaults
+  // for .glass-select-options when the parent lacks .active)
   opts.style.removeProperty('opacity');
-  opts.style.removeProperty('transform');
   opts.style.removeProperty('pointer-events');
   opts.style.removeProperty('transition');
+  opts.style.removeProperty('transform');
   restoreGlassSelectOptions(opts);
 }
 
@@ -53,16 +65,24 @@ function positionGlassSelectOptions(el) {
   const width = Math.max(r.width, 160);
   const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
 
-  if (el.closest('.search-box-glass') && !isMobile) {
-    // Search bar lives inside a blurred glass container. In Chromium,
-    // backdrop-filter can become a containing block for position: fixed,
-    // which double-applies the search bar offset on desktop and sends the
-    // dropdown off-screen. Keep desktop search dropdowns anchored to their select.
+  // Detect if the glass-select lives inside a backdrop-filter or modal context.
+  // In Chromium, backdrop-filter creates a new containing block that breaks
+  // position:fixed (coords become relative to the filter ancestor, not viewport).
+  // The .modal overlay uses backdrop-filter:blur(4px), and .search-box-glass uses
+  // backdrop-filter:blur(12px). For these contexts, use absolute positioning
+  // anchored to the glass-select itself so the dropdown stays next to its trigger.
+  const inBackdropCtx = !!(el.closest('.modal') || (el.closest('.search-box-glass') && !isMobile));
+
+  if (inBackdropCtx) {
     opts.style.position = 'absolute';
-    opts.style.top = 'calc(100% + 10px)';
+    opts.style.top = 'calc(100% + 6px)';
     opts.style.left = '0';
     opts.style.right = 'auto';
     opts.style.width = width + 'px';
+    opts.style.setProperty('opacity', '1', 'important');
+    opts.style.setProperty('transform', 'translateY(0)', 'important');
+    opts.style.setProperty('pointer-events', 'auto', 'important');
+    opts.style.setProperty('transition', 'none', 'important');
     return;
   }
 

@@ -133,15 +133,17 @@ async function doLogin() {
 
   lastAttemptUser = user;
   const btn = document.getElementById("btnLogin");
-  // Visible "登录中..." state — previously the button just disabled silently,
-  // making slow networks look like the click did nothing.
   const _origLabel = btn.textContent;
+  const oldWidth = btn.offsetWidth;
+  if (oldWidth) btn.style.width = oldWidth + 'px'; // prevent jitter
   btn.disabled = true;
-  btn.textContent = "登录中...";
+  btn.innerHTML = `<div class="btn-spinner" style="margin-right:6px;"></div> 登录中...`;
   const errEl = document.getElementById("login-error");
   errEl.style.display = "none";
   const lpEl = document.getElementById('loginplace-section');
   if (lpEl) lpEl.style.display = 'none';
+
+  let _rateLimited = false; // flag: if rate-limited, finally must NOT re-enable btn
 
   try {
     const fp = await getDeviceFingerprint();
@@ -157,6 +159,7 @@ async function doLogin() {
 
     // Rate-limit detection
     if (data.rateLimited) {
+      _rateLimited = true;
       let secs = data.retryAfterSeconds || 60;
       errEl.textContent = `VRChat 登录请求过于频繁，请等待 ${secs} 秒后重试。`;
       errEl.style.display = "block";
@@ -167,6 +170,8 @@ async function doLogin() {
         if (secs <= 0) {
           clearInterval(countdown);
           btn.disabled = false;
+          btn.textContent = _origLabel;
+          btn.style.width = '';
           errEl.style.display = "none";
         }
       }, 1000);
@@ -206,9 +211,15 @@ async function doLogin() {
   } catch (e) {
     errEl.textContent = "Network error: " + e.message;
     errEl.style.display = "block";
+  } finally {
+    // Don't re-enable while rate-limit countdown is running; the countdown
+    // callback owns the button state until the timer expires.
+    if (!_rateLimited) {
+      btn.disabled = false;
+      btn.textContent = _origLabel;
+      btn.style.width = '';
+    }
   }
-  btn.disabled = false;
-  btn.textContent = _origLabel;
 }
 
 async function doVerify2FA() {
@@ -217,7 +228,14 @@ async function doVerify2FA() {
   const btn = document.querySelector("#tfa-section button");
   // Visible "验证中..." state for slow links.
   let _vfOrig = '';
-  if (btn) { _vfOrig = btn.textContent; btn.disabled = true; btn.textContent = "验证中..."; }
+  let _vfOldWidth = 0;
+  if (btn) {
+    _vfOrig = btn.textContent;
+    _vfOldWidth = btn.offsetWidth;
+    if (_vfOldWidth) btn.style.width = _vfOldWidth + 'px';
+    btn.disabled = true;
+    btn.innerHTML = `<div class="btn-spinner" style="margin-right:6px;"></div> 验证中...`;
+  }
   // Map VRChat's requiresTwoFactorAuth methods to the verify endpoint type.
   // VRChat reports "emailOtp", "totp", and/or "otp" (recovery codes).
   const methods = (window._tfaMethods || []).map(m => String(m).toLowerCase());
@@ -236,7 +254,11 @@ async function doVerify2FA() {
   } catch (e) {
     alert("Network error: " + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = _vfOrig || btn.textContent; }
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = _vfOrig || btn.textContent;
+      btn.style.width = '';
+    }
   }
 }
 

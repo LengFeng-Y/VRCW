@@ -238,14 +238,28 @@ async function doAvtrdbSearch() {
   if (searchGridClass) grid.classList.add(searchGridClass);
   grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:rgba(255,255,255,0.4);">搜索中...</div>`;
   document.getElementById("avtrdbStats").textContent = "";
+  const btnSearch = document.getElementById("btnSearchMain");
+  const btnIcon = btnSearch?.querySelector('.search-btn-icon');
+  const originalIcon = btnIcon?.textContent || '🔍';
   
-  if (cat === 'avatars') {
-    await avtrdbFetch(false, searchSignal);
-  } else {
-    await vrcdbFetch(cat, query, searchSignal);
+  if (btnSearch) {
+    btnSearch.disabled = true;
+    if (btnIcon) btnIcon.innerHTML = `<div class="btn-spinner"></div>`;
+  }
+
+  try {
+    if (cat === 'avatars') {
+      await avtrdbFetch(false, searchSignal);
+    } else {
+      await vrcdbFetch(cat, query, searchSignal);
+    }
+  } finally {
+    if (btnSearch) {
+      btnSearch.disabled = false;
+      if (btnIcon) btnIcon.textContent = originalIcon;
+    }
   }
 }
-
 async function vrcdbFetch(cat, query, signal) {
   const grid = document.getElementById("avtrdbGrid");
   const stats = document.getElementById("avtrdbStats");

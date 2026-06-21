@@ -1233,7 +1233,9 @@ async function saveEditAvatar() {
 
   const btn = document.getElementById("btnSaveEdit");
   const oldText = btn.textContent;
-  btn.textContent = "...";
+  const oldWidth = btn.offsetWidth;
+  if (oldWidth) btn.style.width = oldWidth + 'px'; // prevent jitter
+  btn.innerHTML = `<div class="btn-spinner" style="margin-right:6px;"></div>`;
   btn.disabled = true;
 
   try {
@@ -1241,12 +1243,12 @@ async function saveEditAvatar() {
     let newImageUrl = null;
     const thumbInput = document.getElementById("editThumbInput");
     if (thumbInput && thumbInput.files.length > 0) {
-      btn.textContent = "图片上传中...";
+      btn.innerHTML = `<div class="btn-spinner" style="margin-right:6px;"></div> 图片上传中...`;
       logMsg(`🖼️ Uploading new thumbnail for ${name}...`, "info");
       newImageUrl = await uploadImageToVRChat(thumbInput.files[0], name);
     }
 
-    btn.textContent = "保存中...";
+    btn.innerHTML = `<div class="btn-spinner" style="margin-right:6px;"></div> 保存中...`;
     logMsg(`✏️ Updating ${name}...`, "info");
     const payload = {
       name,
@@ -1302,6 +1304,7 @@ async function saveEditAvatar() {
   } finally {
     btn.textContent = oldText;
     btn.disabled = false;
+    btn.style.width = '';
   }
 }
 

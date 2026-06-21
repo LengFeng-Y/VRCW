@@ -715,6 +715,17 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   }
 }
 
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
 /* State 3: Failed — dark bg on image + error icon on wrapper */
 .avatar-thumb.failed {
   background: var(--bg-secondary);
@@ -2967,7 +2978,7 @@ select.input-field {
     right: 0;
     top: 100%;
     border-radius: 16px;     /* restored — was incorrectly set to 0 */
-    z-index: 3000 !important; /* above grid stacking context */
+    z-index: 2500 !important; /* above grid stacking context, below ctx-menu (3000) */
   }
 
   .mobile-hide {
@@ -2995,6 +3006,13 @@ select.input-field {
     padding: 0 !important;
     justify-content: center;
     flex: 0 0 42px;
+  }
+
+  .avatar-filter-bar .glass-search-input-pill:focus-within {
+    width: 140px !important;
+    flex: 0 0 140px !important;
+    padding: 0 12px !important;
+    justify-content: flex-start !important;
   }
 
   .avatar-filter-bar .glass-select-trigger {
@@ -3088,7 +3106,7 @@ select.input-field {
 
   /* Info col: full width, natural height */
   .world-detail-info-col {
-    overflow: visible !important;
+    overflow: hidden !important;
     flex: none !important;
   }
 
@@ -3103,7 +3121,7 @@ select.input-field {
 
   .world-detail-scroll {
     padding: 14px 16px !important;
-    overflow: visible !important;
+    overflow: hidden !important;
     flex: none !important;
   }
 
