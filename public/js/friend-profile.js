@@ -121,13 +121,13 @@ function _renderFriendProfileUI(f, modal) {
   if (modBadge) {
     if (isBlocked) {
       modBadge.style.display = '';
-      modBadge.textContent = '🚫 已屏蔽';
+      modBadge.innerHTML = '<i class="fa-solid fa-ban"></i> 已屏蔽';
       modBadge.style.background = 'rgba(239, 68, 68, 0.2)';
       modBadge.style.color = '#ef4444';
       modBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
     } else if (isMuted) {
       modBadge.style.display = '';
-      modBadge.textContent = '🔇 已静音';
+      modBadge.innerHTML = '<i class="fa-solid fa-volume-xmark"></i> 已静音';
       modBadge.style.background = 'rgba(245, 158, 11, 0.2)';
       modBadge.style.color = '#f59e0b';
       modBadge.style.border = '1px solid rgba(245, 158, 11, 0.4)';
@@ -151,13 +151,13 @@ function _renderFriendProfileUI(f, modal) {
   
   const myLoc = (window.myProfileData && window.myProfileData.location) || '';
   const isMine = f.location && myLoc && f.location === myLoc && f.location !== 'offline' && f.location !== 'private';
-  const isMineTag = isMine ? ' <span style="font-size:0.85em;background:rgba(255, 255, 255, 0.3);color:#d4d4d8;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle;">📍 你也在这里</span>' : '';
+  const isMineTag = isMine ? ' <span style="font-size:0.85em;background:rgba(255, 255, 255, 0.3);color:#d4d4d8;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle;"><i class="fa-solid fa-location-dot"></i> 你也在这里</span>' : '';
 
   if (loc.isOffline) {
     locSection.style.display = 'none';
   } else if (loc.isPrivate || f.location === 'private') {
     locSection.style.display = '';
-    fpWorldInfo.innerHTML = `<span style="opacity:0.8;">🔒 私人房间</span>`;
+    fpWorldInfo.innerHTML = `<span style="opacity:0.8;"><i class="fa-solid fa-lock"></i> 私人房间</span>`;
   } else if (loc.isTraveling || f.location === 'traveling') {
     locSection.style.display = '';
     fpWorldInfo.innerHTML = `<span style="opacity:0.8;">✈️ 正在前往世界...</span>`;
@@ -168,7 +168,7 @@ function _renderFriendProfileUI(f, modal) {
       // If they have a valid world location and it's not private, they are joinable
       const isJoinable = !f.location.includes('~private');
       const btns = isJoinable ? `
-        <button onclick="inviteSelf('${escJsAttr(f.location)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;margin-left:8px;vertical-align:middle;" title="发送邀请给自己">📩 邀请自己</button>
+        <button onclick="inviteSelf('${escJsAttr(f.location)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;margin-left:8px;vertical-align:middle;" title="发送邀请给自己"><i class="fa-solid fa-envelope"></i> 邀请自己</button>
       ` : '';
       fpWorldInfo.innerHTML = `<a href="#" onclick="openInstanceDetail('${escJsAttr(f.location)}'); event.preventDefault();" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--accent-light);vertical-align:middle;">${escHtml(txt)}</a>` + isMineTag + btns; 
     }).catch(()=>{ fpWorldInfo.innerHTML = escHtml(f.location||'') + isMineTag; });
@@ -206,14 +206,14 @@ function _renderFriendProfileUI(f, modal) {
   const isFriendFaved = fpState.isFriendFaved;
   const isOnline = fpState.isOnline;
   const friendFavBtn = isFriend
-    ? `<button class="btn ${isFriendFaved?'btn-warning':'btn-secondary'}" style="font-size:0.82em;" onclick="${isFriendFaved?'toggleFriendFavorite(\''+escJsAttr(id)+'\',\''+escJsAttr(name)+'\')':'toggleFriendFavMenu(event,\''+escJsAttr(id)+'\')'}">${isFriendFaved?'⭐ 已收藏':'⭐ 收藏'}</button>`
+    ? `<button class="btn ${isFriendFaved?'btn-warning':'btn-secondary'}" style="font-size:0.82em;" onclick="${isFriendFaved?'toggleFriendFavorite(\''+escJsAttr(id)+'\',\''+escJsAttr(name)+'\')':'toggleFriendFavMenu(event,\''+escJsAttr(id)+'\')'}">${isFriendFaved?'<i class="fa-solid fa-star"></i> 已收藏':'<i class="fa-solid fa-star"></i> 收藏'}</button>`
     : '';
   
   let actionButtons = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
       <button class="btn btn-secondary" style="font-size:0.82em;padding:6px 14px;" onclick="showFriendContextMenu(event)">··· 操作菜单</button>
       ${friendFavBtn}
-      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escJsAttr(f.id||'')}','_blank')">🔗 VRChat 主页</button>
+      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escJsAttr(f.id||'')}','_blank')"><i class="fa-solid fa-link"></i> VRChat 主页</button>
     </div>
   `;
 
@@ -224,9 +224,9 @@ function _renderFriendProfileUI(f, modal) {
         actionButtons += `<button class="btn" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);font-size:0.82em;" onclick="unblockUser('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">解除屏蔽</button>`;
       } else {
         actionButtons += `
-          <button class="btn btn-primary" style="font-size:0.82em;" onclick="sendBoop('${escJsAttr(id)}','${escJsAttr(name)}')">👋 戳一下 (Boop)</button>
-          ${isOnline ? `<button class="btn btn-success" style="font-size:0.82em;" onclick="sendInvite('${escJsAttr(id)}','${escJsAttr(name)}')">📩 邀请</button>` : ''}
-          ${isOnline ? `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="requestInvite('${escJsAttr(id)}','${escJsAttr(name)}')">📩 请求邀请</button>` : ''}
+          <button class="btn btn-primary" style="font-size:0.82em;" onclick="sendBoop('${escJsAttr(id)}','${escJsAttr(name)}')"><i class="fa-solid fa-hand"></i> 戳一下 (Boop)</button>
+          ${isOnline ? `<button class="btn btn-success" style="font-size:0.82em;" onclick="sendInvite('${escJsAttr(id)}','${escJsAttr(name)}')"><i class="fa-solid fa-envelope"></i> 邀请</button>` : ''}
+          ${isOnline ? `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="requestInvite('${escJsAttr(id)}','${escJsAttr(name)}')"><i class="fa-solid fa-envelope"></i> 请求邀请</button>` : ''}
         `;
       }
       if (isMuted) {
@@ -237,9 +237,9 @@ function _renderFriendProfileUI(f, modal) {
       if (isBlocked) {
         actionButtons += `<button class="btn" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);font-size:0.82em;" onclick="unblockUser('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">解除屏蔽</button>`;
       } else if (fpState.friendRequestPending) {
-        actionButtons += `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="cancelFriendRequest('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">⏳ 取消好友请求</button>`;
+        actionButtons += `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="cancelFriendRequest('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')"><i class="fa-solid fa-hourglass-half"></i> 取消好友请求</button>`;
       } else {
-        actionButtons += `<button class="btn" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);font-size:0.82em;" onclick="sendFriendRequest('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">➕ 添加好友</button>`;
+        actionButtons += `<button class="btn" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3);font-size:0.82em;" onclick="sendFriendRequest('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')"><i class="fa-solid fa-plus"></i> 添加好友</button>`;
       }
       if (isMuted) {
         actionButtons += `<button class="btn btn-secondary" style="font-size:0.82em;" onclick="unmuteUser('${escJsAttr(f.id||'')}','${escJsAttr(f.displayName||'')}')">解除静音</button>`;

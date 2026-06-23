@@ -149,7 +149,7 @@ function setGlassSelectValue(select, val) {
     // or, failing that, case-insensitive text. Classic defines option values
     // inline via selectGlassOption(this, 'private'); there is no data-value
     // attribute today, so we fall back to text for robustness.
-    const declared = opt.getAttribute('data-value') || opt.getAttribute('data-glass-value');
+    const declared = opt.getAttribute('data-value') || opt.getAttribute('data-glass-value') || opt.getAttribute('data-val');
     const matches = declared ? declared === val : (opt.textContent || '').trim().toLowerCase() === String(val).toLowerCase();
     if (matches) {
       matched = opt;

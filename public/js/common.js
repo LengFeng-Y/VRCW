@@ -58,7 +58,7 @@ function isVRCPlus(tags = []) {
 }
 
 function getPlatformEmoji(platform) {
-  const map = { standalonewindows: '🖥️ PC', android: '🥽 Quest', ios: '📱 iOS', web: '🌐 Web' };
+  const map = { standalonewindows: '🖥️ PC', android: '<i class="fa-solid fa-vr-cardboard"></i> Quest', ios: '<i class="fa-solid fa-mobile-screen"></i> iOS', web: '<i class="fa-solid fa-globe"></i> Web' };
   return map[platform] || platform || '';
 }
 
@@ -83,15 +83,15 @@ function _saveWorldNameCache() {
 
 async function getLocationDisplay(location, worldId) {
   if (!location || location === 'offline') return '离线';
-  if (location === 'private')   return '🔒 私人房间';
+  if (location === 'private')   return '<i class="fa-solid fa-lock"></i> 私人房间';
   if (location === 'traveling') return '✈️ 传送中';
 
   const [wid, rest = ''] = location.split(':');
   let type = '公开';
-  if (rest.includes('~private'))        type = '🔒 私人';
-  else if (rest.includes('~friends+')) type = '👥 好友+';
-  else if (rest.includes('~friends'))  type = '👥 好友';
-  else if (rest.includes('~hidden'))   type = '👥 好友+';
+  if (rest.includes('~private'))        type = '<i class="fa-solid fa-lock"></i> 私人';
+  else if (rest.includes('~friends+')) type = '<i class="fa-solid fa-user-group"></i> 好友+';
+  else if (rest.includes('~friends'))  type = '<i class="fa-solid fa-user-group"></i> 好友';
+  else if (rest.includes('~hidden'))   type = '<i class="fa-solid fa-user-group"></i> 好友+';
   else if (rest.includes('group('))    type = '🏠 群组';
 
   const regionMatch = rest.match(/region\(([^)]+)\)/);

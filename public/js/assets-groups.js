@@ -1,7 +1,55 @@
-﻿/*
+/*
  * VRCW - assets-groups.js
  * Heavy assets/economy panel logic. Global nav and groups live in groups-shell.js.
  */
+
+// ── Assets caching helpers ───────────────────────────────────────────────
+// Every assets sub-page used to round-trip /api/vrc/auth/user just to get the
+// caller's own id, then fire its real request — 2 serial calls per sub-page
+// open, no cache at all. getMyId() reuses the session-global currentUserId
+// (set during showMainApp) and only falls back to /auth/user when it's missing.
+// Each cacheable sub-page stores its raw API response in IDB under
+// `assets_<page>` with an age stamp; TTL varies by how stale-prone the data is.
+const ASSETS_CACHE_TTL_MS = 2 * 60 * 1000;   // 2 min — tx/sub/inventory/props/gallery/prints/emoji
+const BALANCE_CACHE_TTL_MS = 30 * 1000;       // 30s — balance changes right after a purchase
+
+async function getMyId() {
+  if (typeof currentUserId !== 'undefined' && currentUserId) return currentUserId;
+  try {
+    const me = await (await apiCall('/api/vrc/auth/user')).json();
+    if (me && me.id) return me.id;
+  } catch (_) {}
+  return '';
+}
+
+// Read a cached asset payload. Returns { data, fresh } where fresh means the
+// TTL hasn't expired (caller can skip the API entirely).
+async function readAssetsCache(page, ttlMs) {
+  try {
+    const data = await idb.get('assets_' + page);
+    if (data == null) return { data: null, fresh: false };
+    const age = (await idb.get('assets_age_' + page)) || 0;
+    return { data, fresh: age > 0 && (Date.now() - age) < ttlMs };
+  } catch (_) {
+    return { data: null, fresh: false };
+  }
+}
+
+async function writeAssetsCache(page, data) {
+  try {
+    await idb.set('assets_' + page, data);
+    await idb.set('assets_age_' + page, Date.now());
+  } catch (_) {}
+}
+
+// Drop every assets cache (called on logout so a different account doesn't
+// briefly show the previous user's wallet / inventory).
+function invalidateAssetsCache() {
+  const pages = ['balance', 'store', 'tx', 'sub', 'gallery', 'prints', 'emoji', 'inventory', 'props'];
+  pages.forEach(p => {
+    try { idb.set('assets_age_' + p, 0); } catch (_) {}
+  });
+}
 
 function initAssetsTab() {
   document.querySelectorAll('#assetsPanel .cat-btn').forEach(b => b.classList.remove('active', 'btn-primary'));
@@ -35,26 +83,43 @@ function switchAssetsPage(page) {
 }
 
 async function fetchBalance(container, gen) {
-  try {
-    const me = await (await apiCall('/api/vrc/auth/user')).json();
+  // Balance is the most stale-prone asset (changes the instant you buy
+  // something), so it gets the shortest TTL — 30s. Still beats re-fetching
+  // on every sub-page switch within half a minute.
+  const { data: cached, fresh } = await readAssetsCache('balance', BALANCE_CACHE_TTL_MS);
+  if (fresh && cached) {
     if (_assetsGen !== gen) return;
-    if (!me || !me.id) throw new Error("Not logged in");
-    const bal = await (await apiCall(`/api/vrc/user/${me.id}/balance`)).json();
-    if (_assetsGen !== gen) return;
-    container.innerHTML = `
-      <h2 style="margin-bottom:16px;">👛 钱包余额</h2>
-      <div class="my-profile-card" style="display:flex;align-items:center;gap:20px;max-width:400px;">
-        <div style="width:60px;height:60px;background:var(--bg-glass);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem;color:var(--warning);">🪙</div>
-        <div>
-          <div style="font-size:0.8rem;color:var(--text-muted);">当前 VRChat 点数 / Credits</div>
-          <div style="font-size:1.8rem;font-weight:700;color:var(--text-primary);">${bal.balance||0} <span style="font-size:0.5em;color:var(--text-muted);">VRC</span></div>
-        </div>
-      </div>
-      <p style="margin-top:12px;color:var(--text-muted);font-size:0.85rem;">可在 VRChat 内购买创作者经济商品或订阅。</p>
-    `;
-  } catch(e) {
-    container.innerHTML = `<div style="color:var(--error);">Failed to load balance: ${e.message}</div>`;
+    _renderBalance(container, cached);
+    return;
   }
+  try {
+    const myId = await getMyId();
+    if (_assetsGen !== gen) return;
+    if (!myId) throw new Error("Not logged in");
+    const bal = await (await apiCall(`/api/vrc/user/${myId}/balance`)).json();
+    if (_assetsGen !== gen) return;
+    await writeAssetsCache('balance', bal);
+    _renderBalance(container, bal);
+  } catch(e) {
+    if (_assetsGen !== gen) return;
+    // Keep stale cache visible on transient failure instead of a red error.
+    if (cached) _renderBalance(container, cached);
+    else container.innerHTML = `<div style="color:var(--error);">Failed to load balance: ${escHtml(String(e.message))}</div>`;
+  }
+}
+
+function _renderBalance(container, bal) {
+  container.innerHTML = `
+    <h2 style="margin-bottom:16px;"><i class="fa-solid fa-wallet"></i> 钱包余额</h2>
+    <div class="my-profile-card" style="display:flex;align-items:center;gap:20px;max-width:400px;">
+      <div style="width:60px;height:60px;background:var(--bg-glass);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem;color:var(--warning);"><i class="fa-solid fa-coins"></i> </div>
+      <div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">当前 VRChat 点数 / Credits</div>
+        <div style="font-size:1.8rem;font-weight:700;color:var(--text-primary);">${escHtml(String(bal.balance||0))} <span style="font-size:0.5em;color:var(--text-muted);">VRC</span></div>
+      </div>
+    </div>
+    <p style="margin-top:12px;color:var(--text-muted);font-size:0.85rem;">可在 VRChat 内购买创作者经济商品或订阅。</p>
+  `;
 }
 
 async function fetchStore(container, gen) {
@@ -71,12 +136,12 @@ async function fetchStore(container, gen) {
       const bal = await balResp.json();
       const credits = bal.balance ?? bal.credits ?? bal.amount ?? '—';
       balHtml = `<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:linear-gradient(135deg,rgba(255, 255, 255, 0.15),rgba(255, 255, 255, 0.1));border:1px solid rgba(255, 255, 255, 0.3);border-radius:12px;margin-bottom:20px;">
-        <span style="font-size:1.6em;">💎</span>
+        <span style="font-size:1.6em;"><i class="fa-solid fa-gem" style="color: #00f2fe;"></i> </span>
         <div>
           <div style="font-size:0.75em;color:var(--text-muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase;">VRChat Credits</div>
           <div style="font-size:1.4em;font-weight:700;color:#d4d4d8;">${escHtml(String(credits))}</div>
         </div>
-        <a href="https://vrchat.com/home/marketplace/storefront" target="_blank" class="btn btn-secondary" style="margin-left:auto;font-size:0.8em;">🛒 打开商店</a>
+        <a href="https://vrchat.com/home/marketplace/storefront" target="_blank" class="btn btn-secondary" style="margin-left:auto;font-size:0.8em;"><i class="fa-solid fa-cart-shopping"></i> 打开商店</a>
       </div>`;
     }
 
@@ -90,7 +155,7 @@ async function fetchStore(container, gen) {
           items.map(item => {
             const img = proxyImg(item.thumbnailImageUrl || item.imageUrl || '');
             const name = escHtml(item.displayName || item.name || item.id || '商品');
-            const price = item.priceTokens != null ? `💎 ${item.priceTokens}` : (item.price ? `$${(item.price/100).toFixed(2)}` : '');
+            const price = item.priceTokens != null ? `<i class="fa-solid fa-gem" style="color: #00f2fe;"></i> ${item.priceTokens}` : (item.price ? `$${(item.price/100).toFixed(2)}` : '');
             const type = escHtml(item.productType || item.type || '');
             return `<div style="background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;" onclick="window.open('https://vrchat.com/home/marketplace','_blank')">
               ${img ? `<img src="${img}" style="width:100%;aspect-ratio:4/3;object-fit:cover;" loading="lazy" onerror="this.style.display='none'">` : '<div style="width:100%;aspect-ratio:4/3;background:var(--bg-secondary);"></div>'}
@@ -107,13 +172,13 @@ async function fetchStore(container, gen) {
     } else {
       // Listings may require special perms - just link to website
       listingsHtml = `<div style="padding:20px;text-align:center;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;">
-        <div style="font-size:2em;margin-bottom:8px;">🏪</div>
+        <div style="font-size:2em;margin-bottom:8px;"><i class="fa-solid fa-shop"></i> </div>
         <div style="font-size:0.85em;color:var(--text-muted);margin-bottom:12px;">商品列表需要在 VRChat 网站查看</div>
-        <a href="https://vrchat.com/home/marketplace/storefront" target="_blank" class="btn btn-primary" style="font-size:0.85em;">🔗 打开 VRChat 商店</a>
+        <a href="https://vrchat.com/home/marketplace/storefront" target="_blank" class="btn btn-primary" style="font-size:0.85em;"><i class="fa-solid fa-link"></i> 打开 VRChat 商店</a>
       </div>`;
     }
 
-    container.innerHTML = '<h2 style="margin-bottom:16px;">🏪 商店浏览</h2>' + balHtml + listingsHtml;
+    container.innerHTML = '<h2 style="margin-bottom:16px;"><i class="fa-solid fa-shop"></i> 商店浏览</h2>' + balHtml + listingsHtml;
   } catch(e) {
     if (isAbortError(e)) return;
     container.innerHTML = '<div style="color:var(--error);">加载失败: ' + e.message + '</div>';
@@ -122,19 +187,28 @@ async function fetchStore(container, gen) {
 
 async function fetchTransactions(container, gen) {
   try {
-    const r = await apiCall('/api/vrc/Steam/transactions');
-    if (gen != null && _assetsGen !== gen) return;
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const tx = await r.json();
-    if (gen != null && _assetsGen !== gen) return;
-    container.innerHTML = '<h2 style="margin-bottom:16px;">💸 交易记录</h2>';
+    // Cache-first: transactions rarely change, 2-min TTL avoids re-fetching
+    // on every sub-page switch.
+    const { data: cached, fresh } = await readAssetsCache('tx', ASSETS_CACHE_TTL_MS);
+    let tx;
+    if (fresh && cached) {
+      tx = cached;
+    } else {
+      const r = await apiCall('/api/vrc/Steam/transactions');
+      if (gen != null && _assetsGen !== gen) return;
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      tx = await r.json();
+      if (gen != null && _assetsGen !== gen) return;
+      await writeAssetsCache('tx', tx);
+    }
+    container.innerHTML = '<h2 style="margin-bottom:16px;"><i class="fa-solid fa-money-bill-transfer"></i> 交易记录</h2>';
     if (!tx || (Array.isArray(tx) && tx.length === 0)) {
       container.innerHTML += '<div style="color:var(--text-muted);">暂无交易记录</div>';
       return;
     }
     const items = Array.isArray(tx) ? tx : [tx];
     const statusColors = {succeeded:'#86efac',expired:'#fbbf24',failed:'#f87171'};
-    const statusLabels = {succeeded:'✅ 成功',expired:'⏰ 已过期',failed:'❌ 失败'};
+    const statusLabels = {succeeded:'<i class="fa-solid fa-check"></i> 成功',expired:'<i class="fa-solid fa-clock"></i> 已过期',failed:'<i class="fa-solid fa-xmark"></i> 失败'};
     container.innerHTML += items.map(t => {
       const sub = t.subscription || {};
       const amt = t.amount || sub.amount;
@@ -143,12 +217,12 @@ async function fetchTransactions(container, gen) {
       const st = t.status || 'unknown';
       const stColor = statusColors[st] || 'var(--text-muted)';
       const stLabel = statusLabels[st] || st;
-      const giftTo = t.isGift && t.targetDisplayName ? ' → 🎁 ' + escHtml(t.targetDisplayName) : '';
+      const giftTo = t.isGift && t.targetDisplayName ? ' → <i class="fa-solid fa-gift"></i> ' + escHtml(t.targetDisplayName) : '';
       const isCredits = t.active && t.orderId && t.orderId.startsWith('tx_');
       
       return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-glass);border:1px solid var(--border);border-radius:12px;margin-bottom:8px; transition: transform 0.2s;" onmouseover="this.style.transform='translateX(4px)'" onmouseout="this.style.transform='none'">
         <div style="width:36px;height:36px;border-radius:50%;background:${isCredits ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.1)'};display:flex;align-items:center;justify-content:center;font-size:1.1em;border:1px solid var(--border);">
-          ${isCredits ? '💎' : '💳'}
+          ${isCredits ? '<i class="fa-solid fa-gem" style="color: #00f2fe;"></i> ' : '<i class="fa-solid fa-credit-card"></i> '}
         </div>
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:0.85em;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(sub.description || t.id || '交易')} ${giftTo}</div>
@@ -168,9 +242,16 @@ async function fetchTransactions(container, gen) {
 
 async function fetchSubscriptions(container, gen) {
   try {
-    const subs = await (await apiCall('/api/vrc/auth/user/subscription')).json();
-    if (gen != null && _assetsGen !== gen) return;
-    container.innerHTML = '<h2 style="margin-bottom:16px;">⭐ VRC+ 订阅</h2>';
+    const { data: cached, fresh } = await readAssetsCache('sub', ASSETS_CACHE_TTL_MS);
+    let subs;
+    if (fresh && cached) {
+      subs = cached;
+    } else {
+      subs = await (await apiCall('/api/vrc/auth/user/subscription')).json();
+      if (gen != null && _assetsGen !== gen) return;
+      await writeAssetsCache('sub', subs);
+    }
+    container.innerHTML = '<h2 style="margin-bottom:16px;"><i class="fa-solid fa-star"></i> VRC+ 订阅</h2>';
     if (!subs || subs.length === 0) {
       container.innerHTML += '<div style="color:var(--text-muted);">当前无有效的 VRC+ 订阅 (No active subscriptions)</div>';
       return;
@@ -190,16 +271,26 @@ async function fetchSubscriptions(container, gen) {
 
 async function fetchEmoji(container, gen) {
   try {
-    container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载中...</div>';
-    const [rEmoji, rEmojiAnim, rSticker] = await Promise.all([
-      apiCall('/api/vrc/files?tag=emoji&n=100'),
-      apiCall('/api/vrc/files?tag=emojianimated&n=100'),
-      apiCall('/api/vrc/files?tag=sticker&n=100'),
-    ]);
-    const emojis = rEmoji.ok ? await rEmoji.json() : [];
-    const emojisAnim = rEmojiAnim.ok ? await rEmojiAnim.json() : [];
-    const stickers = rSticker.ok ? await rSticker.json() : [];
-    if (_assetsGen !== gen) return;
+    // 3 parallel API calls per open — cache the whole bundle.
+    const { data: cached, fresh } = await readAssetsCache('emoji', ASSETS_CACHE_TTL_MS);
+    let emojis, emojisAnim, stickers;
+    if (fresh && cached) {
+      emojis = cached.emojis || [];
+      emojisAnim = cached.emojisAnim || [];
+      stickers = cached.stickers || [];
+    } else {
+      container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载中...</div>';
+      const [rEmoji, rEmojiAnim, rSticker] = await Promise.all([
+        apiCall('/api/vrc/files?tag=emoji&n=100'),
+        apiCall('/api/vrc/files?tag=emojianimated&n=100'),
+        apiCall('/api/vrc/files?tag=sticker&n=100'),
+      ]);
+      emojis = rEmoji.ok ? await rEmoji.json() : [];
+      emojisAnim = rEmojiAnim.ok ? await rEmojiAnim.json() : [];
+      stickers = rSticker.ok ? await rSticker.json() : [];
+      if (_assetsGen !== gen) return;
+      await writeAssetsCache('emoji', { emojis, emojisAnim, stickers });
+    }
     const allEmojis = emojis.concat(emojisAnim);
 
     const renderFileGrid = (files, emptyText) => {
@@ -229,10 +320,10 @@ async function fetchEmoji(container, gen) {
       '</div>';
     };
 
-    container.innerHTML = '<h2 style="margin-bottom:16px;">😊 表情与贴纸</h2>' +
+    container.innerHTML = '<h2 style="margin-bottom:16px;"><i class="fa-solid fa-face-smile"></i> 表情与贴纸</h2>' +
       '<div class="vrc-upload-row">' +
-        makeUploadCard({title:'😊 上传静态表情', hint:'PNG · 最大 10MB · 最大 1024×1024', tag:'emoji', accept:'image/png,image/jpeg,image/webp', refreshPage:'emoji'}) +
-        makeUploadCard({title:'🎞️ 上传动态表情 (GIF)', hint:'GIF → 自动转精灵图 · 最大 10MB', tag:'emojianimated', accept:'image/gif', refreshPage:'emoji'}) +
+        makeUploadCard({title:'<i class="fa-solid fa-face-smile"></i> 上传静态表情', hint:'PNG · 最大 10MB · 最大 1024×1024', tag:'emoji', accept:'image/png,image/jpeg,image/webp', refreshPage:'emoji'}) +
+        makeUploadCard({title:'<i class="fa-solid fa-film"></i> 上传动态表情 (GIF)', hint:'GIF → 自动转精灵图 · 最大 10MB', tag:'emojianimated', accept:'image/gif', refreshPage:'emoji'}) +
         makeUploadCard({title:'🏷️ 上传贴纸', hint:'PNG · 最大 10MB · 最大 1024×1024', tag:'sticker', accept:'image/png,image/jpeg,image/webp', refreshPage:'emoji'}) +
       '</div>' +
       '<h3 style="font-size:0.9rem;margin-bottom:10px;">自定义表情 (' + allEmojis.length + ')</h3>' +
@@ -253,20 +344,28 @@ const _equipSlotLabels = { drone: '无人机', portal: '传送门', warp: 'Warp'
 
 async function fetchInventory(container, gen) {
   try {
-    container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载库存中...</div>';
-    const items = [];
-    // Paginate (cap at a few pages to stay within request budget)
-    for (let i = 0; i < 5; i++) {
-      const r = await apiCall(`/api/vrc/inventory?n=100&offset=${i * 100}&order=newest`);
+    // Inventory pagination can fire up to 5 API calls — cache it hard.
+    const { data: cachedItems, fresh } = await readAssetsCache('inventory', ASSETS_CACHE_TTL_MS);
+    let items;
+    if (fresh && Array.isArray(cachedItems)) {
+      items = cachedItems;
+    } else {
+      container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载库存中...</div>';
+      items = [];
+      // Paginate (cap at a few pages to stay within request budget)
+      for (let i = 0; i < 5; i++) {
+        const r = await apiCall(`/api/vrc/inventory?n=100&offset=${i * 100}&order=newest`);
+        if (_assetsGen !== gen) return;
+        if (!r.ok) break;
+        const j = await r.json().catch(() => ({}));
+        const batch = j.data || j.items || (Array.isArray(j) ? j : []);
+        if (!batch.length) break;
+        items.push(...batch);
+        if (batch.length < 100) break;
+      }
       if (_assetsGen !== gen) return;
-      if (!r.ok) break;
-      const j = await r.json().catch(() => ({}));
-      const batch = j.data || j.items || (Array.isArray(j) ? j : []);
-      if (!batch.length) break;
-      items.push(...batch);
-      if (batch.length < 100) break;
+      await writeAssetsCache('inventory', items);
     }
-    if (_assetsGen !== gen) return;
 
     // Group by itemType for readability
     const groups = {};
@@ -274,7 +373,7 @@ async function fetchInventory(container, gen) {
       const t = it.itemType || it.type || 'other';
       (groups[t] = groups[t] || []).push(it);
     }
-    const typeLabel = { prop: '🪄 道具', emoji: '😊 表情', sticker: '🏷️ 贴纸', gift: '🎁 礼物', drop: '📦 掉落物', other: '📦 其它' };
+    const typeLabel = { prop: '<i class="fa-solid fa-wand-magic-sparkles"></i> 道具', emoji: '<i class="fa-solid fa-face-smile"></i> 表情', sticker: '🏷️ 贴纸', gift: '<i class="fa-solid fa-gift"></i> 礼物', drop: '<i class="fa-solid fa-box"></i> 掉落物', other: '<i class="fa-solid fa-box"></i> 其它' };
 
     const card = (it) => {
       const img = proxyImg(it.imageUrl || it.thumbnailImageUrl || (it.metadata && it.metadata.imageUrl) || '');
@@ -282,7 +381,7 @@ async function fetchInventory(container, gen) {
       const slot = it.equipSlot || (it.metadata && it.metadata.equipSlot);
       const canEquip = ['drone', 'portal', 'warp', 'loadingscreen'].includes(slot);
       return '<div style="background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;">' +
-        (img ? `<img src="${escHtml(img)}" style="width:100%;aspect-ratio:1/1;object-fit:cover;" loading="lazy" onerror="this.style.display='none'">` : '<div style="width:100%;aspect-ratio:1/1;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;font-size:2em;">🎁</div>') +
+        (img ? `<img src="${escHtml(img)}" style="width:100%;aspect-ratio:1/1;object-fit:cover;" loading="lazy" onerror="this.style.display='none'">` : '<div style="width:100%;aspect-ratio:1/1;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;font-size:2em;"><i class="fa-solid fa-gift"></i> </div>') +
         '<div style="padding:8px 10px;display:flex;flex-direction:column;gap:4px;">' +
           `<div style="font-size:0.8em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(it.name || it.id || '')}</div>` +
           (slot ? `<div style="font-size:0.65em;color:var(--text-muted);">槽位: ${escHtml(_equipSlotLabels[slot] || slot)}</div>` : '') +
@@ -290,12 +389,12 @@ async function fetchInventory(container, gen) {
         '</div></div>';
     };
 
-    let html = '<h2 style="margin-bottom:16px;">🎁 库存物品 (' + items.length + ')</h2>';
+    let html = '<h2 style="margin-bottom:16px;"><i class="fa-solid fa-gift"></i> 库存物品 (' + items.length + ')</h2>';
     if (!items.length) {
       html += '<div style="color:var(--text-muted);font-size:0.9em;">暂无库存物品。库存包含无人机、传送门、加载屏、掉落物等（部分需要 VRC+）。</div>';
     } else {
       for (const [t, list] of Object.entries(groups)) {
-        html += `<h3 style="font-size:0.9rem;margin:14px 0 10px;">${typeLabel[t] || ('📦 ' + t)} (${list.length})</h3>`;
+        html += `<h3 style="font-size:0.9rem;margin:14px 0 10px;">${typeLabel[t] || ('<i class="fa-solid fa-box"></i> ' + t)} (${list.length})</h3>`;
         html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;">' +
           list.map(card).join('') + '</div>';
       }
@@ -317,6 +416,8 @@ async function equipInventoryItem(inventoryId, slot, currentlyEquipped) {
     }
     if (r.ok) {
       showToast(currentlyEquipped ? '已卸下' : '已装备', 'success');
+      // Equipment state changed — drop the cache so the reload shows it.
+      try { idb.set('assets_age_inventory', 0); } catch (_) {}
       switchAssetsPage('inventory');
     } else {
       const err = await r.json().catch(() => ({}));
@@ -330,18 +431,24 @@ async function equipInventoryItem(inventoryId, slot, currentlyEquipped) {
 // ═══════════════════════════════════════════════════════════
 async function fetchProps(container, gen) {
   try {
-    container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载道具中...</div>';
-    const me = await (await apiCall('/api/vrc/auth/user')).json();
-    if (_assetsGen !== gen) return;
-    if (!me || !me.id) throw new Error('未登录');
-    // /props lists the current user's props (owned)
-    const r = await apiCall(`/api/vrc/props?userId=${me.id}&n=100`);
-    if (_assetsGen !== gen) return;
-    let props = [];
-    if (r.ok) props = await r.json().catch(() => []);
-    if (!Array.isArray(props)) props = props.data || [];
+    const { data: cached, fresh } = await readAssetsCache('props', ASSETS_CACHE_TTL_MS);
+    let props;
+    if (fresh && Array.isArray(cached)) {
+      props = cached;
+    } else {
+      container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载道具中...</div>';
+      const myId = await getMyId();
+      if (_assetsGen !== gen) return;
+      if (!myId) throw new Error('未登录');
+      // /props lists the current user's props (owned)
+      const r = await apiCall(`/api/vrc/props?userId=${myId}&n=100`);
+      if (_assetsGen !== gen) return;
+      props = r.ok ? await r.json().catch(() => []) : [];
+      if (!Array.isArray(props)) props = props.data || [];
+      await writeAssetsCache('props', props);
+    }
 
-    let html = '<h2 style="margin-bottom:16px;">🪄 道具 Props (' + props.length + ')</h2>';
+    let html = '<h2 style="margin-bottom:16px;"><i class="fa-solid fa-wand-magic-sparkles"></i> 道具 Props (' + props.length + ')</h2>';
     if (!props.length) {
       html += '<div style="color:var(--text-muted);font-size:0.9em;">暂无道具。道具(Props)是可在世界中生成的物件，需在 Unity SDK 中创建上传。</div>';
     } else {
@@ -350,10 +457,10 @@ async function fetchProps(container, gen) {
           const img = proxyImg(p.imageUrl || p.thumbnailImageUrl || '');
           const published = p.releaseStatus === 'public' || p.published;
           return '<div style="background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;overflow:hidden;">' +
-            (img ? `<img src="${escHtml(img)}" style="width:100%;aspect-ratio:1/1;object-fit:cover;" loading="lazy" onerror="this.style.display='none'">` : '<div style="width:100%;aspect-ratio:1/1;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;font-size:2em;">🪄</div>') +
+            (img ? `<img src="${escHtml(img)}" style="width:100%;aspect-ratio:1/1;object-fit:cover;" loading="lazy" onerror="this.style.display='none'">` : '<div style="width:100%;aspect-ratio:1/1;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;font-size:2em;"><i class="fa-solid fa-wand-magic-sparkles"></i> </div>') +
             '<div style="padding:8px 10px;">' +
               `<div style="font-size:0.82em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(p.name || p.id || '')}</div>` +
-              `<div style="font-size:0.65em;color:${published ? '#4ade80' : 'var(--text-muted)'};margin-top:2px;">${published ? '✅ 已发布' : '🔒 未发布'}</div>` +
+              `<div style="font-size:0.65em;color:${published ? '#4ade80' : 'var(--text-muted)'};margin-top:2px;">${published ? '<i class="fa-solid fa-check"></i> 已发布' : '<i class="fa-solid fa-lock"></i> 未发布'}</div>` +
             '</div></div>';
         }).join('') + '</div>';
     }

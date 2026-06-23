@@ -51,7 +51,7 @@ function updateSelectedCount() {
 // ── Avatars ──
 let fetchSeq = 0; // Track latest fetch to avoid stale renders
 // TTL: skip the API refresh entirely when basics cache is younger than this.
-// Tab switches pass forceRefresh=false → fast path; the 🔄 button passes true.
+// Tab switches pass forceRefresh=false → fast path; the <i class="fa-solid fa-rotate-right"></i> button passes true.
 const AVATARS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const avatarCardElements = new Map();
 const pendingAvatarCardUpdates = new Map();
@@ -346,7 +346,7 @@ async function fetchAvatars(forceRefresh = false) {
     const basics = allFetched.map(_avatarBasicFromItem).filter(Boolean);
     idb.set("avatar_basics_" + currentCategory, basics).catch(()=>{});
     idb.set("avatar_basics_age_" + currentCategory, Date.now()).catch(()=>{});
-    logMsg(`✅ Sync complete: ${avatars.length} avatars`, "success");
+    logMsg(`<i class="fa-solid fa-check"></i> Sync complete: ${avatars.length} avatars`, "success");
 
     // Optimized: Disable background prefetch to save Cloudflare Worker requests
     // prefetchThumbnails(allFetched);
@@ -604,7 +604,7 @@ function _buildAvatarCard(av) {
       <div class="card-checkbox ${selectedIds.has(av.id) ? 'on' : ''}" onclick="event.stopPropagation(); toggleSelect('${escJsAttr(av.id)}')" title="选中/取消选中">${selectedIds.has(av.id) ? '✓' : ''}</div>
     </div>
     <div class="card-tr-overlay">
-      <div class="card-fav-quick" onclick="event.stopPropagation(); _avatarQuickFav('${escJsAttr(av.id)}','${escJsAttr(av.name || '')}',event,this)" title="${isFaved ? '已收藏' : '添加到收藏'}">${isFaved ? '⭐' : '☆'}</div>
+      <div class="card-fav-quick" onclick="event.stopPropagation(); _avatarQuickFav('${escJsAttr(av.id)}','${escJsAttr(av.name || '')}',event,this)" title="${isFaved ? '已收藏' : '添加到收藏'}">${isFaved ? '<i class="fa-solid fa-star"></i> ' : '☆'}</div>
     </div>
     ${releaseBadge}
   </div>`;
@@ -701,7 +701,7 @@ function renderGrid(list) {
     grid.querySelectorAll(".avatar-thumb[data-src]").forEach((img) => avatarObserver.unobserve(img));
     imageQueue.length = 0; 
     grid.innerHTML = `<div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:rgba(255,255,255,0.4);gap:12px;">
-      <div style="font-size:3em;">🎭</div>
+      <div style="font-size:3em;"><i class="fa-solid fa-masks-theater"></i> </div>
       <div style="font-size:1.1em;">暂无模型 / No avatars found</div>
       <div style="font-size:0.85em;">点击「刷新」按钮重新加载 / Click Refresh to reload</div>
     </div>`;
@@ -1044,13 +1044,13 @@ async function cleanInvalidFavorites() {
   );
 
   if (!invalid.length && !privateNonOwn.length) {
-    logMsg('✅ 当前收藏夹没有需要清理的内容', 'success');
+    logMsg('<i class="fa-solid fa-check"></i> 当前收藏夹没有需要清理的内容', 'success');
     return;
   }
 
   // Show rich cleanup modal
   _showCleanupModal({
-    title: '🧹 清理收藏模型',
+    title: '<i class="fa-solid fa-broom"></i> 清理收藏模型',
     invalidItems: invalid,
     privateNonOwnItems: privateNonOwn,
     invalidLabel: item => item.name || '失效/无名模型',
@@ -1068,7 +1068,7 @@ async function cleanInvalidFavorites() {
         try {
           await apiCall(`/api/vrc/favorites/${fid}`, { method: 'DELETE' });
           // Cleanup the per-avatar state so the sidebar group counter and the
-          // ⭐ badge stay in sync without waiting for a full re-sync. The
+          // <i class="fa-solid fa-star"></i> badge stay in sync without waiting for a full re-sync. The
           // grouping for this view is `currentCategory` (the favorite tag the
           // user is currently looking at).
           favoriteIdMap.delete(av.id);
@@ -1084,7 +1084,7 @@ async function cleanInvalidFavorites() {
         await new Promise(r => setTimeout(r, 200));
       }
       const cancelled = ctx?.isCancelled?.();
-      logMsg(`${cancelled ? '⏹ 已停止清理' : '✅ 清理完毕'}：成功移除 ${success} 个，失败 ${fail} 个`, success > 0 ? 'success' : (cancelled ? 'info' : 'error'));
+      logMsg(`${cancelled ? '⏹ 已停止清理' : '<i class="fa-solid fa-check"></i> 清理完毕'}：成功移除 ${success} 个，失败 ${fail} 个`, success > 0 ? 'success' : (cancelled ? 'info' : 'error'));
       try {
         await idb.set('avatar_basics_' + currentCategory, avatars.map(_avatarBasicFromItem).filter(Boolean));
         await idb.set('avatar_basics_age_' + currentCategory, Date.now());

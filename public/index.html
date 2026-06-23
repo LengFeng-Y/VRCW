@@ -24,8 +24,8 @@
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
       script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://static.cloudflareinsights.com;
-      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-      font-src 'self' https://fonts.gstatic.com;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
+      font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
       img-src 'self' data: blob: https:;
       connect-src 'self' blob:;
       object-src 'none';
@@ -37,7 +37,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=106">
+    <link rel="stylesheet" href="style.css?v=110">
     <script src="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js" defer></script>
     <script>
       // Register Service Worker for image caching — eliminates repeat Cloudflare image requests
@@ -46,6 +46,7 @@
           .catch(e => console.warn('SW registration failed:', e));
       }
     </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
@@ -107,7 +108,7 @@
         <div id="mobileTopBar" class="mobile-top-bar hidden">
             <div class="mobile-top-title">VRCW</div>
             <button id="mobileSidebarBtn" class="mobile-menu-btn" onclick="toggleSidebar()">
-               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                <i class="fa-solid fa-bars"></i>
             </button>
         </div>
         <!-- Left Global Nav -->
@@ -117,36 +118,37 @@
                 <div class="global-nav-header">
                     <div class="nav-logo">
                         <span class="app-title">VRCW</span>
-                        <span class="app-version" id="appVersionBadge">v80</span>
+                        <span class="app-version" id="appVersionBadge">v109</span>
                     </div>
                     <button class="nav-collapse-btn" onclick="toggleGlobalNav()" title="收起">&#8249;</button>
                 </div>
                 <div class="global-nav-items">
                     <button class="nav-item active" onclick="switchTab('download')" data-tab="download" id="navItemDownload">
-                        <span class="nav-icon">🖼️</span><span class="nav-label">模型</span>
+                        <i class="nav-icon fa-solid fa-image"></i><span class="nav-label">模型</span>
                     </button>
                     <button class="nav-item" onclick="switchTab('friends')" data-tab="friends" id="navItemFriends">
-                        <span class="nav-icon">👥</span><span class="nav-label">好友</span>
+                        <i class="nav-icon fa-solid fa-user-group"></i><span class="nav-label">好友</span>
                     </button>
                     <button class="nav-item" onclick="switchTab('worlds')" data-tab="worlds" id="navItemWorlds">
-                        <span class="nav-icon">🌍</span><span class="nav-label">世界</span>
+                        <i class="nav-icon fa-solid fa-earth-americas"></i><span class="nav-label">世界</span>
                     </button>
                     <div style="height:1px;background:var(--border);margin:4px 0;"></div>
                     <button class="nav-item" onclick="switchTab('groups')" data-tab="groups" id="navItemGroups">
-                        <span class="nav-icon">🏠</span><span class="nav-label">群组</span>
+                        <i class="nav-icon fa-solid fa-house"></i><span class="nav-label">群组</span>
                     </button>
                     <button class="nav-item" onclick="switchTab('upload')" data-tab="upload" id="navItemUpload">
-                        <span class="nav-icon">⬆️</span><span class="nav-label">上传</span>
+                        <i class="nav-icon fa-solid fa-cloud-arrow-up"></i><span class="nav-label">上传</span>
                     </button>
                     <button class="nav-item" onclick="switchTab('assets')" data-tab="assets" id="navItemAssets">
-                        <span class="nav-icon">💰</span><span class="nav-label">资产</span>
+                        <i class="nav-icon fa-solid fa-coins"></i><span class="nav-label">资产</span>
                     </button>
                     <button class="nav-item" onclick="switchTab('search')" data-tab="search" id="navItemSearch">
-                        <span class="nav-icon">🔍</span><span class="nav-label">搜索</span>
+                        <i class="nav-icon fa-solid fa-magnifying-glass"></i><span class="nav-label">搜索</span>
                     </button>
+
                     <div style="height:1px;background:var(--border);margin:4px 0;"></div>
                     <button class="nav-item" onclick="switchTab('settings')" data-tab="settings" id="navItemSettings">
-                        <span class="nav-icon">⚙️</span><span class="nav-label">高级设置</span>
+                        <i class="nav-icon fa-solid fa-gear"></i><span class="nav-label">高级设置</span>
                     </button>
                 </div>
                 <div class="global-nav-footer">
@@ -161,21 +163,23 @@
             <!-- Collapsed nav (icon only) -->
             <div class="global-nav-collapsed hidden" id="globalNavCollapsed">
                 <button class="nav-collapse-btn" onclick="toggleGlobalNav()" title="展开" style="margin:8px auto;">&#8250;</button>
-                <button class="nav-item-icon" onclick="switchTab('download')" data-tab="download" id="navIconDownload" title="模型">🖼️</button>
-                <button class="nav-item-icon" onclick="switchTab('friends')" data-tab="friends" id="navIconFriends" title="好友">👥</button>
-                <button class="nav-item-icon" onclick="switchTab('worlds')" data-tab="worlds" id="navIconWorlds" title="世界">🌍</button>
+                <button class="nav-item-icon" onclick="switchTab('download')" data-tab="download" id="navIconDownload" title="模型"><i class="fa-solid fa-image"></i> </button>
+                <button class="nav-item-icon" onclick="switchTab('friends')" data-tab="friends" id="navIconFriends" title="好友"><i class="fa-solid fa-users"></i> </button>
+                <button class="nav-item-icon" onclick="switchTab('worlds')" data-tab="worlds" id="navIconWorlds" title="世界"><i class="fa-solid fa-earth-americas"></i> </button>
                 <hr style="width:70%;border-color:var(--border);margin:2px 0;">
-                <button class="nav-item-icon" onclick="switchTab('groups')" data-tab="groups" id="navIconGroups" title="群组">🏠</button>
-                <button class="nav-item-icon" onclick="switchTab('upload')" data-tab="upload" id="navIconUpload" title="上传">⬆️</button>
-                <button class="nav-item-icon" onclick="switchTab('assets')" data-tab="assets" id="navIconAssets" title="资产">💰</button>
-                <button class="nav-item-icon" onclick="switchTab('search')" data-tab="search" id="navIconSearch" title="搜索">🔍</button>
+                <button class="nav-item-icon" onclick="switchTab('groups')" data-tab="groups" id="navIconGroups" title="群组"><i class="fa-solid fa-house"></i> </button>
+                <button class="nav-item-icon" onclick="switchTab('upload')" data-tab="upload" id="navIconUpload" title="上传"><i class="fa-solid fa-upload"></i> </button>
+                <button class="nav-item-icon" onclick="switchTab('assets')" data-tab="assets" id="navIconAssets" title="资产"><i class="fa-solid fa-sack-dollar"></i> </button>
+                <button class="nav-item-icon" onclick="switchTab('search')" data-tab="search" id="navIconSearch" title="搜索"><i class="fa-solid fa-magnifying-glass"></i> </button>
+
                 <hr style="width:70%;border-color:var(--border);margin:2px 0;">
-                <button class="nav-item-icon" onclick="switchTab('settings')" data-tab="settings" id="navIconSettings" title="高级设置">⚙️</button>
-                <button class="nav-item-icon" onclick="doLogout()" title="退出" style="margin-top:auto;color:var(--error);">🚩</button>
+                <button class="nav-item-icon" onclick="switchTab('settings')" data-tab="settings" id="navIconSettings" title="高级设置"><i class="fa-solid fa-gear"></i> </button>
+                <button class="nav-item-icon" onclick="doLogout()" title="退出" style="margin-top:auto;color:var(--error);"><i class="fa-solid fa-right-from-bracket"></i> </button>
             </div>
 
         <div class="main-content">
             <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
             <!-- ── Download Panel ── -->
             <div id="downloadPanel" class="download-panel active" style="position:relative;">
                 <div class="sidebar" id="appSidebar">
@@ -224,7 +228,7 @@
                     <!-- Filter Bar -->
                     <div class="filter-bar avatar-filter-bar" style="display: flex; gap: 10px; padding: 16px 24px 0 24px; flex-shrink: 0;">
                         <div class="glass-search-input-pill" style="flex: 1;">
-                            <span style="opacity: 0.5; font-size: 0.9em;">🔍</span>
+                            <span style="opacity: 0.5; font-size: 0.9em;"><i class="fa-solid fa-magnifying-glass"></i> </span>
                             <input type="text" id="searchInput" class="input-field" data-i18n-placeholder="searchPlaceholder" placeholder="Search name, desc, tags..." oninput="applyFiltersDebounced()">
                         </div>
                         <div class="glass-select" style="min-width: 130px;" onclick="toggleGlassSelect(event, this)">
@@ -264,7 +268,7 @@
                 <div class="upload-area">
                     <h3 style="margin-bottom:16px;" data-i18n="tabUpload">Upload</h3>
                     <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.4);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:flex-start;gap:12px;">
-                        <span style="font-size:1.4em;flex-shrink:0;">🚫</span>
+                        <span style="font-size:1.4em;flex-shrink:0;"><i class="fa-solid fa-ban"></i> </span>
                         <div>
                             <div style="color:#ef4444;font-weight:600;font-size:0.9em;margin-bottom:4px;">上传功能不可用 / Upload Unavailable</div>
                             <div style="color:rgba(255,255,255,0.5);font-size:0.78em;line-height:1.5;">由于 VRChat 的限制，.vrca 文件无法通过网页直接上传。<br>Due to VRChat restrictions, .vrca files cannot be uploaded directly via web.</div>
@@ -403,7 +407,7 @@
                                 </div>
                             </div>
                             <button id="btnSearchMain" class="search-btn-premium" onclick="doAvtrdbSearch()">
-                                <span class="search-btn-icon">🔍</span>
+                                <span class="search-btn-icon"><i class="fa-solid fa-magnifying-glass"></i> </span>
                                 <span class="search-btn-text">搜索</span>
                             </button>
                         </div>
@@ -437,7 +441,7 @@
                           </div>
                         </div>
                         <div class="category-list" id="friendCategoryList">
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('myprofile')" id="friendCatMyprofile" style="width:100%;display:none;">👤 完整资料</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('myprofile')" id="friendCatMyprofile" style="width:100%;display:none;"><i class="fa-solid fa-user"></i> 完整资料</button>
                         </div>
                     </div>
                     <div class="sidebar-section">
@@ -449,10 +453,10 @@
                     <div class="sidebar-section">
                         <h3>全部好友</h3>
                         <div class="category-list">
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('all')" id="friendCatAll" style="width:100%;">👥 所有好友</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('online')" id="friendCatOnline" style="width:100%;">🟢 仅在线</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('notifications')" id="friendCatNotifications" style="width:100%;">🔔 消息通知</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('modlog')" id="friendCatModlog" style="width:100%;">📜 管理记录</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('all')" id="friendCatAll" style="width:100%;"><i class="fa-solid fa-users"></i> 所有好友</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('online')" id="friendCatOnline" style="width:100%;"><i class="fa-solid fa-circle" style="color: #22c55e;"></i> 仅在线</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('notifications')" id="friendCatNotifications" style="width:100%;"><i class="fa-solid fa-bell"></i> 消息通知</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchFriendCategory('modlog')" id="friendCatModlog" style="width:100%;"><i class="fa-solid fa-scroll"></i> 管理记录</button>
                         </div>
                     </div>
                     <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;">
@@ -473,7 +477,7 @@
                         <!-- Toolbar -->
                         <div style="display:flex;gap:8px;padding:16px 24px 0;flex-shrink:0;flex-wrap:wrap;align-items:center;">
                             <div class="glass-search-input-pill" style="flex:1; min-width:140px;">
-                                <span style="opacity: 0.5; font-size: 0.9em;">🔍</span>
+                                <span style="opacity: 0.5; font-size: 0.9em;"><i class="fa-solid fa-magnifying-glass"></i> </span>
                                 <input type="text" id="friendSearch" class="input-field"
                                     placeholder="搜索好友 / Search..." oninput="filterFriendsDebounced()">
                             </div>
@@ -489,7 +493,7 @@
                                 </div>
                                 <input type="hidden" id="friendSortBy" value="status">
                             </div>
-                            <button class="btn btn-secondary" onclick="fetchCurrentFriendCategory(true)">🔄 刷新</button>
+                            <button class="btn btn-secondary" onclick="fetchCurrentFriendCategory(true)"><i class="fa-solid fa-rotate-right"></i> 刷新</button>
                         </div>
                         <div id="friendStats" style="padding:6px 24px;font-size:0.8em;color:rgba(255,255,255,0.4);flex-shrink:0;"></div>
                         <div id="friendList" style="padding:0 16px 16px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;flex:1;"></div>
@@ -497,8 +501,8 @@
                     <!-- Moderation Log view -->
                     <div id="friendModlogView" style="display:none;flex-direction:column;height:100%;overflow:hidden;">
                         <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border);">
-                            <h3 style="margin:0;font-size:1.1em;">📜 玩家管理记录</h3>
-                            <button class="btn btn-secondary" style="font-size:0.8em;color:var(--text-danger);" onclick="clearModerationLog()">🗑️ 清空记录</button>
+                            <h3 style="margin:0;font-size:1.1em;"><i class="fa-solid fa-scroll"></i> 玩家管理记录</h3>
+                            <button class="btn btn-secondary" style="font-size:0.8em;color:var(--text-danger);" onclick="clearModerationLog()"><i class="fa-solid fa-trash"></i> 清空记录</button>
                         </div>
                         <div id="modLogList" style="flex:1;overflow-y:auto;padding:16px 24px;">
                             <div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">暂无管理记录</div>
@@ -507,8 +511,8 @@
                     <!-- Notification view -->
                     <div id="friendNotificationsView" style="display:none;flex-direction:column;height:100%;overflow:hidden;">
                         <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border);">
-                            <h3 style="margin:0;font-size:1.1em;">🔔 消息通知</h3>
-                            <button class="btn btn-secondary" style="font-size:0.8em;" onclick="seeAllNotifications()">🧹 全部标为已读</button>
+                            <h3 style="margin:0;font-size:1.1em;"><i class="fa-solid fa-bell"></i> 消息通知</h3>
+                            <button class="btn btn-secondary" style="font-size:0.8em;" onclick="seeAllNotifications()"><i class="fa-solid fa-broom"></i> 全部标为已读</button>
                         </div>
                         <div id="notificationList" style="flex:1;overflow-y:auto;padding:16px 24px;">
                             <div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">暂无消息通知</div>
@@ -530,8 +534,8 @@
                     <div class="sidebar-section">
                         <h3>发现</h3>
                         <div class="category-list">
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchWorldCategory('recent')" id="worldCatRecent" style="width:100%;">🕐 最近访问</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchWorldCategory('active')" id="worldCatActive" style="width:100%;">🔥 热门世界</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchWorldCategory('recent')" id="worldCatRecent" style="width:100%;"><i class="fa-solid fa-clock"></i> 最近访问</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchWorldCategory('active')" id="worldCatActive" style="width:100%;"><i class="fa-solid fa-fire" style="color: #ff4757;"></i> 热门世界</button>
                         </div>
                     </div>
                     <div class="sidebar-section">
@@ -552,7 +556,7 @@
                 <div class="grid-area" style="display:flex;flex-direction:column;overflow:hidden;">
                     <div class="world-filter-bar" style="display:flex;gap:8px;padding:16px 24px 0;flex-shrink:0;flex-wrap:wrap;align-items:center;">
                         <div class="glass-search-input-pill" style="flex:1; min-width:160px;">
-                            <span style="opacity: 0.5; font-size: 0.9em;">🔍</span>
+                            <span style="opacity: 0.5; font-size: 0.9em;"><i class="fa-solid fa-magnifying-glass"></i> </span>
                             <input type="text" id="worldSearch" class="input-field"
                                 placeholder="搜索世界 / Search worlds..." oninput="filterWorldsDebounced()">
                         </div>
@@ -569,7 +573,7 @@
                             </div>
                             <input type="hidden" id="worldFilterPlatform" value="all">
                         </div>
-                        <button class="btn btn-secondary" onclick="fetchWorlds(currentWorldCategory, true)">🔄 刷新</button>
+                        <button class="btn btn-secondary" onclick="fetchWorlds(currentWorldCategory, true)"><i class="fa-solid fa-rotate-right"></i> 刷新</button>
                     </div>
                     <div id="worldStats" style="padding:6px 24px;font-size:0.8em;color:rgba(255,255,255,0.4);flex-shrink:0;"></div>
                     <div id="worldGrid" class="avatar-grid" style="flex:1;overflow-y:auto;padding:0 16px 16px;"></div>
@@ -582,19 +586,19 @@
                     <div class="sidebar-section">
                         <h3>群组 (Groups)</h3>
                         <div class="btn-group">
-                            <button class="btn btn-secondary btn-block cat-btn active btn-primary" onclick="switchGroupsCategory('mine')" id="gpCatMine">🏠 我创建的</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchGroupsCategory('joined')" id="gpCatJoined">📋 已加入的</button>
+                            <button class="btn btn-secondary btn-block cat-btn active btn-primary" onclick="switchGroupsCategory('mine')" id="gpCatMine"><i class="fa-solid fa-house"></i> 我创建的</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchGroupsCategory('joined')" id="gpCatJoined"><i class="fa-solid fa-clipboard"></i> 已加入的</button>
                         </div>
                     </div>
                     <div class="sidebar-section" style="margin-top:12px;">
                         <h3>发现</h3>
                         <div class="btn-group">
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchGroupsCategory('search')" id="gpCatSearch">🔍 搜索群组</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchGroupsCategory('search')" id="gpCatSearch"><i class="fa-solid fa-magnifying-glass"></i> 搜索群组</button>
                         </div>
                     </div>
                 </div>
                 <div class="grid-area" style="padding:20px 24px;overflow-y:auto;" id="groupsContentArea">
-                    <h2 style="font-size:1.3rem;font-weight:600;margin-bottom:16px;">🏠 我的群组</h2>
+                    <h2 style="font-size:1.3rem;font-weight:600;margin-bottom:16px;"><i class="fa-solid fa-house"></i> 我的群组</h2>
                     <p style="color:var(--text-muted);font-size:0.85rem;">加载中...</p>
                 </div>
             </div>
@@ -603,28 +607,28 @@
             <div id="assetsPanel" class="download-panel">
                 <div class="sidebar">
                     <div class="sidebar-section">
-                        <h3>💰 经济 (Economy)</h3>
+                        <h3><i class="fa-solid fa-sack-dollar"></i> 经济 (Economy)</h3>
                         <div class="btn-group">
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('balance')" id="cat-assets-balance">👛 钱包余额</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('store')" id="cat-assets-store">🏪 商店浏览</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('tx')" id="cat-assets-tx">💸 交易记录</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('sub')" id="cat-assets-sub">⭐ VRC+ 订阅</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('balance')" id="cat-assets-balance"><i class="fa-solid fa-wallet"></i> 钱包余额</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('store')" id="cat-assets-store"><i class="fa-solid fa-shop"></i> 商店浏览</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('tx')" id="cat-assets-tx"><i class="fa-solid fa-money-bill-transfer"></i> 交易记录</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('sub')" id="cat-assets-sub"><i class="fa-solid fa-star"></i> VRC+ 订阅</button>
                         </div>
                     </div>
                     <div class="sidebar-section" style="margin-top:12px;">
-                        <h3>🧳 库存 (Inventory)</h3>
+                        <h3><i class="fa-solid fa-suitcase"></i> 库存 (Inventory)</h3>
                         <div class="btn-group">
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('gallery')" id="cat-assets-gallery">🖼️ VRC+ 相册</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('prints')" id="cat-assets-prints">🎞️ 拍立得照片</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('emoji')" id="cat-assets-emoji">😊 表情与贴纸</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('inventory')" id="cat-assets-inventory">🎁 库存物品</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('props')" id="cat-assets-props">🪄 道具 Props</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('gallery')" id="cat-assets-gallery"><i class="fa-solid fa-image"></i> VRC+ 相册</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('prints')" id="cat-assets-prints"><i class="fa-solid fa-film"></i> 拍立得照片</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('emoji')" id="cat-assets-emoji"><i class="fa-solid fa-face-smile"></i> 表情与贴纸</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('inventory')" id="cat-assets-inventory"><i class="fa-solid fa-gift"></i> 库存物品</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchAssetsPage('props')" id="cat-assets-props"><i class="fa-solid fa-wand-magic-sparkles"></i> 道具 Props</button>
                         </div>
                     </div>
                 </div>
-            <!-- Settings Panel -->
+            <!-- Assets Panel -->
                 <div class="grid-area" style="padding:20px 24px;overflow-y:auto;" id="assetsContentArea">
-                    <h2 style="font-size:1.4rem;font-weight:600;margin-bottom:16px;">💰 资产与经济</h2>
+                    <h2 style="font-size:1.4rem;font-weight:600;margin-bottom:16px;"><i class="fa-solid fa-sack-dollar"></i> 资产与经济</h2>
                     <p style="color:var(--text-muted);font-size:0.85rem;">选择左侧菜单查看你的余额、商店、库存和订阅。</p>
                 </div>
             </div>
@@ -632,28 +636,30 @@
             <div id="settingsPanel" class="download-panel hidden">
                 <div class="sidebar">
                     <div class="sidebar-section">
-                        <h3>⚙️ 高级设置</h3>
+                        <h3><i class="fa-solid fa-gear"></i> 高级设置</h3>
                         <div class="btn-group">
-                            <button class="btn btn-secondary btn-block cat-btn active" onclick="switchSettingsPage('cache')" id="setCatCache">🗑️ 缓存管理</button>
-                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchSettingsPage('join')" id="setCatJoin">🚀 加入偏好</button>
+                            <button class="btn btn-secondary btn-block cat-btn active" onclick="switchSettingsPage('cache')" id="setCatCache"><i class="fa-solid fa-trash"></i> 缓存管理</button>
+                            <button class="btn btn-secondary btn-block cat-btn" onclick="switchSettingsPage('join')" id="setCatJoin"><i class="fa-solid fa-rocket"></i> 加入偏好</button>
+
                             <button class="btn btn-secondary btn-block cat-btn" onclick="switchSettingsPage('about')" id="setCatAbout">ℹ️ 关于</button>
                         </div>
                     </div>
                 </div>
                 <div class="grid-area" style="padding:24px;overflow-y:auto;" id="settingsContentArea">
                     <div id="setPageCache">
-                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">🗑️ 缓存管理</h2>
+                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;"><i class="fa-solid fa-trash"></i> 缓存管理</h2>
                         <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">管理本地 IndexedDB 缓存。清除某类别后，下次访问时数据将从 API 重新拉取。</p>
                         <div id="cacheStatsContainer" style="display:flex;flex-direction:column;gap:10px;max-width:540px;">
                             <div style="color:var(--text-muted);font-size:0.85em;padding:20px;text-align:center;">正在读取缓存信息...</div>
                         </div>
                         <div style="margin-top:16px;max-width:540px;display:flex;flex-direction:column;gap:10px;">
-                            <button id="btnRefreshAllCache" onclick="refreshAllPersistentCache()" class="btn btn-secondary btn-block" style="color:#22c55e;border-color:rgba(34,197,94,0.35);">🔄 刷新所有缓存（从 API 重新拉取）</button>
-                            <button onclick="clearAllCacheNow()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.35);">🗑️ 全部清除（含图片 Blob）</button>
+                            <button id="btnRefreshAllCache" onclick="refreshAllPersistentCache()" class="btn btn-secondary btn-block" style="color:#22c55e;border-color:rgba(34,197,94,0.35);"><i class="fa-solid fa-rotate-right"></i> 刷新所有缓存（从 API 重新拉取）</button>
+                            <button onclick="clearAllCacheNow()" class="btn btn-secondary btn-block" style="color:#f87171;border-color:rgba(248,113,113,0.35);"><i class="fa-solid fa-trash"></i> 全部清除（含图片 Blob）</button>
                         </div>
                     </div>
+
                     <div id="setPageJoin" style="display:none;max-width:520px;">
-                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;">🚀 加入偏好</h2>
+                        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:6px;"><i class="fa-solid fa-rocket"></i> 加入偏好</h2>
                         <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;">点击“加入世界”时自动使用以下设置创建实例。</p>
 
                         <div style="display:flex;flex-direction:column;gap:20px;">
@@ -709,7 +715,7 @@
                                 <h2>关于 VRCW</h2>
                                 <p>VRChat Web Companion for managing avatars, worlds, friends, groups, and assets.</p>
                             </div>
-                            <span class="about-version-pill" data-app-version>v80</span>
+                            <span class="about-version-pill" data-app-version>v109</span>
                         </div>
 
                         <section class="about-panel">
@@ -723,7 +729,7 @@
                             <div class="about-meta-grid">
                                 <div class="about-meta-item">
                                     <span class="about-meta-label">版本</span>
-                                    <strong data-app-version>v80</strong>
+                                    <strong data-app-version>v109</strong>
                                 </div>
                                 <div class="about-meta-item">
                                     <span class="about-meta-label">作者</span>
@@ -872,9 +878,9 @@
                     <span id="worldDetailBreadcrumbName" style="color:var(--text-primary);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">World Details</span>
                 </div>
                 <div class="world-detail-header-btns" style="display:flex;gap:8px;flex-shrink:0;">
-                    <button id="worldDetailDeleteBtn" class="btn btn-icon" style="display:none;" title="删除世界" onclick="deleteCurrentWorld()">🗑️</button>
-                    <button id="worldDetailMainFavBtn" onclick="toggleWorldFavMenu(event)" class="btn btn-icon" title="收藏世界">⭐</button>
-                    <button id="worldDetailJoinBtn" onclick="joinWorldInstance()" class="btn btn-icon" title="加入世界">⚡</button>
+                    <button id="worldDetailDeleteBtn" class="btn btn-icon" style="display:none;" title="删除世界" onclick="deleteCurrentWorld()"><i class="fa-solid fa-trash"></i> </button>
+                    <button id="worldDetailMainFavBtn" onclick="toggleWorldFavMenu(event)" class="btn btn-icon" title="收藏世界"><i class="fa-solid fa-star"></i> </button>
+                    <button id="worldDetailJoinBtn" onclick="joinWorldInstance()" class="btn btn-icon" title="加入世界"><i class="fa-solid fa-bolt"></i> </button>
                     <button onclick="closeWorldDetail()" class="btn btn-icon" title="关闭">✕</button>
                 </div>
             </div>
@@ -896,7 +902,7 @@
                         <!-- Badges Row -->
                         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;" id="worldDetailBadges">
                             <span id="worldDetailStatusBadge" class="avtrdb-badge">Public</span>
-                            <span id="worldDetailCapacityBadge" class="avtrdb-badge">👥 0</span>
+                            <span id="worldDetailCapacityBadge" class="avtrdb-badge"><i class="fa-solid fa-users"></i> 0</span>
                             <span id="worldDetailPlatformBadge" class="avtrdb-badge">PC</span>
                             <span id="worldDetailVersionBadge" class="avtrdb-badge">v1.0.0</span>
                         </div>
@@ -961,9 +967,9 @@
             <!-- Mobile-only bottom action bar (matches avatar detail style) -->
             <div class="world-detail-mobile-actions" style="display:none;gap:10px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;">
                 <div style="flex:1;position:relative;">
-                    <button class="btn btn-secondary" style="width:100%;" onclick="toggleWorldFavMenu(event)" id="worldDetailFavBtn">⭐ 收藏</button>
+                    <button class="btn btn-secondary" style="width:100%;" onclick="toggleWorldFavMenu(event)" id="worldDetailFavBtn"><i class="fa-solid fa-star"></i> 收藏</button>
                 </div>
-                <button class="btn btn-primary" style="flex:1;" onclick="joinWorldInstance()">⚡ 加入世界</button>
+                <button class="btn btn-primary" style="flex:1;" onclick="joinWorldInstance()"><i class="fa-solid fa-bolt"></i> 加入世界</button>
             </div>
 
             <div id="worldDetailFavStatus" style="padding:10px 24px;font-size:0.8em;background:rgba(0,0,0,0.1);border-top:1px solid var(--border);text-align:center;min-height:38px;color:var(--success);"></div>
@@ -979,7 +985,7 @@
                 <div style="position:relative;flex-shrink:0;cursor:pointer;" onclick="document.getElementById('editThumbInput').click()" title="点击更换封面 / Click to change thumbnail">
                     <img id="editThumbPreview" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid var(--border);display:block;background:var(--bg-secondary);">
                     <div style="position:absolute;inset:0;border-radius:8px;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
-                        <span style="font-size:1.4em;">📷</span>
+                        <span style="font-size:1.4em;"><i class="fa-solid fa-camera"></i> </span>
                     </div>
                 </div>
                 <div style="flex:1;">
@@ -1023,23 +1029,23 @@
     </div>
 
 
-    <script src="js/core.js?v=106" defer></script>
-    <script src="js/common.js?v=106" defer></script>
-    <script src="js/images.js?v=106" defer></script>
-    <script src="js/logging.js?v=106" defer></script>
-    <script src="js/auth.js?v=106" defer></script>
-    <script src="js/ui-controls.js?v=106" defer></script>
-    <script src="js/sidebar-profile.js?v=106" defer></script>
-    <script src="js/worlds-shell.js?v=106" defer></script>
-    <script src="js/groups-instance-shell.js?v=106" defer></script>
-    <script src="js/shell.js?v=106" defer></script>
-    <script src="js/avatars.js?v=106" defer></script>
-    <script src="js/friends.js?v=106" defer></script>
-    <script src="js/friend-profile-shell.js?v=106" defer></script>
-    <script src="js/groups-shell.js?v=106" defer></script>
-    <script src="js/search-shell.js?v=106" defer></script>
-    <script src="js/context-menu.js?v=106" defer></script>
-    <script src="js/profile-actions.js?v=106" defer></script>
+    <script src="js/core.js?v=110" defer></script>
+    <script src="js/common.js?v=110" defer></script>
+    <script src="js/images.js?v=110" defer></script>
+    <script src="js/logging.js?v=110" defer></script>
+    <script src="js/auth.js?v=110" defer></script>
+    <script src="js/ui-controls.js?v=110" defer></script>
+    <script src="js/sidebar-profile.js?v=110" defer></script>
+    <script src="js/worlds-shell.js?v=110" defer></script>
+    <script src="js/groups-instance-shell.js?v=110" defer></script>
+    <script src="js/shell.js?v=110" defer></script>
+    <script src="js/avatars.js?v=110" defer></script>
+    <script src="js/friends.js?v=110" defer></script>
+    <script src="js/friend-profile-shell.js?v=110" defer></script>
+    <script src="js/groups-shell.js?v=110" defer></script>
+    <script src="js/search-shell.js?v=110" defer></script>
+    <script src="js/context-menu.js?v=110" defer></script>
+    <script src="js/profile-actions.js?v=110" defer></script>
 
     <!-- ── avtrDB Avatar Detail Modal ── -->
     <div id="avtrdbDetailModal" class="modal hidden" onclick="if(event.target===this)closeAvtrdbDetail()">
@@ -1094,9 +1100,9 @@
                     <!-- Favorite button with dropdown -->
                     <div style="flex:1;position:relative;" id="avtrdbFavWrapper">
                         <button id="avtrdbDetailFavBtn" class="btn btn-secondary" style="width:100%;"
-                            onclick="toggleAvtrdbFavMenu(event)">⭐ 收藏</button>
+                            onclick="toggleAvtrdbFavMenu(event)"><i class="fa-solid fa-star"></i> 收藏</button>
                     </div>
-                    <button id="avtrdbDetailSwitchBtn" class="btn btn-primary" style="flex:1;">⚡ 切换模型</button>
+                    <button id="avtrdbDetailSwitchBtn" class="btn btn-primary" style="flex:1;"><i class="fa-solid fa-bolt"></i> 切换模型</button>
                 </div>
                 <!-- Owner-only actions: edit + delete. Visible only when av.authorId
                      matches currentUserId. Per-card edit/delete were removed for
@@ -1104,7 +1110,7 @@
                      so this is the single home for those actions. -->
                 <div id="avtrdbDetailOwnerActions" class="hidden" style="display:flex;gap:8px;">
                     <button id="avtrdbDetailEditBtn" class="btn btn-secondary" style="flex:1;">✏️ 编辑</button>
-                    <button id="avtrdbDetailDeleteBtn" class="btn btn-danger-full" style="flex:1;">🗑️ 删除</button>
+                    <button id="avtrdbDetailDeleteBtn" class="btn btn-danger-full" style="flex:1;"><i class="fa-solid fa-trash"></i> 删除</button>
                 </div>
                 <!-- Favorite status feedback -->
                 <div id="avtrdbFavStatus" style="font-size:0.75em;text-align:center;min-height:18px;"></div>
@@ -1120,8 +1126,7 @@
       leave them in a stale state on next login. They are position:fixed so they
       render fine anywhere in the DOM — moved out to be siblings of #mainApp.
     -->
-        </div><!-- /app-layout -->
-    </div><!-- /mainApp -->
+    </div><!-- /mainApp (app-layout closed earlier at line 806) -->
 
     <!-- avtrDB Favorite Group Menu -->
     <div id="avtrdbFavMenu" class="hidden"

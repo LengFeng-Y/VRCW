@@ -47,7 +47,7 @@ function groupCardHtml(g, myId) {
     '</div>' +
     '<div class="friend-info">' +
       '<div class="friend-name">' + escHtml(g.name||'') + (isOwner ? ' <span style="font-size:0.65em;background:rgba(255,255,255,0.13);color:#d4d4d8;border:1px solid rgba(255,255,255,0.27);padding:2px 6px;border-radius:99px;">创建者</span>' : '') + '</div>' +
-      '<div class="friend-location" style="font-size:0.78em;color:var(--text-muted);">.' + escHtml(g.shortCode||'') + ' · 👥 ' + (g.memberCount||0) + '</div>' +
+      '<div class="friend-location" style="font-size:0.78em;color:var(--text-muted);">.' + escHtml(g.shortCode||'') + ' · <i class="fa-solid fa-user-group"></i> ' + (g.memberCount||0) + '</div>' +
     '</div>' +
   '</div>';
 }
@@ -140,10 +140,10 @@ async function openGroupDetail(groupId) {
     document.getElementById('gdShortCode').textContent = '.' + (g.shortCode || '');
     document.getElementById('gdDesc').textContent = g.description || '暂无简介';
     document.getElementById('gdStats').innerHTML =
-      '<span>👥 ' + (g.memberCount || 0) + ' 成员</span>' +
+      '<span><i class="fa-solid fa-user-group"></i> ' + (g.memberCount || 0) + ' 成员</span>' +
       '<span style="opacity:0.3;margin:0 4px;">|</span>' +
-      '<span>' + (g.joinState === 'closed' ? '🔒 闭门' : g.joinState === 'invite' ? '✉️ 邀请' : g.joinState === 'request' ? '✋ 申请' : '🔓 公开') + '</span>' +
-      (g.languages && g.languages.length ? '<span style="opacity:0.3;margin:0 4px;">|</span><span>🌐 ' + g.languages.join(', ') + '</span>' : '');
+      '<span>' + (g.joinState === 'closed' ? '<i class="fa-solid fa-lock"></i> 闭门' : g.joinState === 'invite' ? '✉️ 邀请' : g.joinState === 'request' ? '<i class="fa-solid fa-hand"></i> 申请' : '<i class="fa-solid fa-lock-open"></i> 公开') + '</span>' +
+      (g.languages && g.languages.length ? '<span style="opacity:0.3;margin:0 4px;">|</span><span><i class="fa-solid fa-globe"></i> ' + g.languages.join(', ') + '</span>' : '');
 
     // Render Actions
     let actionHtml = '';
@@ -151,12 +151,12 @@ async function openGroupDetail(groupId) {
       const myId = g.myMember.userId;
       const vis = g.myMember.visibility; // 'visible', 'hidden', 'friends'
       const oppVis = vis === 'visible' ? 'hidden' : 'visible';
-      const visText = vis === 'visible' ? '👁️ 个人资料可见' : (vis === 'friends' ? '👥 仅好友可见' : '👻 资料页隐藏');
+      const visText = vis === 'visible' ? '👁️ 个人资料可见' : (vis === 'friends' ? '<i class="fa-solid fa-user-group"></i> 仅好友可见' : '👻 资料页隐藏');
       actionHtml += `<button onclick="vrcGroupAction('${escJsAttr(groupId)}','visibility','${escJsAttr(myId)}','${escJsAttr(oppVis)}')" style="background:var(--bg-glass);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:0.75em;color:var(--text-primary);cursor:pointer;" title="点击切换">${visText}</button>`;
-      actionHtml += `<button onclick="vrcGroupAction('${escJsAttr(groupId)}','leave')" style="background:#ef444422;border:1px solid #ef444444;border-radius:6px;padding:4px 10px;font-size:0.75em;color:#ef4444;cursor:pointer;">🚪 退出群组</button>`;
+      actionHtml += `<button onclick="vrcGroupAction('${escJsAttr(groupId)}','leave')" style="background:#ef444422;border:1px solid #ef444444;border-radius:6px;padding:4px 10px;font-size:0.75em;color:#ef4444;cursor:pointer;"><i class="fa-solid fa-door-open"></i> 退出群组</button>`;
     } else {
       if (g.joinState !== 'closed') {
-        actionHtml += `<button onclick="vrcGroupAction('${escJsAttr(groupId)}','join')" style="background:var(--accent);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:0.75em;color:#fff;cursor:pointer;font-weight:600;">➕ 申请加入</button>`;
+        actionHtml += `<button onclick="vrcGroupAction('${escJsAttr(groupId)}','join')" style="background:var(--accent);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:0.75em;color:#fff;cursor:pointer;font-weight:600;"><i class="fa-solid fa-plus"></i> 申请加入</button>`;
       }
     }
     document.getElementById('gdActions').innerHTML = actionHtml;
@@ -209,9 +209,10 @@ async function vrcGroupAction(groupId, action, myId, nextVis) {
 
     // Invalidate the cached groups list — leave/join would otherwise let the
     // sidebar keep showing the user as still in the group (or missing) for
-    // up to a full reload, since loadGroupsPage early-returns when myGroupsCache
-    // is populated. Setting it to null forces the next page open to re-fetch.
+    // up to a full reload (TTL). Clear both the mutual-groups memory cache
+    // and the groups-shell IDB cache so the next open re-fetches.
     myGroupsCache = null;
+    if (typeof invalidateGroupsCache === 'function') invalidateGroupsCache();
 
     // Refresh modal
     openGroupDetail(groupId);
@@ -425,13 +426,13 @@ async function fetchInstanceOccupancy(loc, token = null, signal = null) {
     const userCount = (ins.userCount != null ? ins.userCount : ins.n_users);
     if (userCount != null) {
       const cap = ins.capacity != null ? ('/' + ins.capacity) : '';
-      parts.push(pill('👥', '在线', userCount + cap));
+      parts.push(pill('<i class="fa-solid fa-user-group"></i> ', '在线', userCount + cap));
     }
-    if (ins.queueSize) parts.push(pill('⏳', '排队', ins.queueSize));
+    if (ins.queueSize) parts.push(pill('<i class="fa-solid fa-hourglass-half"></i> ', '排队', ins.queueSize));
     if (ins.platforms) {
       if (ins.platforms.standalonewindows) parts.push(pill('🖥️', 'PC', ins.platforms.standalonewindows));
-      if (ins.platforms.android) parts.push(pill('📱', 'Quest', ins.platforms.android));
-      if (ins.platforms.ios) parts.push(pill('🍎', 'iOS', ins.platforms.ios));
+      if (ins.platforms.android) parts.push(pill('<i class="fa-solid fa-mobile-screen"></i> ', 'Quest', ins.platforms.android));
+      if (ins.platforms.ios) parts.push(pill('<i class="fa-brands fa-apple"></i> ', 'iOS', ins.platforms.ios));
     }
     if (ins.full) parts.push('<span style="font-size:0.72em;padding:3px 9px;border-radius:999px;background:rgba(239,68,68,0.18);color:#fca5a5;">已满</span>');
     el.innerHTML = parts.join('') ||
@@ -479,12 +480,12 @@ async function openInstanceDetail(loc) {
           <div id="insOccupancy" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px;"></div>
           
           <div style="display:flex;gap:10px;margin-bottom:20px;">
-             <button id="insBtnWorld" class="btn btn-primary" style="flex:1;">🌍 世界详情</button>
-             <button id="insBtnInvite" class="btn btn-success" style="flex:1;">📩 邀请自己</button>
+             <button id="insBtnWorld" class="btn btn-primary" style="flex:1;"><i class="fa-solid fa-earth-americas"></i> 世界详情</button>
+             <button id="insBtnInvite" class="btn btn-success" style="flex:1;"><i class="fa-solid fa-envelope"></i> 邀请自己</button>
           </div>
 
           <div style="font-size:0.85em;font-weight:700;margin-bottom:10px;color:var(--text-primary);display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);padding-bottom:8px;">
-            <span style="font-size:1.2em;">👥</span> 在此实例的好友
+            <span style="font-size:1.2em;"><i class="fa-solid fa-user-group"></i> </span> 在此实例的好友
           </div>
           <div id="insFriendList" style="display:flex;flex-direction:column;gap:8px;max-height:240px;overflow-y:auto;padding-right:4px;"></div>
         </div>
@@ -532,11 +533,11 @@ async function openInstanceDetail(loc) {
       document.getElementById('insDesc').textContent = w.description || '暂无世界简介';
       
       const region = loc.includes('~region(') ? loc.match(/~region\((.*?)\)/)[1].toUpperCase() : 'US';
-      const regionIcon = {US:'🇺🇸',EU:'🇪🇺',JP:'🇯🇵'}[region] || '🌐';
+      const regionIcon = {US:'🇺🇸',EU:'🇪🇺',JP:'🇯🇵'}[region] || '<i class="fa-solid fa-globe"></i> ';
       
       document.getElementById('insStats').innerHTML = `
         <div style="font-size:0.9em;font-weight:700;">${regionIcon} ${region}</div>
-        <div style="font-size:0.75em;color:var(--text-muted);">${w.releaseStatus === 'labs' ? '🧪 Labs' : '✅ Public'}</div>
+        <div style="font-size:0.75em;color:var(--text-muted);">${w.releaseStatus === 'labs' ? '<i class="fa-solid fa-flask"></i> Labs' : '<i class="fa-solid fa-check"></i> Public'}</div>
       `;
 
       // Tags
@@ -572,7 +573,7 @@ async function openInstanceDetail(loc) {
           <div style="flex:1;">
             <div style="font-size:0.95em;font-weight:600;color:${trust.color};display:flex;align-items:center;gap:6px;">
               ${escHtml(f.displayName)}
-              ${f.isSelf ? '<span style="font-size:0.7em;background:rgba(255, 255, 255, 0.3);color:#d4d4d8;padding:2px 6px;border-radius:4px;">📍 我自己</span>' : ''}
+              ${f.isSelf ? '<span style="font-size:0.7em;background:rgba(255, 255, 255, 0.3);color:#d4d4d8;padding:2px 6px;border-radius:4px;"><i class="fa-solid fa-location-dot"></i> 我自己</span>' : ''}
             </div>
             <div style="font-size:0.75em;opacity:0.7;color:var(--text-muted);">${getStatusLabel(f)}</div>
           </div>

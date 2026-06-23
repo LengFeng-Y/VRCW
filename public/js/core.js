@@ -563,7 +563,7 @@ async function syncLocalFavorites() {
     localAvatarIdMap.clear();
     localAvatarFavs.forEach(av => localAvatarIdMap.set(av.id, true));
     const btn = document.getElementById("cat-local");
-    if (btn) btn.textContent = `⭐ 本地收藏 (${localAvatarFavs.length}/200)`;
+    if (btn) btn.innerHTML = `<i class="fa-solid fa-star"></i> 本地收藏 (${localAvatarFavs.length}/200)`;
   } catch(e) { console.error("syncLocalFavorites", e); }
 }
 
@@ -577,16 +577,17 @@ async function saveToLocalFavorite(av) {
   localAvatarIdMap.set(av.id, true);
   await idb.saveLocalAvatar(av);
   syncLocalFavorites();
-  // INSTANT UI: flip the unified card-fav-quick toggle from ☆ → ⭐
+  // INSTANT UI: flip the unified card-fav-quick toggle from ☆ to ★ on the
+  // currently-rendered card so the user sees the favorite land immediately.
   const card = document.getElementById("card-" + av.id);
   if (card) {
     const fq = card.querySelector('.card-fav-quick');
     if (fq) {
-      fq.textContent = '⭐';
+      fq.innerHTML = '<i class="fa-solid fa-star"></i> ';
       fq.title = '已收藏';
     }
   }
-  logMsg(`✅ 已保存到本地收藏: ${av.name}`, "info");
+  logMsg(`<i class="fa-solid fa-check"></i> 已保存到本地收藏: ${av.name}`, "info");
   // Refresh the detail modal button if it's showing this avatar
   if (typeof _refreshDetailAfterFavChange === 'function') _refreshDetailAfterFavChange(av.id);
 }
@@ -906,15 +907,15 @@ const PHOTON_EMOJIS = [
   'Question','Stop','Zzz'
 ];
 const PHOTON_EMOJI_ICONS = {
-  'Angry':'😠','Blushing':'😊','Crying':'😭','Frown':'☹️','Hand Wave':'👋','Hang Ten':'🤙','In Love':'😍',
+  'Angry':'😠','Blushing':'<i class="fa-solid fa-face-smile"></i> ','Crying':'😭','Frown':'☹️','Hand Wave':'<i class="fa-solid fa-hand"></i> ','Hang Ten':'🤙','In Love':'😍',
   'Jack O Lantern':'🎃','Kiss':'😘','Laugh':'😂','Skull':'💀','Smile':'🙂','Spooky Ghost':'👻','Stoic':'😐',
   'Sunglasses':'😎','Thinking':'🤔','Thumbs Down':'👎','Thumbs Up':'👍','Tongue Out':'😛','Wow':'😮',
-  'Arrow Point':'👉',"Can't see":'🙈','Hourglass':'⏳','Keyboard':'⌨️','No Headphones':'🔕','No Mic':'🔇',
-  'Portal':'🌀','Shush':'🤫','Bats':'🦇','Cloud':'☁️','Fire':'🔥','Snow Fall':'🌨️','Snowball':'⛄','Splash':'💦',
+  'Arrow Point':'👉',"Can't see":'🙈','Hourglass':'<i class="fa-solid fa-hourglass-half"></i> ','Keyboard':'⌨️','No Headphones':'🔕','No Mic':'<i class="fa-solid fa-volume-xmark"></i> ',
+  'Portal':'🌀','Shush':'🤫','Bats':'🦇','Cloud':'☁️','Fire':'<i class="fa-solid fa-fire" style="color: #ff4757;"></i> ','Snow Fall':'🌨️','Snowball':'⛄','Splash':'💦',
   'Web':'🕸️','Beer':'🍺','Candy':'🍬','Candy Cane':'🍭','Candy Corn':'🌽','Champagne':'🍾','Drink':'🍹',
   'Gingerbread':'🍪','Ice Cream':'🍦','Pineapple':'🍍','Pizza':'🍕','Tomato':'🍅','Beachball':'🏖️','Coal':'🪨',
-  'Confetti':'🎊','Gift':'🎁','Gifts':'🛍️','Life Ring':'🛟','Mistletoe':'🌿','Money':'💰','Neon Shades':'🥽',
-  'Sun Lotion':'🧴','Boo':'👻','Broken Heart':'💔','Exclamation':'❗','Go':'🟢','Heart':'💖','Music Note':'🎵',
+  'Confetti':'🎊','Gift':'<i class="fa-solid fa-gift"></i> ','Gifts':'<i class="fa-solid fa-shop"></i> ','Life Ring':'🛟','Mistletoe':'🌿','Money':'<i class="fa-solid fa-sack-dollar"></i> ','Neon Shades':'<i class="fa-solid fa-vr-cardboard"></i> ',
+  'Sun Lotion':'🧴','Boo':'👻','Broken Heart':'💔','Exclamation':'❗','Go':'🟢','Heart':'<i class="fa-solid fa-heart"></i> ','Music Note':'🎵',
   'Question':'❓','Stop':'🛑','Zzz':'💤'
 };
 // default emojiId for a named photon emoji

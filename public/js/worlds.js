@@ -43,7 +43,7 @@ function renderWorldFavGroupButtons(message) {
     const isVrcPlus = name.startsWith('vrcPlusWorlds') || g.type === 'vrcPlusWorld';
     const count = worldFavGroupCounts.get(name);
     const countLabel = Number.isFinite(count) ? ` (${count}/100)` : '';
-    const icon = isVrcPlus ? '💎' : '⭐';
+    const icon = isVrcPlus ? '<i class="fa-solid fa-gem" style="color: #00f2fe;"></i> ' : '<i class="fa-solid fa-star"></i> ';
     return makeCatBtn(`${icon} ${escHtml(g.displayName || g.name)}${countLabel}`, `switchWorldCategory('fav_${name}')`, `worldCatFav_${name}`);
   }).join('');
 
@@ -52,11 +52,11 @@ function renderWorldFavGroupButtons(message) {
     .sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
   html += extra.map(g => {
     const isVrcPlus = g.name.startsWith('vrcPlusWorlds') || g.type === 'vrcPlusWorld';
-    const icon = isVrcPlus ? '💎' : '⭐';
+    const icon = isVrcPlus ? '<i class="fa-solid fa-gem" style="color: #00f2fe;"></i> ' : '<i class="fa-solid fa-star"></i> ';
     return makeCatBtn(`${icon} ${escHtml(g.displayName || g.name)}`, `switchWorldCategory('fav_${escJsAttr(g.name)}')`, `worldCatFav_${g.name}`);
   }).join('');
 
-  html += makeCatBtn('📤 我上传的世界', "switchWorldCategory('mine')", 'worldCatMine');
+  html += makeCatBtn('<i class="fa-solid fa-cloud-arrow-up"></i> 我上传的世界', "switchWorldCategory('mine')", 'worldCatMine');
 
   if (message) {
     html = `<div style="font-size:0.75em;color:var(--text-muted);padding:4px 0 8px;line-height:1.5;">${escHtml(message)}</div>` + html;
@@ -156,7 +156,7 @@ async function fetchWorlds(category, forceRefresh = false) {
   _updateWorldActionBtns();
 
   const catLabel = category.startsWith('fav_') ? `收藏夹 [${category.slice(4)}]` : category;
-  worldLogMsg(`📂 切换到 ${catLabel}`, 'info');
+  worldLogMsg(`<i class="fa-solid fa-folder-open"></i> 切换到 ${catLabel}`, 'info');
 
   // ── Step 1: Load basics from cache immediately ──────────────────────────
   const WORLDS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
@@ -173,7 +173,7 @@ async function fetchWorlds(category, forceRefresh = false) {
       filterWorlds();
       const freshLabel = forceRefresh ? '缓存(刷新中)' : (category.startsWith('fav_') || cacheIsFresh ? '缓存' : '缓存(刷新中)');
       if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界 (${freshLabel})`;
-      worldLogMsg(`⚡ 从缓存加载了 ${cachedBasics.length} 个世界${cacheIsFresh && !forceRefresh ? '，缓存有效跳过API' : ''}`, 'info');
+      worldLogMsg(`<i class="fa-solid fa-bolt"></i> 从缓存加载了 ${cachedBasics.length} 个世界${cacheIsFresh && !forceRefresh ? '，缓存有效跳过API' : ''}`, 'info');
 
       // Favorite groups are IDB-first: startup/background index sync updates
       // stale favorite caches only when their remote ID index changes.
@@ -182,7 +182,7 @@ async function fetchWorlds(category, forceRefresh = false) {
       if (cacheIsFresh && !forceRefresh) return;
     } else {
       gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:rgba(255,255,255,0.3);">加载中...</div>';
-      worldLogMsg('🌐 从 API 获取世界列表...', 'info');
+      worldLogMsg('<i class="fa-solid fa-globe"></i> 从 API 获取世界列表...', 'info');
     }
   } catch(_) {}
 
@@ -210,7 +210,7 @@ async function fetchWorlds(category, forceRefresh = false) {
       if (isFirst) renderWorldGrid(freshWorlds);
       else _appendWorldCards(batch);
       saveWorldBasics(category);
-      worldLogMsg(`🔄 已加载 ${freshWorlds.length} 个世界...`, 'info');
+      worldLogMsg(`<i class="fa-solid fa-rotate-right"></i> 已加载 ${freshWorlds.length} 个世界...`, 'info');
     };
 
     if (category.startsWith('fav_')) {
@@ -249,7 +249,7 @@ async function fetchWorlds(category, forceRefresh = false) {
 
       if (forceRefresh && _worldCacheIdsMatch(category, onlineWorldIds)) {
         if (statsEl) statsEl.textContent = `${allWorlds.length} 个世界 (已是最新)`;
-        worldLogMsg('✅ 收藏夹未变化，跳过详情刷新', 'success');
+        worldLogMsg('<i class="fa-solid fa-check"></i> 收藏夹未变化，跳过详情刷新', 'success');
         return;
       }
 
@@ -258,7 +258,7 @@ async function fetchWorlds(category, forceRefresh = false) {
         renderWorldGrid([]);
         await idb.set('world_basics_' + category, []);
         await idb.set('world_basics_age_' + category, Date.now());
-        worldLogMsg('✅ 收藏夹为空，已同步本地缓存', 'success');
+        worldLogMsg('<i class="fa-solid fa-check"></i> 收藏夹为空，已同步本地缓存', 'success');
       }
 
       // Concurrency 8: streams in fast without bursting the CF free-tier
@@ -302,7 +302,7 @@ async function fetchWorlds(category, forceRefresh = false) {
     if (seq === currentWorldFetchSeq && statsEl) {
         const invalidCount = allWorlds.filter(w => w.isInvalid).length;
         statsEl.textContent = `${allWorlds.length} 个世界${invalidCount ? ` (${invalidCount} 个失效)` : ''}`;
-        worldLogMsg(`✅ 加载完成：${allWorlds.length} 个世界${invalidCount ? `，${invalidCount} 个失效` : ''}`, invalidCount > 0 ? 'error' : 'success');
+        worldLogMsg(`<i class="fa-solid fa-check"></i> 加载完成：${allWorlds.length} 个世界${invalidCount ? `，${invalidCount} 个失效` : ''}`, invalidCount > 0 ? 'error' : 'success');
     }
   } catch(e) {
     console.error('World fetch error', e);
@@ -329,7 +329,7 @@ async function cleanupInvalidWorlds() {
     }
 
     _showCleanupModal({
-        title: '🧹 清理收藏世界',
+        title: '<i class="fa-solid fa-broom"></i> 清理收藏世界',
         invalidItems: invalid,
         privateNonOwnItems: privateNonOwn,
         invalidLabel: item => item.name || '失效世界',
@@ -395,7 +395,7 @@ function renderWorldGrid(list) {
   const gridEl = document.getElementById('worldGrid');
   if (!gridEl) return;
   if (!list.length) {
-    gridEl.innerHTML = '<div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:rgba(255,255,255,0.3);gap:12px;"><div style="font-size:3em;">🌍</div><div>暂无世界</div></div>';
+    gridEl.innerHTML = '<div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:rgba(255,255,255,0.3);gap:12px;"><div style="font-size:3em;"><i class="fa-solid fa-earth-americas"></i> </div><div>暂无世界</div></div>';
     return;
   }
   gridEl.innerHTML = '';
@@ -434,11 +434,11 @@ function _buildWorldCard(w) {
         <div class="card-checkbox ${sel ? 'on' : ''}" onclick="toggleSelectWorld('${escJsAttr(w.id)}', event)" title="选中/取消选中">${sel ? '✓' : ''}</div>
       </div>
       <div class="card-tr-overlay">
-        <div class="card-fav-quick" data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escJsAttr(w.id)}',event)" title="${isFaved ? '取消收藏' : '添加到收藏夹'}">${isFaved ? '⭐' : '☆'}</div>
+        <div class="card-fav-quick" data-fav-btn="${escHtml(w.id)}" onclick="quickWorldFav('${escJsAttr(w.id)}',event)" title="${isFaved ? '取消收藏' : '添加到收藏夹'}">${isFaved ? '<i class="fa-solid fa-star"></i> ' : '☆'}</div>
       </div>
       <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:4px;z-index:5;pointer-events:none;">
-        ${friendsHere>0 ? `<div style="background:var(--accent);color:white;font-size:0.7em;padding:2px 6px;border-radius:4px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);">🤝 ${friendsHere}</div>` : ''}
-        ${pc>0 ? `<div class="world-player-badge" style="position:static;margin:0;">👥 ${pc}</div>` : ''}
+        ${friendsHere>0 ? `<div style="background:var(--accent);color:white;font-size:0.7em;padding:2px 6px;border-radius:4px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,0.3);"><i class="fa-solid fa-handshake"></i> ${friendsHere}</div>` : ''}
+        ${pc>0 ? `<div class="world-player-badge" style="position:static;margin:0;"><i class="fa-solid fa-user-group"></i> ${pc}</div>` : ''}
       </div>
       ${w.isInvalid ? `<div class="card-release-badge release-private" style="background:var(--error);">已失效</div>` : ''}
     </div>`;
@@ -477,20 +477,20 @@ function _broadcastWorldFavUpdate(worldId, isFaved) {
   // 1. Update all visible grid cards
   const btn = document.querySelector(`[data-fav-btn="${worldId}"]`);
   if (btn) {
-    btn.textContent = isFaved ? '⭐' : '☆';
+    btn.innerHTML = isFaved ? '<i class="fa-solid fa-star"></i> ' : '☆';
     btn.title = isFaved ? '取消收藏' : '添加到收藏夹';
   }
   // 2. Update mobile bottom action bar button (id=worldDetailFavBtn)
   if (currentWorldDetail && currentWorldDetail.id === worldId) {
     const mobileBtn = document.getElementById('worldDetailFavBtn');
     if (mobileBtn) {
-      mobileBtn.innerHTML = isFaved ? '⭐ 取消收藏' : '⭐ 收藏';
+      mobileBtn.innerHTML = isFaved ? '<i class="fa-solid fa-star"></i> 取消收藏' : '<i class="fa-solid fa-star"></i> 收藏';
       mobileBtn.className = isFaved ? 'btn btn-warning' : 'btn btn-secondary';
     }
     // 3. Also update the desktop header icon button
     const headerBtn = document.getElementById('worldDetailMainFavBtn');
     if (headerBtn) {
-      headerBtn.innerHTML = isFaved ? '⭐' : '☆';
+      headerBtn.innerHTML = isFaved ? '<i class="fa-solid fa-star"></i> ' : '☆';
       headerBtn.title = isFaved ? '取消收藏' : '添加到收藏夹';
     }
   }
@@ -503,7 +503,7 @@ async function quickWorldFav(worldId, event) {
 
   if (worldFavoriteIdMap.has(worldId)) {
     if (!confirm('确定要取消收藏这个世界吗？')) return;
-    btn.textContent = '⏳';
+    btn.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> ';
     try {
       const favId = worldFavoriteIdMap.get(worldId);
       // Look up which group this world is in by scanning loaded `allWorlds`
@@ -529,14 +529,14 @@ async function quickWorldFav(worldId, event) {
           allWorlds = allWorlds.filter(w => w.id !== worldId);
           filterWorlds();
         }
-      } else { btn.textContent = '⭐'; showToast('取消收藏失败', 'error'); }
-    } catch(e) { btn.textContent = '⭐'; }
+      } else { btn.innerHTML = '<i class="fa-solid fa-star"></i> '; showToast('取消收藏失败', 'error'); }
+    } catch(e) { btn.innerHTML = '<i class="fa-solid fa-star"></i> '; }
     return;
   }
 
   // Auto-load groups if empty
   if (!worldFavGroups.length) {
-    btn.textContent = '⏳';
+    btn.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> ';
     await loadWorldFavGroups();
     btn.textContent = '☆';
     if (!worldFavGroups.length) { showToast('无法获取收藏组列表，请重试', 'error'); return; }
@@ -553,7 +553,7 @@ async function quickWorldFav(worldId, event) {
   `;
   const hdr = document.createElement('div');
   hdr.style.cssText = 'font-size:0.72em;color:var(--text-muted);padding:4px 8px 6px;border-bottom:1px solid var(--border);margin-bottom:4px;';
-  hdr.textContent = '⭐ 收藏到…';
+  hdr.innerHTML = '<i class="fa-solid fa-star"></i> 收藏到…';
   menu.appendChild(hdr);
 
   worldFavGroups.forEach(g => {
@@ -562,7 +562,7 @@ async function quickWorldFav(worldId, event) {
     b.style.cssText = 'width:100%;display:block;text-align:left;';
     b.textContent = g.displayName || g.name;
     b.onclick = async () => {
-      btn.textContent = '⏳';
+      btn.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> ';
       try {
         const r = await apiCall('/api/vrc/favorites', {
           method: 'POST',
@@ -659,7 +659,7 @@ async function unfavoriteSelectedWorlds() {
     await new Promise(r => setTimeout(r, 300));
   }
   try { await idb.set('world_basics_' + currentWorldCategory, allWorlds); } catch(_) {}
-  worldLogMsg(`✅ 批量移除完成：成功 ${success}，失败 ${fail}`, success > 0 ? 'success' : 'error');
+  worldLogMsg(`<i class="fa-solid fa-check"></i> 批量移除完成：成功 ${success}，失败 ${fail}`, success > 0 ? 'success' : 'error');
   _updateWorldActionBtns();
 }
 
@@ -748,7 +748,7 @@ async function openWorldDetail(worldId, worldObj = null) {
     const badgesEl = document.getElementById('worldDetailBadges');
     badgesEl.innerHTML = `
       <span class="avtrdb-badge" style="background:rgba(134,239,172,0.1);color:#4ade80;border-color:rgba(134,239,172,0.2);">${escHtml(w.releaseStatus||'public').toUpperCase()}</span>
-      <span class="avtrdb-badge">👥 ${w.capacity || 0}</span>
+      <span class="avtrdb-badge"><i class="fa-solid fa-user-group"></i> ${w.capacity || 0}</span>
       <span class="avtrdb-badge">v${w.version || 1}</span>
     `;
     
@@ -784,20 +784,20 @@ async function openWorldDetail(worldId, worldObj = null) {
         if (!friendInstMap.has(instStr)) friendInstMap.set(instStr, []);
         friendInstMap.get(instStr).push(f);
       }
-      html += `<div style="font-size:0.8em;font-weight:700;color:var(--text-primary);margin-bottom:8px;">👥 好友在此世界</div>`;
+      html += `<div style="font-size:0.8em;font-weight:700;color:var(--text-primary);margin-bottom:8px;"><i class="fa-solid fa-user-group"></i> 好友在此世界</div>`;
       for (const [instStr, friends] of friendInstMap) {
         let typeLabel = '公开', typeColor = '#64748b';
-        if (instStr.includes('~private'))      { typeLabel='🔒 私人'; typeColor='#f59e0b'; }
-        else if (instStr.includes('~hidden'))  { typeLabel='👥 好友+'; typeColor='#22c55e'; }
-        else if (instStr.includes('canRequestInvite')) { typeLabel='👥 好友+'; typeColor='#22c55e'; }
-        else if (instStr.includes('~friends')) { typeLabel='👥 好友'; typeColor='#22c55e'; }
+        if (instStr.includes('~private'))      { typeLabel='<i class="fa-solid fa-lock"></i> 私人'; typeColor='#f59e0b'; }
+        else if (instStr.includes('~hidden'))  { typeLabel='<i class="fa-solid fa-user-group"></i> 好友+'; typeColor='#22c55e'; }
+        else if (instStr.includes('canRequestInvite')) { typeLabel='<i class="fa-solid fa-user-group"></i> 好友+'; typeColor='#22c55e'; }
+        else if (instStr.includes('~friends')) { typeLabel='<i class="fa-solid fa-user-group"></i> 好友'; typeColor='#22c55e'; }
         else if (instStr.includes('group('))   { typeLabel='🏠 群组'; typeColor='#3b82f6'; }
         const fullLoc = worldId + ':' + instStr;
         html += `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
             <span style="font-size:0.65em;padding:2px 8px;border-radius:6px;background:${typeColor}22;color:${typeColor};border:1px solid ${typeColor}44;font-weight:700;">${typeLabel}</span>
             <span style="flex:1;font-size:0.75em;opacity:0.6;font-family:monospace;overflow:hidden;text-overflow:ellipsis;">#${escHtml(instStr.split('~')[0])}</span>
-            ${!instStr.includes('~private') ? `<button class="btn btn-xs" onclick="inviteSelf('${escJsAttr(fullLoc)}')" style="padding:4px 10px;font-size:0.75em;background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2);">📩 邀请自己</button>` : ''}
+            ${!instStr.includes('~private') ? `<button class="btn btn-xs" onclick="inviteSelf('${escJsAttr(fullLoc)}')" style="padding:4px 10px;font-size:0.75em;background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2);"><i class="fa-solid fa-envelope"></i> 邀请自己</button>` : ''}
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${friends.map(f => {
@@ -810,7 +810,7 @@ async function openWorldDetail(worldId, worldObj = null) {
           </div>
         </div>`;
       }
-      html += `<div style="font-size:0.8em;font-weight:700;color:var(--text-primary);margin:8px 0 8px;">🌐 公开实例</div>`;
+      html += `<div style="font-size:0.8em;font-weight:700;color:var(--text-primary);margin:8px 0 8px;"><i class="fa-solid fa-globe"></i> 公开实例</div>`;
     }
 
     const instances = Array.isArray(w.instances) ? w.instances : [];
@@ -827,13 +827,13 @@ async function openWorldDetail(worldId, worldObj = null) {
         if (!friendInstMap.has(instStr)) friendInstMap.set(instStr, []);
         friendInstMap.get(instStr).push(f);
       }
-      friendsHtml = `<div style="font-size:0.82em;font-weight:700;color:var(--text-primary);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);">👥 好友在此世界</div>`;
+      friendsHtml = `<div style="font-size:0.82em;font-weight:700;color:var(--text-primary);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);"><i class="fa-solid fa-user-group"></i> 好友在此世界</div>`;
       for (const [instStr, friends] of friendInstMap) {
         let typeLabel = '公开', typeColor = '#64748b';
-        if (instStr.includes('~private'))      { typeLabel='🔒 私人'; typeColor='#f59e0b'; }
-        else if (instStr.includes('~hidden'))  { typeLabel='👥 好友+'; typeColor='#22c55e'; }
-        else if (instStr.includes('canRequestInvite')) { typeLabel='👥 好友+'; typeColor='#22c55e'; }
-        else if (instStr.includes('~friends')) { typeLabel='👥 好友'; typeColor='#22c55e'; }
+        if (instStr.includes('~private'))      { typeLabel='<i class="fa-solid fa-lock"></i> 私人'; typeColor='#f59e0b'; }
+        else if (instStr.includes('~hidden'))  { typeLabel='<i class="fa-solid fa-user-group"></i> 好友+'; typeColor='#22c55e'; }
+        else if (instStr.includes('canRequestInvite')) { typeLabel='<i class="fa-solid fa-user-group"></i> 好友+'; typeColor='#22c55e'; }
+        else if (instStr.includes('~friends')) { typeLabel='<i class="fa-solid fa-user-group"></i> 好友'; typeColor='#22c55e'; }
         else if (instStr.includes('group('))   { typeLabel='🏠 群组'; typeColor='#3b82f6'; }
         const fullLoc = worldId + ':' + instStr;
         const isPrivateInst = instStr.includes('~private');
@@ -841,8 +841,8 @@ async function openWorldDetail(worldId, worldObj = null) {
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
             <span style="font-size:0.7em;padding:2px 7px;border-radius:99px;background:${typeColor}22;color:${typeColor};border:1px solid ${typeColor}44;">${typeLabel}</span>
             <span style="flex:1;font-size:0.72em;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(instStr.split('~')[0])}</span>
-            ${!isPrivateInst ? `<button class="btn btn-xs" onclick="inviteSelf('${escJsAttr(fullLoc)}')" style="padding:2px 8px;font-size:0.75em;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);border-radius:4px;cursor:pointer;">📩 邀请自己</button>` : ''}
-            <button class="btn btn-xs" onclick="openInstanceDetail('${escJsAttr(fullLoc)}')" style="padding:2px 8px;font-size:0.75em;background:rgba(255, 255, 255, 0.1);color:#d4d4d8;border:1px solid rgba(255, 255, 255, 0.2);border-radius:4px;cursor:pointer;">👥 详情</button>
+            ${!isPrivateInst ? `<button class="btn btn-xs" onclick="inviteSelf('${escJsAttr(fullLoc)}')" style="padding:2px 8px;font-size:0.75em;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);border-radius:4px;cursor:pointer;"><i class="fa-solid fa-envelope"></i> 邀请自己</button>` : ''}
+            <button class="btn btn-xs" onclick="openInstanceDetail('${escJsAttr(fullLoc)}')" style="padding:2px 8px;font-size:0.75em;background:rgba(255, 255, 255, 0.1);color:#d4d4d8;border:1px solid rgba(255, 255, 255, 0.2);border-radius:4px;cursor:pointer;"><i class="fa-solid fa-user-group"></i> 详情</button>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             ${friends.map(f => {
@@ -855,7 +855,7 @@ async function openWorldDetail(worldId, worldObj = null) {
           </div>
         </div>`;
       }
-      friendsHtml += `<div style="font-size:0.82em;font-weight:700;color:var(--text-primary);margin:10px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border);">🌐 公开实例</div>`;
+      friendsHtml += `<div style="font-size:0.82em;font-weight:700;color:var(--text-primary);margin:10px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border);"><i class="fa-solid fa-globe"></i> 公开实例</div>`;
     }
 
     // Bug#1: instance entry format is [instanceString, occupantCount]
@@ -868,10 +868,10 @@ async function openWorldDetail(worldId, worldObj = null) {
     } else {
       instContainer.innerHTML = activeInst.slice(0,10).map(([instStr, count]) => {
         let typeLabel = '公开', typeColor = '#64748b';
-        if (instStr.includes('~private'))   { typeLabel='🔒 私人'; typeColor='#f59e0b'; }
-        else if (instStr.includes('~friends+') || instStr.includes('canRequestInvite')) { typeLabel='👥 好友+'; typeColor='#22c55e'; }
-        else if (instStr.includes('~friends')) { typeLabel='👥 好友'; typeColor='#22c55e'; }
-        else if (instStr.includes('~hidden')) { typeLabel='👥 好友+'; typeColor='#22c55e'; }
+        if (instStr.includes('~private'))   { typeLabel='<i class="fa-solid fa-lock"></i> 私人'; typeColor='#f59e0b'; }
+        else if (instStr.includes('~friends+') || instStr.includes('canRequestInvite')) { typeLabel='<i class="fa-solid fa-user-group"></i> 好友+'; typeColor='#22c55e'; }
+        else if (instStr.includes('~friends')) { typeLabel='<i class="fa-solid fa-user-group"></i> 好友'; typeColor='#22c55e'; }
+        else if (instStr.includes('~hidden')) { typeLabel='<i class="fa-solid fa-user-group"></i> 好友+'; typeColor='#22c55e'; }
         else if (instStr.includes('group(')) { typeLabel='🏠 群组'; typeColor='#3b82f6'; }
 
         const regionMatch = instStr.match(/region\(([^)]+)\)/);
@@ -883,10 +883,10 @@ async function openWorldDetail(worldId, worldObj = null) {
         return `<div class="world-instance-item" style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,0.02);border-radius:8px;margin-bottom:4px;">
           <span style="flex:1;font-size:0.78em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${regionFlag} ${escHtml(instShortId)}</span>
           <span style="font-size:0.68em;padding:2px 7px;border-radius:99px;background:${typeColor}22;color:${typeColor};border:1px solid ${typeColor}44;">${typeLabel}</span>
-          <span class="inst-players" style="font-size:0.75em;opacity:0.7;">👥 ${count}/${w.capacity||'∞'}</span>
+          <span class="inst-players" style="font-size:0.75em;opacity:0.7;"><i class="fa-solid fa-user-group"></i> ${count}/${w.capacity||'∞'}</span>
           <div style="display:flex;gap:4px;">
-            <button class="btn btn-xs" onclick="event.stopPropagation();openInstanceDetail('${escJsAttr(w.id)}:${escJsAttr(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(255, 255, 255, 0.15);color:var(--accent-light);border:1px solid var(--accent);cursor:pointer;" title="查看谁在此实例">👥</button>
-            ${!isPrivate ? `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escJsAttr(w.id)}:${escJsAttr(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请">&nbsp;📩&nbsp;</button>` : ''}
+            <button class="btn btn-xs" onclick="event.stopPropagation();openInstanceDetail('${escJsAttr(w.id)}:${escJsAttr(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(255, 255, 255, 0.15);color:var(--accent-light);border:1px solid var(--accent);cursor:pointer;" title="查看谁在此实例"><i class="fa-solid fa-user-group"></i> </button>
+            ${!isPrivate ? `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escJsAttr(w.id)}:${escJsAttr(instStr)}')" style="padding:2px 6px;font-size:0.8em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请">&nbsp;<i class="fa-solid fa-envelope"></i> &nbsp;</button>` : ''}
           </div>
         </div>`;
       }).join('');
@@ -897,7 +897,7 @@ async function openWorldDetail(worldId, worldObj = null) {
     const isFaved = worldFavoriteIdMap.has(w.id) || !!w.favoriteId;
     if (isFaved && w.favoriteId) worldFavoriteIdMap.set(w.id, w.favoriteId);
     if (favBtn) {
-      favBtn.innerHTML  = isFaved ? '⭐ 取消收藏' : '⭐ 收藏';
+      favBtn.innerHTML  = isFaved ? '<i class="fa-solid fa-star"></i> 取消收藏' : '<i class="fa-solid fa-star"></i> 收藏';
       favBtn.className  = isFaved ? 'btn btn-warning' : 'btn btn-secondary';
     }
   } catch(e) {
@@ -964,13 +964,13 @@ async function showCacheClearModal() {
 
   // Define categories with matchers
   const CATEGORIES = [
-    { id: 'friend',  label: '好友数据',       emoji: '👥', match: k => k === 'friend_basics' },
-    { id: 'profile', label: '个人资料',       emoji: '🪪', match: k => k === 'my_profile' },
-    { id: 'avatar',  label: '模型缓存',       emoji: '🎭', match: k => k.startsWith('avatar') || k.startsWith('avatars_') },
-    { id: 'world',   label: '世界缓存',       emoji: '🌍', match: k => k.startsWith('world') || k.startsWith('worlds_') },
-    { id: 'names',   label: '头像名称映射',   emoji: '📋', match: k => k === 'persistent_avatar_names' },
+    { id: 'friend',  label: '好友数据',       emoji: '<i class="fa-solid fa-user-group"></i> ', match: k => k === 'friend_basics' },
+    { id: 'profile', label: '个人资料',       emoji: '<i class="fa-solid fa-id-badge"></i> ', match: k => k === 'my_profile' },
+    { id: 'avatar',  label: '模型缓存',       emoji: '<i class="fa-solid fa-masks-theater"></i> ', match: k => k.startsWith('avatar') || k.startsWith('avatars_') },
+    { id: 'world',   label: '世界缓存',       emoji: '<i class="fa-solid fa-earth-americas"></i> ', match: k => k.startsWith('world') || k.startsWith('worlds_') },
+    { id: 'names',   label: '头像名称映射',   emoji: '<i class="fa-solid fa-clipboard"></i> ', match: k => k === 'persistent_avatar_names' },
     { id: 'images',  label: '图片缓存 (Blob)', emoji: '🖼️', match: () => false, isImages: true },
-    { id: 'other',   label: '其他',           emoji: '📦', match: k => true },
+    { id: 'other',   label: '其他',           emoji: '<i class="fa-solid fa-box"></i> ', match: k => true },
   ];
 
   // Assign each key to first matching category
@@ -1100,7 +1100,7 @@ async function joinWorldInstance() {
     document.getElementById('worldDetailJoinBtn'),
     document.querySelector('.world-detail-mobile-actions .btn-primary')
   ].filter(Boolean);
-  allJoinBtns.forEach(b => { b.disabled = true; b.textContent = '⏳ 创建中...'; });
+  allJoinBtns.forEach(b => { b.disabled = true; b.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> 创建中...'; });
 
   const statusEl = document.getElementById('worldDetailFavStatus');
   const _joinType   = localStorage.getItem(PREF_TYPE)   || 'hidden';
@@ -1140,22 +1140,22 @@ async function joinWorldInstance() {
     const r2 = await apiCall(`/api/vrc/invite/myself/to/${location}`, { method: 'POST', noAbort: true });
     if (!r2.ok) throw new Error('邀请失败 HTTP ' + r2.status);
 
-    if (statusEl) { statusEl.textContent = '✅ 邀请已发送，请在游戏内查收'; statusEl.style.color = 'var(--success)'; }
-    allJoinBtns.forEach(b => { b.textContent = '✅ 已邀请'; });
+    if (statusEl) { statusEl.innerHTML = '<i class="fa-solid fa-check"></i> 邀请已发送，请在游戏内查收'; statusEl.style.color = 'var(--success)'; }
+    allJoinBtns.forEach(b => { b.innerHTML = '<i class="fa-solid fa-check"></i> 已邀请'; });
   } catch(e) {
-    if (statusEl) { statusEl.textContent = '❌ ' + e.message; statusEl.style.color = 'var(--error)'; }
+    if (statusEl) { statusEl.innerHTML = '<i class="fa-solid fa-xmark"></i> ' + e.message; statusEl.style.color = 'var(--error)'; }
     allJoinBtns.forEach(b => {
-      if (b.id === 'worldDetailJoinBtn') b.innerHTML = '⚡';
-      else b.textContent = '⚡ 加入世界';
+      if (b.id === 'worldDetailJoinBtn') b.innerHTML = '<i class="fa-solid fa-bolt"></i> ';
+      else b.innerHTML = '<i class="fa-solid fa-bolt"></i> 加入世界';
     });
   } finally {
     setTimeout(() => {
       allJoinBtns.forEach(b => { 
         if(b) {
           b.disabled = false; 
-          // Restore icon: worldDetailJoinBtn is just an icon, the other is ⚡ 加入世界
-          if (b.id === 'worldDetailJoinBtn') b.innerHTML = '⚡';
-          else b.innerHTML = '⚡ 加入世界';
+          // Restore icon: worldDetailJoinBtn is just an icon, the other is <i class="fa-solid fa-bolt"></i> 加入世界
+          if (b.id === 'worldDetailJoinBtn') b.innerHTML = '<i class="fa-solid fa-bolt"></i> ';
+          else b.innerHTML = '<i class="fa-solid fa-bolt"></i> 加入世界';
           b.classList.remove('btn-success'); 
         }
       });

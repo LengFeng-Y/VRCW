@@ -5,20 +5,20 @@
 
 async function inviteSelf(locationId) {
   if (!locationId || locationId === 'private' || locationId === 'offline') {
-    friendLogMsg('❌ 无法发送邀请 (私有或离线)', 'error');
+    friendLogMsg('<i class="fa-solid fa-xmark"></i> 无法发送邀请 (私有或离线)', 'error');
     return;
   }
   try {
-    friendLogMsg(`📩 正在发送邀请到 ${locationId}...`, 'info');
+    friendLogMsg(`<i class="fa-solid fa-envelope"></i> 正在发送邀请到 ${locationId}...`, 'info');
     const r = await apiCall(`/api/vrc/invite/myself/to/${locationId}`, { method: 'POST' });
     if (r.ok) {
-      friendLogMsg('✅ 邀请已发送，请在游戏内查收', 'success');
+      friendLogMsg('<i class="fa-solid fa-check"></i> 邀请已发送，请在游戏内查收', 'success');
     } else {
       const err = await r.json();
       throw new Error(err.error?.message || '发送失败');
     }
   } catch(e) {
-    friendLogMsg(`❌ 邀请失败: ${e.message}`, 'error');
+    friendLogMsg(`<i class="fa-solid fa-xmark"></i> 邀请失败: ${e.message}`, 'error');
   }
 }
 
@@ -36,9 +36,9 @@ async function renderModerationLog() {
     container.innerHTML = logs.map(log => {
       const date = new Date(log.timestamp).toLocaleString();
       let icon = '🛡️', color = 'var(--text-secondary)';
-      if (log.type === 'block') { icon = '🚫'; color = '#ef4444'; }
-      if (log.type === 'mute')  { icon = '🔇'; color = '#f59e0b'; }
-      if (log.type === 'avatar') { icon = log.action === 'show' ? '👁️' : '👓'; color = '#10b981'; }
+      if (log.type === 'block') { icon = '<i class="fa-solid fa-ban"></i> '; color = '#ef4444'; }
+      if (log.type === 'mute')  { icon = '<i class="fa-solid fa-volume-xmark"></i> '; color = '#f59e0b'; }
+      if (log.type === 'avatar') { icon = log.action === 'show' ? '👁️' : '<i class="fa-solid fa-glasses"></i> '; color = '#10b981'; }
       const actionText = {
         block: '屏蔽', unblock: '解除屏蔽',
         mute: '静音', unmute: '解除静音',
@@ -181,7 +181,7 @@ async function openEditProfileModal() {
         // two click-to-dismiss dialogs.
         modal.remove();
         cleanup();
-        showToast('✅ 资料已更新', 'success');
+        showToast('<i class="fa-solid fa-check"></i> 资料已更新', 'success');
         fetchMyProfile(true);
       } else {
         const err = await r.json().catch(() => ({}));

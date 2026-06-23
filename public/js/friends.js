@@ -106,11 +106,11 @@ async function fetchMyProfile(forceRefresh = false) {
           if (loc && loc !== 'offline' && loc !== 'private') {
             locRow.style.display = '';
             getLocationDisplay(loc).then(txt => {
-              locEl.innerHTML = `<a href="#" onclick="openInstanceDetail('${escJsAttr(loc)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a> <button onclick="inviteSelf('${escJsAttr(loc)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;vertical-align:middle;">📩 邀请自己</button>`;
+              locEl.innerHTML = `<a href="#" onclick="openInstanceDetail('${escJsAttr(loc)}'); event.preventDefault();" style="color:var(--accent-light);text-decoration:none;">${txt}</a> <button onclick="inviteSelf('${escJsAttr(loc)}')" class="btn btn-xs" style="background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);padding:2px 8px;border-radius:4px;font-size:0.75em;cursor:pointer;vertical-align:middle;"><i class="fa-solid fa-envelope"></i> 邀请自己</button>`;
             }).catch(() => { locEl.textContent = loc; });
           } else if (loc === 'private') {
             locRow.style.display = '';
-            locEl.textContent = '🔒 私人房间';
+            locEl.innerHTML = '<i class="fa-solid fa-lock"></i> 私人房间';
           } else {
             locRow.style.display = 'none';
           }
@@ -148,7 +148,7 @@ function renderMyProfile(u) {
   const showcasedBadges = (u.badges || []);
 
   const statusColor = {active:'#22c55e','join me':'#1A75FF','ask me':'#f59e0b',busy:'#ef4444',offline:'#475569'}[u.status] || '#22c55e';
-  const platformIcon = {standalonewindows:'🖥️',android:'🥽',ios:'📱'}[u.last_platform] || '';
+  const platformIcon = {standalonewindows:'🖥️',android:'<i class="fa-solid fa-vr-cardboard"></i> ',ios:'<i class="fa-solid fa-mobile-screen"></i> '}[u.last_platform] || '';
   const statCard = (label, val) =>
     `<div class="fp-stat-item"><div class="fp-stat-label">${label}</div><div class="fp-stat-value">${val||'–'}</div></div>`;
 
@@ -236,10 +236,10 @@ function renderMyProfile(u) {
     <!-- Action buttons -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
       <button class="btn btn-primary" style="padding:6px 14px;font-size:0.82em;" onclick="openEditProfileModal()">✏️ 编辑个人资料</button>
-      <button class="btn btn-secondary" style="padding:6px 14px;font-size:0.82em;" onclick="fetchMyProfile(true)">🔄 刷新资料</button>
+      <button class="btn btn-secondary" style="padding:6px 14px;font-size:0.82em;" onclick="fetchMyProfile(true)"><i class="fa-solid fa-rotate-right"></i> 刷新资料</button>
       <button class="btn btn-secondary" style="padding:6px 14px;font-size:0.82em;" onclick="showSelfContextMenu(event)">··· 操作菜单</button>
-      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escJsAttr(u.id||'')}','_blank')">🔗 VRChat 主页</button>
-      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="navigator.clipboard.writeText('${escJsAttr(u.id||'')}').then(()=>this.textContent='✓ 已复制').catch(()=>{})">📋 复制 ID</button>
+      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="window.open('https://vrchat.com/home/user/${escJsAttr(u.id||'')}','_blank')"><i class="fa-solid fa-link"></i> VRChat 主页</button>
+      <button class="btn btn-secondary" style="font-size:0.82em;" onclick="navigator.clipboard.writeText('${escJsAttr(u.id||'')}').then(()=>this.textContent='✓ 已复制').catch(()=>{})"><i class="fa-solid fa-clipboard"></i> 复制 ID</button>
     </div>
   </div>`;
 
@@ -255,7 +255,7 @@ function renderMyProfile(u) {
         }).catch(() => { if (locEl) locEl.textContent = u.location; });
       } else if (u.location === 'private') {
         locRow.style.display = '';
-        locEl.textContent = '🔒 私人房间';
+        locEl.innerHTML = '<i class="fa-solid fa-lock"></i> 私人房间';
       } else {
         locRow.style.display = 'none';
       }
@@ -322,7 +322,7 @@ function renderMyProfile(u) {
 // Need to batch-fetch actual user profiles
 // Friends list cache TTL: skip the (expensive) full re-fetch when cache is this
 // fresh. Tab switches pass forceRefresh=false so they hit this fast path; the
-// 🔄 refresh button passes true to bypass it.
+// <i class="fa-solid fa-rotate-right"></i> refresh button passes true to bypass it.
 const FRIENDS_CACHE_TTL = 60 * 1000; // 60s
 async function fetchCurrentFriendCategory(forceRefresh = false) {
   const seq = ++currentGlobalFetchSeq;
@@ -491,10 +491,10 @@ async function fetchCurrentFriendCategory(forceRefresh = false) {
     }
 
     if (statsEl) statsEl.textContent = `共 ${allFriends.length} 位好友`;
-    friendLogMsg(`✅ 好友状态已全部同步`, 'success');
+    friendLogMsg(`<i class="fa-solid fa-check"></i> 好友状态已全部同步`, 'success');
   } catch (e) {
     console.error('Fetch error:', e);
-    friendLogMsg(`❌ 好友同步异常`, 'error');
+    friendLogMsg(`<i class="fa-solid fa-xmark"></i> 好友同步异常`, 'error');
   }
 }
 
@@ -529,7 +529,7 @@ async function fetchNotifications() {
       let actions = `<button class="btn btn-secondary btn-xs" onclick="seeNotification('${escJsAttr(n.id)}')">标为已读</button>`;
       
       if (n.type === 'friendRequest') {
-        typeLabel = '➕ 好友申请';
+        typeLabel = '<i class="fa-solid fa-plus"></i> 好友申请';
         actions = `<button class="btn btn-primary btn-xs" onclick="handleNotification('${escJsAttr(n.id)}','accept')">接受</button>
                    <button class="btn btn-secondary btn-xs" onclick="handleNotification('${escJsAttr(n.id)}','hide')">忽略</button>`;
       } else if (n.type === 'groupInvite') {
@@ -539,7 +539,7 @@ async function fetchNotifications() {
       } else if (n.type === 'invite') {
         typeLabel = '✉️ 房间邀请';
       } else if (n.type === 'requestInvite') {
-        typeLabel = '✋ 请求邀请';
+        typeLabel = '<i class="fa-solid fa-hand"></i> 请求邀请';
       }
 
       return `<div class="friend-card" style="margin-bottom:8px; border-left: 3px solid ${isUnread ? 'var(--accent)' : 'transparent'};">
@@ -568,7 +568,7 @@ async function handleNotification(id, action) {
     const r = await apiCall(url, { method: 'PUT' });
     if (!r.ok) throw new Error(await r.text());
     const label = action === 'accept' ? '接受' : (action === 'hide' ? '忽略' : '已读');
-    logMsg(`✅ 已${label}通知`, 'success');
+    logMsg(`<i class="fa-solid fa-check"></i> 已${label}通知`, 'success');
     fetchNotifications();
   } catch(e) {
     showToast('操作失败: ' + e.message, 'error');
@@ -594,9 +594,9 @@ function updateNotificationBadge(count) {
   const btn = document.getElementById('friendCatNotifications');
   if (!btn) return;
   if (count > 0) {
-    btn.innerHTML = `🔔 消息通知 <span style="background:var(--error);color:white;font-size:0.7em;padding:1px 6px;border-radius:99px;margin-left:4px;">${count}</span>`;
+    btn.innerHTML = `<i class="fa-solid fa-bell"></i> 消息通知 <span style="background:var(--error);color:white;font-size:0.7em;padding:1px 6px;border-radius:99px;margin-left:4px;">${count}</span>`;
   } else {
-    btn.innerHTML = `🔔 消息通知`;
+    btn.innerHTML = `<i class="fa-solid fa-bell"></i> 消息通知`;
   }
 }
 
@@ -727,7 +727,7 @@ function renderFriendList(list) {
   const el = document.getElementById('friendList');
   if (!el) return;
   if (!list.length) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);">🧑‍🤝‍🧑<br><br>暂无好友</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);"><i class="fa-solid fa-user"></i> ‍<i class="fa-solid fa-handshake"></i> ‍<i class="fa-solid fa-user"></i> <br><br>暂无好友</div>';
     return;
   }
   const sortBy = document.getElementById('friendSortBy')?.value || 'status';
@@ -798,15 +798,15 @@ function renderFriendList(list) {
 
   // 1. Joinable Groups
   if (joinableGroups.length) {
-    html += sectionDiv('👥', '好友聚集的实例', '#86efac', true);
+    html += sectionDiv('<i class="fa-solid fa-user-group"></i> ', '好友聚集的实例', '#86efac', true);
     for (const [loc, friends] of joinableGroups) {
       const isMine = myLoc && loc === myLoc;
-      const isMineTag = isMine ? ' <span style="font-size:0.85em;background:rgba(255, 255, 255, 0.3);color:#d4d4d8;padding:1px 6px;border-radius:4px;">📍 你也在这里</span>' : '';
+      const isMineTag = isMine ? ' <span style="font-size:0.85em;background:rgba(255, 255, 255, 0.3);color:#d4d4d8;padding:1px 6px;border-radius:4px;"><i class="fa-solid fa-location-dot"></i> 你也在这里</span>' : '';
       const isPrivateLoc = loc === 'private' || loc.includes('~private');
       const groupInviteBtn = isPrivateLoc ? '' : `<button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escJsAttr(loc)}')" style="padding:2px 8px;font-size:0.8em;border-radius:4px;background:#86efac22;color:#86efac;border:1px solid #86efac44;cursor:pointer;">邀请自己</button>`;
       
       html += `<div class="loc-group-header" id="loc_${loc.split(':')[0]}" data-loc="${escHtml(loc)}" style="display:flex;align-items:center;gap:6px;padding:6px 10px;margin:4px 0 2px;background:rgba(134,239,172,0.06);border-left:2px solid #86efac;border-radius:0 6px 6px 0;font-size:0.75em;color:#86efac;">` +
-        `<span>👥 ${friends.length} 位好友在此</span>` +
+        `<span><i class="fa-solid fa-user-group"></i> ${friends.length} 位好友在此</span>` +
         `<span style="opacity:0.6;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="lgn_${loc.split(':')[0]}">加载中...</span>` +
         isMineTag + groupInviteBtn + '</div>';
       html += friends.map(f => friendCardHtml(f)).join('');
@@ -815,7 +815,7 @@ function renderFriendList(list) {
 
   // 2. Joinable Solo
   if (joinableSolo.length) {
-    html += sectionDiv('🎮', '游戏中 · 可加入', '#60a5fa', html === '');
+    html += sectionDiv('<i class="fa-solid fa-gamepad"></i> ', '游戏中 · 可加入', '#60a5fa', html === '');
     for (const [loc, friends] of joinableSolo) {
       html += friends.map(f => friendCardHtml(f)).join('');
     }
@@ -823,12 +823,12 @@ function renderFriendList(list) {
 
   // 3. Private Rooms (Grouped)
   if (privateInsts.length) {
-    html += sectionDiv('🔒', '在私人房间 / 不可加入', '#fbbf24', html === '');
+    html += sectionDiv('<i class="fa-solid fa-lock"></i> ', '在私人房间 / 不可加入', '#fbbf24', html === '');
     for (const [loc, friends] of privateInsts) {
       if (friends.length > 1) {
         // No data-loc on private headers — world name resolution is not applicable
         html += `<div class="loc-group-header" id="loc_${loc.split(':')[0]}" style="display:flex;align-items:center;gap:6px;padding:6px 10px;margin:4px 0 2px;background:rgba(251,191,36,0.06);border-left:2px solid #fbbf24;border-radius:0 6px 6px 0;font-size:0.75em;color:#fbbf24;">` +
-          `<span>👥 ${friends.length} 位好友在此</span>` +
+          `<span><i class="fa-solid fa-user-group"></i> ${friends.length} 位好友在此</span>` +
           `<span style="opacity:0.6;flex:1;">私人房间</span>` +
           '</div>';
       }
@@ -838,7 +838,7 @@ function renderFriendList(list) {
 
   // 4. Web Online
   if (webOnline.length) {
-    html += sectionDiv('🌐', '网页在线', 'var(--text-muted)', html === '');
+    html += sectionDiv('<i class="fa-solid fa-globe"></i> ', '网页在线', 'var(--text-muted)', html === '');
     html += webOnline.map(f => friendCardHtml(f)).join('');
   }
 
@@ -875,7 +875,7 @@ function friendCardHtml(f) {
   let locationText = '离线';
   const locSpanId = 'loc_' + (f.id || '').replace(/[^a-zA-Z0-9_-]/g,'');
   if (!loc.isOffline) {
-    if (loc.isPrivate) locationText = '🔒 私人房间';
+    if (loc.isPrivate) locationText = '<i class="fa-solid fa-lock"></i> 私人房间';
     else if (loc.isTraveling) locationText = '✈️ 传送中';
     else locationText = '加载中...';
   }
@@ -889,12 +889,12 @@ function friendCardHtml(f) {
       && f.location.startsWith('wrld_');
     const joinBtn = isJoinable ? `
       <div style="display:flex;gap:4px;margin-bottom:2px;">
-        <button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escJsAttr(f.location)}')" style="padding:2px 6px;font-size:0.7em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请给自己">📩</button>
+        <button class="btn btn-xs" onclick="event.stopPropagation();inviteSelf('${escJsAttr(f.location)}')" style="padding:2px 6px;font-size:0.7em;border-radius:4px;background:rgba(134,239,172,0.1);color:#4ade80;border:1px solid rgba(134,239,172,0.2);cursor:pointer;" title="发送邀请给自己"><i class="fa-solid fa-envelope"></i> </button>
       </div>` : '';
 
     return `<div class="friend-card" onclick="openFriendProfile(this);" data-friend="${fJson}">
       <div class="friend-avatar-wrap">
-        ${thumb ? `<img src="${escHtml(thumb)}" alt="" onerror="this.style.display=\'none\'">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.3em;">👤</div>'}
+        ${thumb ? `<img src="${escHtml(thumb)}" alt="" onerror="this.style.display=\'none\'">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.3em;"><i class="fa-solid fa-user"></i> </div>'}
         <span class="friend-status-dot ${statusCss}"></span>
       </div>
       <div class="friend-info">

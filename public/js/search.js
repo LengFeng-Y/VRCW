@@ -104,9 +104,9 @@ function _buildFavGroupListHtml(favList, id, opts = {}) {
   let html = '';
   // Local favorites row
   if (isLocalFaved) {
-    html += `<button class="avtrdb-fav-group-btn avtrdb-fav-group-active" onclick="removeFromLocalFavorite('${escJsAttr(id)}'); _refreshDetailAfterFavChange('${escJsAttr(id)}');">✓ 📦 本地收藏</button>`;
+    html += `<button class="avtrdb-fav-group-btn avtrdb-fav-group-active" onclick="removeFromLocalFavorite('${escJsAttr(id)}'); _refreshDetailAfterFavChange('${escJsAttr(id)}');">✓ <i class="fa-solid fa-box"></i> 本地收藏</button>`;
   } else {
-    html += `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="${localSaveAction}">+ 📦 保存到本地 (200槽位)</button>`;
+    html += `<button class="avtrdb-fav-group-btn" style="color:var(--secondary);border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:4px;" onclick="${localSaveAction}">+ <i class="fa-solid fa-box"></i> 保存到本地 (200槽位)</button>`;
   }
 
   // Cloud groups
@@ -240,7 +240,7 @@ async function doAvtrdbSearch() {
   document.getElementById("avtrdbStats").textContent = "";
   const btnSearch = document.getElementById("btnSearchMain");
   const btnIcon = btnSearch?.querySelector('.search-btn-icon');
-  const originalIcon = btnIcon?.textContent || '🔍';
+  const originalIcon = btnIcon?.textContent || '<i class="fa-solid fa-magnifying-glass"></i> ';
   
   if (btnSearch) {
     btnSearch.disabled = true;
@@ -346,13 +346,13 @@ async function vrcdbFetch(cat, query, signal) {
           </div>
           <div class="friend-info">
             <div class="friend-name">${escHtml(g.name)} <span style="font-size:0.7em;opacity:0.6;">${escHtml(g.shortCode)}</span></div>
-            <div class="friend-location" style="font-size:0.8em;">👥 ${g.memberCount||0} Members</div>
+            <div class="friend-location" style="font-size:0.8em;"><i class="fa-solid fa-users"></i> ${g.memberCount||0} Members</div>
           </div>
         </div>`;
       }).join('');
     }
   } catch(e) {
-    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--error);padding:40px;">搜索失败: ${e.message}</div>`;
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--error);padding:40px;">搜索失败: ${escHtml(String(e.message || e))}</div>`;
   }
 }
 
@@ -1100,17 +1100,17 @@ function displayAvatarDetail(av, opts = {}) {
   if (relRow && relEl) {
     const rs = av.releaseStatus || av.release_status || "";
     if (av.isInvalid || rs === 'unavailable' || rs === 'hidden') {
-      relEl.textContent = '🚫 已失效';
+      relEl.innerHTML = '<i class="fa-solid fa-ban"></i> 已失效';
       relEl.style.background = 'var(--error)';
       relEl.style.color = '#fff';
       relRow.style.display = '';
     } else if (rs === 'public') {
-      relEl.textContent = '🌐 Public';
+      relEl.innerHTML = '<i class="fa-solid fa-globe"></i> Public';
       relEl.style.background = 'var(--success)';
       relEl.style.color = '#052e16';
       relRow.style.display = '';
     } else if (rs === 'private') {
-      relEl.textContent = '🔒 Private';
+      relEl.innerHTML = '<i class="fa-solid fa-lock"></i> Private';
       relEl.style.background = 'rgba(0,0,0,0.55)';
       relEl.style.color = '#fff';
       relRow.style.display = '';
@@ -1132,10 +1132,10 @@ function displayAvatarDetail(av, opts = {}) {
   const isCloudFaved = favoriteIdMap.has(id);
 
   if (isCloudFaved || isLocalFaved) {
-     favBtn.innerHTML = "⭐ 已收藏";
+     favBtn.innerHTML = '<i class="fa-solid fa-star"></i> 已收藏';
      favBtn.className = "btn btn-success-full";
   } else {
-     favBtn.innerHTML = "⭐ 收藏";
+     favBtn.innerHTML = '<i class="fa-solid fa-star"></i> 收藏';
      favBtn.className = "btn btn-secondary";
   }
   // Always open the group selector — for adding or removing
@@ -1459,12 +1459,11 @@ async function addToFavorite(avtrId, groupName, btn) {
         || (_currentDetailAvatar && ((_currentDetailAvatar.id || _currentDetailAvatar.vrc_id) === avtrId) ? _currentDetailAvatar : null)
         || { id: avtrId };
       await upsertAvatarIntoFavoriteCache(groupName, knownAvatar);
-      // INSTANT UI: flip the unified card-fav-quick toggle from ☆ → ⭐
-      const card = document.getElementById("card-" + avtrId);
+      // INSTANT UI: flip the unified card-fav-quick toggle from ☆ → <i class="fa-solid fa-star"></i> const card = document.getElementById("card-" + avtrId);
       if (card) {
         const fq = card.querySelector('.card-fav-quick');
         if (fq) {
-          fq.textContent = '⭐';
+          fq.innerHTML = '<i class="fa-solid fa-star"></i> ';
           fq.title = '已收藏';
         }
       }
@@ -1547,10 +1546,10 @@ function _refreshDetailAfterFavChange(avtrId) {
   const isCloudFaved = favoriteIdMap.has(avtrId);
   const isLocalFaved = localAvatarIdMap.has(avtrId);
   if (isCloudFaved || isLocalFaved) {
-    favBtn.innerHTML = '⭐ 已收藏';
+    favBtn.innerHTML = '<i class="fa-solid fa-star"></i> 已收藏';
     favBtn.className = 'btn btn-success-full';
   } else {
-    favBtn.innerHTML = '⭐ 收藏';
+    favBtn.innerHTML = '<i class="fa-solid fa-star"></i> 收藏';
     favBtn.className = 'btn btn-secondary';
   }
   // Rebuild group list to reflect new checkmarks
@@ -1567,10 +1566,10 @@ function openInVRCX(avtrId) {
 
 async function switchAvatar(avtrId) {
   const btn = document.getElementById("avtrdbDetailSwitchBtn");
-  const originalText = btn ? btn.innerHTML : "⚡ 切换模型";
+  const originalText = btn ? btn.innerHTML : '<i class="fa-solid fa-bolt"></i> 切换模型';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = "⚡ 正在切换...";
+    btn.innerHTML = '<i class="fa-solid fa-bolt"></i> 正在切换...';
   }
 
   try {
@@ -1579,14 +1578,14 @@ async function switchAvatar(avtrId) {
     });
     const result = await resp.json().catch(() => ({}));
     if (resp.ok && !result.error) {
-      logMsg("✅ 模型切换成功 (Avatar switched successfully)！", "success");
-      if (btn) btn.innerHTML = "✅ 已切换";
+      logMsg('<i class="fa-solid fa-check"></i> 模型切换成功 (Avatar switched successfully)！', "success");
+      if (btn) btn.innerHTML = '<i class="fa-solid fa-check"></i> 已切换';
     } else {
       throw new Error(result.error?.message || "未知错误");
     }
   } catch (e) {
-    logMsg(`❌ 模型切换失败 (Failed to switch): ${e.message}`, "error");
-    if (btn) btn.innerHTML = "❌ 切换失败";
+    logMsg(`<i class="fa-solid fa-xmark"></i> 模型切换失败 (Failed to switch): ${e.message}`, "error");
+    if (btn) btn.innerHTML = '<i class="fa-solid fa-xmark"></i> 切换失败';
   } finally {
     setTimeout(() => {
       if (btn) {
@@ -1607,7 +1606,7 @@ async function setFallbackAvatar(avtrId, name) {
     const res = await r.json().catch(() => ({}));
     if (r.ok && !res.error) {
       showToast('已设为后备模型', 'success');
-      logMsg(`✅ 已将「${name || avtrId}」设为后备模型`, 'success');
+      logMsg(`<i class="fa-solid fa-check"></i> 已将「${name || avtrId}」设为后备模型`, 'success');
     } else {
       throw new Error(res.error?.message || ('HTTP ' + r.status));
     }
@@ -1624,7 +1623,7 @@ async function enqueueImpostor(avtrId, name) {
     const res = await r.json().catch(() => ({}));
     if (r.ok && !res.error) {
       showToast('已加入 Impostor 生成队列', 'success');
-      logMsg(`✅ 已为「${name || avtrId}」排队生成 Impostor`, 'success');
+      logMsg(`<i class="fa-solid fa-check"></i> 已为「${name || avtrId}」排队生成 Impostor`, 'success');
     } else {
       throw new Error(res.error?.message || ('HTTP ' + r.status));
     }
@@ -1639,7 +1638,7 @@ async function deleteImpostor(avtrId, name) {
     const r = await apiCall(`/api/vrc/avatars/${avtrId}/impostor`, { method: 'DELETE' });
     if (r.ok) {
       showToast('已删除 Impostor', 'success');
-      logMsg(`✅ 已删除「${name || avtrId}」的 Impostor`, 'info');
+      logMsg(`<i class="fa-solid fa-check"></i> 已删除「${name || avtrId}」的 Impostor`, 'info');
     } else {
       showToast('删除 Impostor 失败: HTTP ' + r.status, 'error');
     }

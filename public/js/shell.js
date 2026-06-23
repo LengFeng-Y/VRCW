@@ -117,7 +117,7 @@ async function syncAllFavoriteIds() {
     avatarFavoriteIndexByGroup = nextAvatarFavoriteIndexByGroup;
     worldFavoriteIndexByGroup = nextWorldFavoriteIndexByGroup;
 
-    logMsg(`✅ 已同步收藏状态 (模型:${favoriteIdMap.size} 世界:${worldFavoriteIdMap.size} 好友:${friendFavoriteIdMap.size})`, "info");
+    logMsg(`<i class="fa-solid fa-check"></i> 已同步收藏状态 (模型:${favoriteIdMap.size} 世界:${worldFavoriteIdMap.size} 好友:${friendFavoriteIdMap.size})`, "info");
     return true;
   } catch (e) {
     console.warn("Failed to sync favorite IDs", e);
@@ -188,7 +188,7 @@ function renderFriendFavGroupButtons() {
     return;
   }
   container.innerHTML = friendFavGroups.map(g =>
-    makeCatBtn(`⭐ ${escHtml(g.displayName || g.name)}`, `switchFriendCategory('fav_${escJsAttr(g.name)}')`, `friendCatFav_${g.name}`)
+    makeCatBtn(`<i class="fa-solid fa-star"></i> ${escHtml(g.displayName || g.name)}`, `switchFriendCategory('fav_${escJsAttr(g.name)}')`, `friendCatFav_${g.name}`)
   ).join('');
 }
 
@@ -557,7 +557,7 @@ function renderFavoriteGroupButtons() {
   const btnLocal = document.createElement("button");
   btnLocal.className = "btn btn-secondary btn-block cat-btn";
   btnLocal.id = "cat-local";
-  btnLocal.textContent = "⭐ 本地收藏";
+  btnLocal.innerHTML = '<i class="fa-solid fa-star"></i> 本地收藏';
   btnLocal.onclick = () => switchCategory("local");
   container.appendChild(btnLocal);
 }
@@ -686,10 +686,19 @@ function switchTab(tab) {
   const panels = { download:'downloadPanel', upload:'uploadPanel', search:'searchPanel', friends:'friendsPanel', worlds:'worldsPanel', groups:'groupsPanel', assets:'assetsPanel', settings:'settingsPanel' };
   Object.entries(panels).forEach(([key, id]) => {
       const el = document.getElementById(id);
-      if (el) el.classList.toggle('active', tab === key);
+      if (el) {
+          el.classList.toggle('active', tab === key);
+      }
   });
   const sp = document.getElementById('settingsPanel');
   if (sp) sp.classList.toggle('hidden', tab !== 'settings');
+
+  const targetPanel = document.getElementById(panels[tab]);
+  const btn = document.getElementById('mobileSidebarBtn');
+  if (btn && targetPanel) {
+      const hasSidebar = targetPanel.querySelector('.sidebar') !== null;
+      btn.style.visibility = hasSidebar ? 'visible' : 'hidden';
+  }
 
   // If already on this tab, skip the abort+reload dance entirely
   if (isSameTab) return;
@@ -706,7 +715,7 @@ function switchTab(tab) {
     currentTabAbortController = new AbortController();
 
     // forceRefresh=false: render cache immediately, then silently re-fetch in
-    // background. The dedicated 🔄 refresh buttons inside each tab pass true.
+    // background. The dedicated <i class="fa-solid fa-rotate-right"></i> refresh buttons inside each tab pass true.
     if (tab === "friends") {
       if (!friendsLoaded) await initFriendsTab();
       else await fetchCurrentFriendCategory(false);
@@ -734,7 +743,7 @@ function switchTab(tab) {
 }
 
 function switchSettingsPage(page) {
-  ['cache', 'join', 'about'].forEach(p => {
+  ['cache', 'join', 'dating', 'about'].forEach(p => {
     const el = document.getElementById('setPage' + p.charAt(0).toUpperCase() + p.slice(1));
     if (el) el.style.display = p === page ? '' : 'none';
     const btn = document.getElementById('setCat' + p.charAt(0).toUpperCase() + p.slice(1));
@@ -742,11 +751,135 @@ function switchSettingsPage(page) {
   });
   if (page === 'cache') loadCacheStats();
   if (page === 'join') loadJoinPrefs();
+  if (page === 'dating') loadDatingSettings();
 }
 
 // ── Join Preferences (localStorage) ──
 const PREF_TYPE   = 'vrcw_default_instance_type';
 const PREF_REGION = 'vrcw_default_region';
+
+// ── Dating System Logic ──
+let datingAgeVerified = false;
+
+async function initDatingSettings() {
+  if (!window.myProfileData) return;
+  const vrcId = window.myProfileData.id;
+  
+  // 1. Fetch D1 setting
+  try {
+    const res = await apiCall(`/api/dating/settings?vrc_id=${vrcId}`);
+    if (res.ok) {
+      const data = await res.json();
+      datingAgeVerified = data.age_verified === 1;
+    }
+  } catch(e) {}
+
+  const navItem = document.getElementById('navItemDating');
+  const navIcon = document.getElementById('navIconDating');
+  const toggle = document.getElementById('settingEnableDating');
+  
+  const isVrc18init = window.myProfileData?.ageVerificationStatus === '18+'
+                   || window.myProfileData?.ageVerified === true;
+
+  if (datingAgeVerified || isVrc18init) {
+    // Already verified (either via DB or VRChat 18+)
+    if (navItem) navItem.style.display = 'flex';
+    if (navIcon) navIcon.style.display = 'flex';
+    if (toggle) toggle.checked = true;
+  } else {
+    // Not verified
+    if (navItem) navItem.style.display = 'none';
+    if (navIcon) navIcon.style.display = 'none';
+    if (toggle) toggle.checked = false;
+  }
+}
+
+function loadDatingSettings() {
+  const toggle = document.getElementById('settingEnableDating');
+  const prompt = document.getElementById('datingAgePrompt');
+  const isVrc18 = window.myProfileData?.ageVerificationStatus === '18+'
+                || window.myProfileData?.ageVerified === true;
+
+  if (toggle) toggle.checked = datingAgeVerified || isVrc18;
+  if (prompt) prompt.style.display = 'none';
+
+  // If VRC 18+ certified, show a note
+  const noteEl = document.getElementById('datingVrcVerifiedNote');
+  if (noteEl) noteEl.style.display = isVrc18 ? 'block' : 'none';
+}
+
+function toggleDatingFeature() {
+  const toggle = document.getElementById('settingEnableDating');
+  const prompt = document.getElementById('datingAgePrompt');
+  const navItem = document.getElementById('navItemDating');
+  const navIcon = document.getElementById('navIconDating');
+
+  if (toggle.checked) {
+    const isVrc18toggle = window.myProfileData?.ageVerificationStatus === '18+'
+                       || window.myProfileData?.ageVerified === true;
+    if (datingAgeVerified || isVrc18toggle) {
+      // Allow turning on without prompt if already verified
+      if (navItem) navItem.style.display = 'flex';
+      if (navIcon) navIcon.style.display = 'flex';
+      prompt.style.display = 'none';
+      saveDatingSettings(true, null);
+    } else {
+      // Require DOB input
+      prompt.style.display = 'block';
+    }
+  } else {
+    prompt.style.display = 'none';
+    if (navItem) navItem.style.display = 'none';
+    if (navIcon) navIcon.style.display = 'none';
+    // If they manually turn it off, we might want to un-verify them or just hide it.
+    // For now, let's just let them hide it. We won't clear their age_verified.
+  }
+}
+
+async function verifyDatingAge() {
+  const dob = document.getElementById('datingDobInput').value;
+  if (!dob) return alert('请输入您的出生日期');
+  
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+  }
+  
+  if (age < 18) {
+    alert('抱歉，此系统包含成人交互选项，仅限年满18岁的用户开启。');
+    document.getElementById('settingEnableDating').checked = false;
+    document.getElementById('datingAgePrompt').style.display = 'none';
+    return;
+  }
+  
+  datingAgeVerified = true;
+  document.getElementById('datingAgePrompt').style.display = 'none';
+  
+  const navItem = document.getElementById('navItemDating');
+  const navIcon = document.getElementById('navIconDating');
+  if (navItem) navItem.style.display = 'flex';
+  if (navIcon) navIcon.style.display = 'flex';
+  
+  await saveDatingSettings(true, dob);
+  alert('验证成功！E了吗交友功能已在左侧导航栏解锁。');
+}
+
+async function saveDatingSettings(verified, dob) {
+  if (!window.myProfileData) return;
+  try {
+    await apiCall('/api/dating/settings', {
+      method: 'POST',
+      json: {
+        vrc_id: window.myProfileData.id,
+        age_verified: verified,
+        dob: dob
+      }
+    });
+  } catch(e) {}
+}
 
 const INSTANCE_TYPE_LABELS = {
   hidden:     'Friends+ (好友加)',
@@ -808,12 +941,12 @@ async function loadCacheStats() {
   try { allKeys = await idb.keys(); } catch(_) {}
 
   const CATEGORIES = [
-    { id: 'friend',  label: '好友数据',        emoji: '👥', desc: '好友列表缓存',          match: k => k === 'friend_basics' },
-    { id: 'profile', label: '我的资料',        emoji: '🪪', desc: '个人资料缓存',           match: k => k === 'my_profile' },
-    { id: 'avatar',  label: '模型缓存',        emoji: '🎭', desc: '模型列表与收藏夹数据',   match: k => k.startsWith('avatar') || k.startsWith('avatars_') },
-    { id: 'world',   label: '世界缓存',        emoji: '🌍', desc: '世界列表与收藏夹数据',   match: k => k.startsWith('world') || k.startsWith('worlds_') },
-    { id: 'names',   label: '名称映射',        emoji: '📋', desc: '模型 ID → 名称映射',    match: k => k === 'persistent_avatar_names' },
-    { id: 'other',   label: '其他数据',        emoji: '📦', desc: '其他本地缓存',           match: k => true },
+    { id: 'friend',  label: '好友数据',        emoji: '<i class="fa-solid fa-users"></i> ', desc: '好友列表缓存',          match: k => k === 'friend_basics' },
+    { id: 'profile', label: '我的资料',        emoji: '<i class="fa-solid fa-id-badge"></i> ', desc: '个人资料缓存',           match: k => k === 'my_profile' },
+    { id: 'avatar',  label: '模型缓存',        emoji: '<i class="fa-solid fa-masks-theater"></i> ', desc: '模型列表与收藏夹数据',   match: k => k.startsWith('avatar') || k.startsWith('avatars_') },
+    { id: 'world',   label: '世界缓存',        emoji: '<i class="fa-solid fa-earth-americas"></i> ', desc: '世界列表与收藏夹数据',   match: k => k.startsWith('world') || k.startsWith('worlds_') },
+    { id: 'names',   label: '名称映射',        emoji: '<i class="fa-solid fa-clipboard"></i> ', desc: '模型 ID → 名称映射',    match: k => k === 'persistent_avatar_names' },
+    { id: 'other',   label: '其他数据',        emoji: '<i class="fa-solid fa-box"></i> ', desc: '其他本地缓存',           match: k => true },
   ];
 
   const catKeys = {};
@@ -858,7 +991,7 @@ async function loadCacheStats() {
   if (imageCount > 0) {
     html += `
       <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:14px;">
-        <span style="font-size:1.5em;">🖼️</span>
+        <span style="font-size:1.5em;"><i class="fa-solid fa-image"></i> </span>
         <div style="flex:1;">
           <div style="font-weight:600;font-size:0.9em;">图片缓存 (Blob)</div>
           <div style="font-size:0.75em;color:var(--text-muted);margin-top:2px;">本地图片 Blob 缓存 · ${imageCount} 张</div>
@@ -868,7 +1001,7 @@ async function loadCacheStats() {
   }
 
   if (!html) {
-    html = '<div style="color:var(--text-muted);font-size:0.85em;padding:20px;text-align:center;background:var(--bg-card);border-radius:12px;">✅ 缓存为空，无需清除</div>';
+    html = '<div style="color:var(--text-muted);font-size:0.85em;padding:20px;text-align:center;background:var(--bg-card);border-radius:12px;"><i class="fa-solid fa-check"></i> 缓存为空，无需清除</div>';
   }
 
   container.innerHTML = html;
@@ -918,17 +1051,17 @@ async function clearAllCacheNow() {
 // and just overwrites stale data with fresh API responses.
 async function refreshAllPersistentCache() {
   const btn = document.getElementById('btnRefreshAllCache');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ 正在刷新...'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> 正在刷新...'; }
   const log = (msg) => logMsg(msg, 'info');
 
   try {
     // 1. Re-sync favorite IDs + group counts
-    log('🔄 正在同步收藏 ID...');
+    log('<i class="fa-solid fa-rotate-right"></i> 正在同步收藏 ID...');
     await syncAllFavoriteIds();
 
     // 2. Re-fetch all avatar favorite groups
     if (favoriteGroups.length > 0) {
-      log(`🔄 正在刷新 ${favoriteGroups.length} 个模型收藏组...`);
+      log(`<i class="fa-solid fa-rotate-right"></i> 正在刷新 ${favoriteGroups.length} 个模型收藏组...`);
       for (const g of favoriteGroups) {
         try {
           let offset = 0, all = [];
@@ -962,7 +1095,7 @@ async function refreshAllPersistentCache() {
     }
 
     // 3. Re-fetch "my avatars"
-    log('🔄 正在刷新我的模型...');
+    log('<i class="fa-solid fa-rotate-right"></i> 正在刷新我的模型...');
     try {
       let offset = 0, myAll = [];
       while (true) {
@@ -992,7 +1125,7 @@ async function refreshAllPersistentCache() {
     }
 
     // 4. Re-fetch friends
-    log('🔄 正在刷新好友列表...');
+    log('<i class="fa-solid fa-rotate-right"></i> 正在刷新好友列表...');
     try {
       let offset = 0, friendAll = [];
       while (true) {
@@ -1028,12 +1161,12 @@ async function refreshAllPersistentCache() {
       log(`  ✓ 名称映射: ${window._localNameMap.size} 条`);
     }
 
-    log('✅ 所有持久化缓存已刷新完成');
-    showToast('✅ 所有持久化缓存已刷新', 'success');
+    log('<i class="fa-solid fa-check"></i> 所有持久化缓存已刷新完成');
+    showToast('<i class="fa-solid fa-check"></i> 所有持久化缓存已刷新', 'success');
   } catch (e) {
     showToast('刷新缓存失败: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🔄 刷新所有缓存（从 API 重新拉取）'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> 刷新所有缓存（从 API 重新拉取）'; }
     loadCacheStats();
   }
 }

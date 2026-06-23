@@ -287,7 +287,7 @@ function prefetchThumbnails(avatarList) {
     })
       .then(r => r.json())
       .then(d => {
-        if (d.fetched > 0) logMsg(`⚡ Prefetched ${d.fetched} thumbnails at edge`, "info");
+        if (d.fetched > 0) logMsg(`<i class="fa-solid fa-bolt"></i> Prefetched ${d.fetched} thumbnails at edge`, "info");
       })
       .catch(() => {}); // Silent fail
   }

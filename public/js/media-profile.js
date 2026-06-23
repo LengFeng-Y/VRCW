@@ -70,7 +70,7 @@ function makeUploadCard(opts) {
       ondragover="event.preventDefault();this.classList.add('dragover')"
       ondragleave="this.classList.remove('dragover')"
       ondrop="event.preventDefault();this.classList.remove('dragover');document.getElementById('${uniqueId}').files=event.dataTransfer.files;onUploadFileSelected('${uniqueId}','${opts.tag}')">
-      <span class="upload-icon">${isAnimated ? '🎞️' : '📤'}</span>
+      <span class="upload-icon">${isAnimated ? '🎞️' : '<i class="fa-solid fa-cloud-arrow-up"></i> '}</span>
       <span class="upload-label">点击或拖拽文件</span>
       <span class="upload-hint">${opts.hint}</span>
       <span class="upload-selected" id="sel_${uniqueId}">未选择文件</span>
@@ -117,7 +117,7 @@ async function onUploadFileSelected(inputId, tag) {
   } else if (tag === 'emojianimated') {
     // For GIFs, auto-detect FPS from frame delays
     if (f.type === 'image/gif') {
-      if (dim) { dim.textContent = '⏳ 正在读取 GIF 帧速...'; dim.style.color = 'var(--text-muted)'; }
+      if (dim) { dim.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> 正在读取 GIF 帧速...'; dim.style.color = 'var(--text-muted)'; }
       const buf = await f.arrayBuffer();
       try {
         const gif = window.parseGIF(buf);
@@ -127,7 +127,7 @@ async function onUploadFileSelected(inputId, tag) {
         if (fpsSl) { fpsSl.value = detectedFps; }
         if (fpsEl) { fpsEl.textContent = detectedFps; }
         if (dim) {
-          dim.textContent = `✅ ${gifFrames.length} 帧，自动检测 ${detectedFps} fps`;
+          dim.innerHTML = `<i class="fa-solid fa-check"></i> ${gifFrames.length} 帧，自动检测 ${detectedFps} fps`;
           dim.style.color = 'var(--accent-light)';
         }
       } catch(e) {
@@ -150,7 +150,7 @@ async function uploadToVRCStyled(inputId, tag, refreshPage) {
   const fpsSl    = document.getElementById('fps_' + inputId);
   if (!input || !input.files || !input.files[0]) { statusEl.textContent = '请先选择文件'; return; }
   let file = input.files[0];
-  if (file.size > 10*1024*1024) { statusEl.textContent = '❌ 文件超过 10MB'; statusEl.style.color='#f87171'; return; }
+  if (file.size > 10*1024*1024) { statusEl.innerHTML = '<i class="fa-solid fa-xmark"></i> 文件超过 10MB'; statusEl.style.color='#f87171'; return; }
 
   btn.disabled = true;
   statusEl.style.color = 'var(--text-muted)';
@@ -160,7 +160,7 @@ async function uploadToVRCStyled(inputId, tag, refreshPage) {
   try {
     if (tag === 'emojianimated') {
       // GIF → Spritesheet conversion
-      statusEl.textContent = '⏳ 正在转换 GIF → 精灵图（可能需要几秒）...';
+      statusEl.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> 正在转换 GIF → 精灵图（可能需要几秒）...';
       if (file.type !== 'image/gif') throw new Error('动态表情必须上传 GIF 文件！');
       const fps = fpsSl ? parseInt(fpsSl.value) || 12 : 12;
       const { blob, frames, framesOverTime } = await gifToSpritesheet(file, fps);
@@ -168,10 +168,10 @@ async function uploadToVRCStyled(inputId, tag, refreshPage) {
       fd.append('tagstring', 'emojianimated');
       fd.append('frames', String(frames));
       fd.append('framesOverTime', String(framesOverTime));
-      statusEl.textContent = `⏳ 上传精灵图（${frames} 帧，${framesOverTime}fps）...`;
+      statusEl.innerHTML = `<i class="fa-solid fa-hourglass-half"></i> 上传精灵图（${frames} 帧，${framesOverTime}fps）...`;
     } else if (tag === 'emoji' || tag === 'sticker') {
       // Static emoji/sticker — validate 1024×1024
-      statusEl.textContent = '⏳ 检查尺寸...';
+      statusEl.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> 检查尺寸...';
       await new Promise((res, rej) => {
         const img = new Image();
         const objUrl = URL.createObjectURL(file);
@@ -185,12 +185,12 @@ async function uploadToVRCStyled(inputId, tag, refreshPage) {
       });
       fd.append('filestring', file, file.name);
       fd.append('tagstring', tag);
-      statusEl.textContent = '⏳ 上传中...';
+      statusEl.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> 上传中...';
     } else {
       // gallery, icon, prints preview
       fd.append('filestring', file, file.name);
       fd.append('tagstring', tag);
-      statusEl.textContent = '⏳ 上传中...';
+      statusEl.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> 上传中...';
     }
 
     // Route through apiCall (fresh in-memory vrcAuth + multipart boundary auto-set).
@@ -202,16 +202,20 @@ async function uploadToVRCStyled(inputId, tag, refreshPage) {
       const txt = await r.text().catch(() => '');
       throw new Error('HTTP ' + r.status + ': ' + txt.substring(0, 200));
     }
-    statusEl.textContent = '✅ 上传成功！';
+    statusEl.innerHTML = '<i class="fa-solid fa-check"></i> 上传成功！';
     statusEl.style.color = '#86efac';
     input.value = '';
     const selEl = document.getElementById('sel_' + inputId);
     if (selEl) selEl.textContent = '未选择文件';
     const dimEl = document.getElementById('dim_' + inputId);
     if (dimEl) dimEl.textContent = '';
+    // Drop the cached payload for this sub-page so the reload actually
+    // re-fetches (otherwise the 2-min TTL would serve stale data right
+    // after an upload).
+    if (refreshPage && typeof invalidateAssetsCache === 'function') invalidateAssetsCache();
     setTimeout(() => { if (refreshPage) switchAssetsPage(refreshPage); }, 1800);
   } catch(e) {
-    statusEl.textContent = '❌ ' + e.message;
+    statusEl.innerHTML = '<i class="fa-solid fa-xmark"></i> ' + e.message;
     statusEl.style.color = '#f87171';
     btn.disabled = false;
   }
@@ -219,16 +223,23 @@ async function uploadToVRCStyled(inputId, tag, refreshPage) {
 
 async function fetchGalleryOnly(container, gen) {
   try {
-    container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载中...</div>';
-    const r = await apiCall('/api/vrc/files?tag=gallery&n=60');
-    if (gen != null && _assetsGen !== gen) return;
-    const files = r.ok ? await r.json() : [];
+    const { data: cached, fresh } = await readAssetsCache('gallery', ASSETS_CACHE_TTL_MS);
+    let files;
+    if (fresh && Array.isArray(cached)) {
+      files = cached;
+    } else {
+      container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载中...</div>';
+      const r = await apiCall('/api/vrc/files?tag=gallery&n=60');
+      if (gen != null && _assetsGen !== gen) return;
+      files = r.ok ? await r.json() : [];
+      await writeAssetsCache('gallery', files);
+    }
     container.innerHTML = '<h2 style="margin-bottom:16px;">🖼️ VRC+ 相册</h2>';
     container.innerHTML += '<div class="vrc-upload-row">' + makeUploadCard({
-      title:'📤 上传到 VRC+ 相册', hint:'PNG/JPG/GIF · 最大 10MB',
+      title:'<i class="fa-solid fa-cloud-arrow-up"></i> 上传到 VRC+ 相册', hint:'PNG/JPG/GIF · 最大 10MB',
       tag:'gallery', accept:'image/*', refreshPage:'gallery', id:'gallery'
     }) + '</div>';
-    container.innerHTML += '<h3 style="font-size:0.92rem;margin-bottom:12px;">📸 我的相册 (' + files.length + ')</h3>';
+    container.innerHTML += '<h3 style="font-size:0.92rem;margin-bottom:12px;"><i class="fa-solid fa-camera"></i> 我的相册 (' + files.length + ')</h3>';
     if (files.length) {
       container.innerHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;">' +
         files.map(f => {
@@ -252,21 +263,28 @@ async function fetchGalleryOnly(container, gen) {
 // ═══════════════════════════════════════════════════════════
 async function fetchPrints(container, gen) {
   try {
-    container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载中...</div>';
-    const me = await (await apiCall('/api/vrc/auth/user')).json();
-    if (gen != null && _assetsGen !== gen) return;
-    const r = await apiCall('/api/vrc/prints/user/' + me.id + '?n=100&offset=0');
-    if (gen != null && _assetsGen !== gen) return;
-    const prints = r.ok ? await r.json() : [];
+    const { data: cached, fresh } = await readAssetsCache('prints', ASSETS_CACHE_TTL_MS);
+    let prints;
+    if (fresh && Array.isArray(cached)) {
+      prints = cached;
+    } else {
+      container.innerHTML = '<div style="color:var(--text-muted);margin:20px;">加载中...</div>';
+      const myId = await getMyId();
+      if (gen != null && _assetsGen !== gen) return;
+      const r = await apiCall('/api/vrc/prints/user/' + myId + '?n=100&offset=0');
+      if (gen != null && _assetsGen !== gen) return;
+      prints = r.ok ? await r.json() : [];
+      await writeAssetsCache('prints', prints);
+    }
     const printUploadId = 'printUpl_' + Date.now();
     container.innerHTML = '<h2 style="margin-bottom:12px;">🎞️ 拍立得照片</h2>' +
       '<div class="vrc-upload-card" style="max-width:420px;margin-bottom:20px;">' +
-        '<h4>📤 上传拍立得照片</h4>' +
+        '<h4><i class="fa-solid fa-cloud-arrow-up"></i> 上传拍立得照片</h4>' +
         '<div class="vrc-upload-zone" id="zone_' + printUploadId + '"' +
           ' ondragover="event.preventDefault();this.classList.add(\'dragover\')"' +
           ' ondragleave="this.classList.remove(\'dragover\')"' +
           ' ondrop="event.preventDefault();this.classList.remove(\'dragover\');document.getElementById(\'' + printUploadId + '\').files=event.dataTransfer.files;onPrintFileSelected(\'' + printUploadId + '\')">' +
-          '<span class="upload-icon">📷</span>' +
+          '<span class="upload-icon"><i class="fa-solid fa-camera"></i> </span>' +
           '<span class="upload-label">点击或拖拽照片 (PNG/JPG)</span>' +
           '<span class="upload-hint">最大 10MB · 推荐 1920×1080 · 需要 VRC+</span>' +
           '<span class="upload-selected" id="sel_' + printUploadId + '">未选择文件</span>' +
@@ -346,9 +364,9 @@ async function uploadPrint(inputId) {
   const noteEl   = document.getElementById('note_' + inputId);
   if (!input || !input.files || !input.files[0]) { statusEl.textContent = '请先选择文件'; return; }
   const file = input.files[0];
-  if (file.size > 10*1024*1024) { statusEl.textContent = '❌ 文件超过 10MB'; statusEl.style.color='#f87171'; return; }
+  if (file.size > 10*1024*1024) { statusEl.innerHTML = '<i class="fa-solid fa-xmark"></i> 文件超过 10MB'; statusEl.style.color='#f87171'; return; }
   btn.disabled = true;
-  statusEl.textContent = '⏳ 上传中 (处理图片...)';
+  statusEl.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> 上传中 (处理图片...)';
   statusEl.style.color = 'var(--text-muted)';
   try {
     // VRCX ALWAYS converts prints to PNG before uploading.
@@ -370,7 +388,7 @@ async function uploadPrint(inputId) {
     const pngBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
     URL.revokeObjectURL(imgUrl);
 
-    statusEl.textContent = '⏳ 上传中 (发送到 VRChat...)';
+    statusEl.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> 上传中 (发送到 VRChat...)';
     const fd = new FormData();
     fd.append('image', pngBlob, 'image.png');
     fd.append('timestamp', new Date().toISOString());
@@ -384,14 +402,15 @@ async function uploadPrint(inputId) {
       const txt = await r.text();
       throw new Error('HTTP ' + r.status + ': ' + txt);
     }
-    statusEl.textContent = '✅ 上传成功！';
+    statusEl.innerHTML = '<i class="fa-solid fa-check"></i> 上传成功！';
     statusEl.style.color = '#86efac';
     if (input) input.value = '';
     const sel = document.getElementById('sel_' + inputId);
     if (sel) sel.textContent = '未选择文件';
+    if (typeof invalidateAssetsCache === 'function') invalidateAssetsCache();
     setTimeout(() => switchAssetsPage('prints'), 2000);
   } catch(e) {
-    statusEl.textContent = '❌ ' + e.message;
+    statusEl.innerHTML = '<i class="fa-solid fa-xmark"></i> ' + e.message;
     statusEl.style.color = '#f87171';
     btn.disabled = false;
   }

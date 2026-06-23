@@ -618,7 +618,7 @@ async function startUpload() {
     const itemEl = document.getElementById("upload-item-" + idx);
     const statusEl = document.getElementById("upload-status-" + idx);
     if (itemEl) itemEl.classList.add("uploading");
-    if (statusEl) statusEl.textContent = "⏳";
+    if (statusEl) statusEl.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> ';
 
     try {
       setUploadStatus(`Processing ${file.name}...`);

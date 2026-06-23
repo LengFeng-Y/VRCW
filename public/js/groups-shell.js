@@ -4,6 +4,16 @@
  * code stays in assets-groups.js and is loaded only when the assets tab opens.
  */
 
+// ── Groups list cache ─────────────────────────────────────────────────────
+// The groups tab used to fire 2 serial API calls (/auth/user then /users/{id}/groups)
+// on EVERY open with no cache and no "already loaded" guard — friends/worlds/
+// avatars tabs all have IDB caches + TTL + *Loaded guards, groups did not, which
+// is why it felt noticeably slower to open. Below mirrors that pattern: IDB-first
+// render, background refresh, 5-min TTL, one-shot groupsLoaded guard.
+let groupsLoaded = false;
+let _groupsListCache = [];          // raw /users/{id}/groups response
+const GROUPS_CACHE_TTL = 5 * 60 * 1000; // 5 min — matches avatars/worlds
+
 function toggleGlobalNav() {
   const nav = document.getElementById("globalNav");
   const navCol = document.getElementById("globalNavCollapsed");
@@ -66,54 +76,117 @@ function switchGroupsCategory(cat) {
 async function loadGroupsPage(cat) {
   const area = document.getElementById('groupsContentArea');
   if (!area) return;
-  area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">加载中...</div>';
+
+  // Search sub-view has no cache — it's driven by user input.
+  if (cat === 'search') {
+    area.innerHTML = '<h2 style="font-size:1.2rem;margin-bottom:12px;"><i class="fa-solid fa-magnifying-glass"></i> 搜索群组</h2>' +
+      '<div style="display:flex;gap:8px;margin-bottom:16px;">' +
+        '<input type="text" id="groupSearchInput" class="input-field" placeholder="输入群组名称或 shortCode..." style="flex:1;">' +
+        '<button class="btn btn-primary" onclick="searchGroups()">搜索</button>' +
+      '</div>' +
+      '<div id="groupSearchResults"></div>';
+    return;
+  }
+
+  // ── Cache-first render ────────────────────────────────────────────────
+  // Draw from IDB immediately (if present) so the user sees their groups
+  // instantly, then silently refresh from the API in the background. The
+  // old code blocked on 2 serial API calls every open → slow.
+  let cacheAge = 0;
+  let cacheIsFresh = false;
   try {
-    if (cat === 'search') {
-      area.innerHTML = '<h2 style="font-size:1.2rem;margin-bottom:12px;">🔍 搜索群组</h2>' +
-        '<div style="display:flex;gap:8px;margin-bottom:16px;">' +
-          '<input type="text" id="groupSearchInput" class="input-field" placeholder="输入群组名称或 shortCode..." style="flex:1;">' +
-          '<button class="btn btn-primary" onclick="searchGroups()">搜索</button>' +
-        '</div>' +
-        '<div id="groupSearchResults"></div>';
-      return;
+    const cached = await idb.get('groups_basics');
+    if (Array.isArray(cached) && cached.length >= 0) {
+      _groupsListCache = cached;
+      cacheAge = (await idb.get('groups_basics_age')) || 0;
+      cacheIsFresh = cacheAge > 0 && (Date.now() - cacheAge) < GROUPS_CACHE_TTL;
+      if (cached.length > 0) {
+        renderGroupsList(area, cat, cached);
+      }
     }
-    const me = await (await apiCall('/api/vrc/auth/user')).json();
-    const r = await apiCall('/api/vrc/users/' + me.id + '/groups');
+  } catch (_) {}
+
+  if (cacheIsFresh && _groupsListCache.length > 0) {
+    // Cache fresh enough — skip the API entirely (like avatars/worlds do).
+    return;
+  }
+
+  // ── Background refresh ────────────────────────────────────────────────
+  // Only show the spinner when there's nothing cached to show yet.
+  if (_groupsListCache.length === 0) {
+    area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">加载中...</div>';
+  }
+
+  try {
+    // Reuse the global currentUserId instead of round-tripping /auth/user.
+    // It's set during showMainApp() and stays valid for the session.
+    let myId = (typeof currentUserId !== 'undefined' && currentUserId) || '';
+    if (!myId) {
+      const me = await (await apiCall('/api/vrc/auth/user')).json();
+      myId = me.id || '';
+    }
+    if (!myId) throw new Error('无法获取用户 ID');
+
+    const r = await apiCall('/api/vrc/users/' + myId + '/groups');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const groups = await r.json();
 
-    let filtered = groups || [];
-    let title = '';
-    if (cat === 'mine') {
-      filtered = filtered.filter(g => g.ownerId === me.id || g.userId === me.id);
-      title = '👑 我创建的群组 (' + filtered.length + ')';
-    } else {
-      filtered = filtered.filter(g => g.ownerId !== me.id && g.userId !== me.id);
-      title = '📋 已加入的群组 (' + filtered.length + ')';
-    }
+    _groupsListCache = Array.isArray(groups) ? groups : [];
+    // Persist to IDB for next session's instant render.
+    try {
+      await idb.set('groups_basics', _groupsListCache);
+      await idb.set('groups_basics_age', Date.now());
+    } catch (_) {}
 
-    if (!filtered.length) {
-      area.innerHTML = '<h2 style="font-size:1.2rem;margin-bottom:12px;">' + title + '</h2><div style="color:var(--text-muted);">暂无群组</div>';
-      return;
-    }
-
-    area.innerHTML = '<h2 style="font-size:1.2rem;margin-bottom:16px;">' + title + '</h2>';
-    area.innerHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">' +
-      filtered.map(g => {
-        const icon = proxyImg(g.iconUrl || g.bannerUrl || '');
-        return '<div onclick="openGroupDetail(\'' + escJsAttr(g.groupId || g.id) + '\')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;cursor:pointer;">' +
-          '<img src="' + escHtml(icon) + '" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
-          '<div style="flex:1;min-width:0;">' +
-            '<div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(g.name || '') + '</div>' +
-            '<div style="font-size:0.75em;color:var(--text-muted);">.' + escHtml(g.shortCode || '') + ' · 👥 ' + (g.memberCount || 0) + '</div>' +
-          '</div>' +
-        '</div>';
-      }).join('') +
-    '</div>';
+    renderGroupsList(area, cat, _groupsListCache);
   } catch (e) {
     if (isAbortError(e)) return;
-    area.innerHTML = '<div style="color:var(--error);padding:20px;">加载失败: ' + escHtml(e.message) + '</div>';
+    // Keep cached content visible on transient failure (mirrors friends.js).
+    if (_groupsListCache.length === 0) {
+      area.innerHTML = '<div style="color:var(--error);padding:20px;">加载失败: ' + escHtml(e.message) + '</div>';
+    }
   }
+}
+
+// Render the filtered groups grid for a category. Extracted so both the
+// cache-first render and the background refresh share identical markup.
+function renderGroupsList(area, cat, groups) {
+  let filtered = groups || [];
+  let title = '';
+  if (cat === 'mine') {
+    filtered = filtered.filter(g => g.ownerId === currentUserId || g.userId === currentUserId);
+    title = '<i class="fa-solid fa-crown" style="color: gold;"></i> 我创建的群组 (' + filtered.length + ')';
+  } else {
+    filtered = filtered.filter(g => g.ownerId !== currentUserId && g.userId !== currentUserId);
+    title = '<i class="fa-solid fa-clipboard"></i> 已加入的群组 (' + filtered.length + ')';
+  }
+
+  if (!filtered.length) {
+    area.innerHTML = '<h2 style="font-size:1.2rem;margin-bottom:12px;">' + title + '</h2><div style="color:var(--text-muted);">暂无群组</div>';
+    return;
+  }
+
+  area.innerHTML = '<h2 style="font-size:1.2rem;margin-bottom:16px;">' + title + '</h2>';
+  area.innerHTML += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">' +
+    filtered.map(g => {
+      const icon = proxyImg(g.iconUrl || g.bannerUrl || '');
+      return '<div onclick="openGroupDetail(\'' + escJsAttr(g.groupId || g.id) + '\')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;cursor:pointer;">' +
+        '<img src="' + escHtml(icon) + '" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(g.name || '') + '</div>' +
+          '<div style="font-size:0.75em;color:var(--text-muted);">.' + escHtml(g.shortCode || '') + ' · <i class="fa-solid fa-user-group"></i> ' + (g.memberCount || 0) + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('') +
+  '</div>';
+}
+
+// Invalidate the cache after a join/leave so the next open re-fetches.
+// Called from groups-instance.js vrcGroupAction().
+function invalidateGroupsCache() {
+  _groupsListCache = [];
+  groupsLoaded = false;
+  try { idb.set('groups_basics_age', 0); } catch (_) {}
 }
 
 async function searchGroups() {
@@ -138,7 +211,7 @@ async function searchGroups() {
           '<img src="' + escHtml(icon) + '" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">' +
           '<div style="flex:1;min-width:0;">' +
             '<div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(g.name || '') + '</div>' +
-            '<div style="font-size:0.75em;color:var(--text-muted);">.' + escHtml(g.shortCode || '') + ' · 👥 ' + (g.memberCount || 0) + '</div>' +
+            '<div style="font-size:0.75em;color:var(--text-muted);">.' + escHtml(g.shortCode || '') + ' · <i class="fa-solid fa-user-group"></i> ' + (g.memberCount || 0) + '</div>' +
           '</div>' +
         '</div>';
       }).join('') +

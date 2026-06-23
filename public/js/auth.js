@@ -7,6 +7,7 @@
  */
 // ── Mobile Sidebar Toggle ──
 window.toggleSidebar = function (forceState) {
+
   const activePanel = document.querySelector(".download-panel.active") || document.querySelector(".upload-panel.active");
   if (!activePanel) return;
   const sidebar = activePanel.querySelector(".sidebar");
@@ -26,7 +27,7 @@ window.toggleSidebar = function (forceState) {
   }
 
   btn?.classList.toggle("active", isOpening);
-  if (btn) btn.textContent = isOpening ? "✕" : "☰";
+  if (btn) btn.innerHTML = isOpening ? '<i class="fa-solid fa-xmark"></i>' : '<i class="fa-solid fa-bars"></i>';
 };
 
 // ── Login & Account Management ──
@@ -286,6 +287,11 @@ function doLogout() {
     if (typeof myProfileData !== 'undefined') myProfileData = null;
     if (typeof currentFriendProfile !== 'undefined') currentFriendProfile = null;
     if (typeof currentWorldDetail !== 'undefined') currentWorldDetail = null;
+    // Reset the groups tab cache so a different account doesn't briefly show
+    // the previous user's groups on next login.
+    if (typeof invalidateGroupsCache === 'function') invalidateGroupsCache();
+    // Same for the assets tab (wallet/inventory/emoji/prints/etc).
+    if (typeof invalidateAssetsCache === 'function') invalidateAssetsCache();
   } catch (e) { /* best-effort: never block logout on a stale ref */ }
 
   // Close any open modals so they don't linger over the login page.
@@ -298,6 +304,8 @@ function doLogout() {
   resetBodyScroll(); // safety: clear any lingering modal scroll-lock
   document.getElementById("loginPage").classList.remove("hidden");
   document.getElementById("mainApp").classList.add("hidden");
+
+
   // Focus username so re-login is one keystroke away
   requestAnimationFrame(() => document.getElementById('username')?.focus());
 }
@@ -311,6 +319,8 @@ function showMainApp() {
     if (r.ok) {
       const user = await r.json();
       currentUserId = user.id || "";
+      window.myProfileData = user;
+
     }
   }).catch(() => {});
 
