@@ -653,7 +653,7 @@ async function sendInvite(userId, name) {
     }
     const r = await apiCall(`/api/vrc/invite/${userId}`, {
       method: 'POST',
-      json: { instanceId: me.location, messageSlot: 0 }
+      json: { instanceId: me.location }
     });
     if (r.ok) logMsg(`<i class="fa-solid fa-check"></i> 已向 ${name} 发送邀请`, 'success');
     else {
